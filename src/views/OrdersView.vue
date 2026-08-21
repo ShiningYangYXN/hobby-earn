@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { h, ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NCard, NSpace, NDataTable, NTag, NModal, NForm, NFormItem, NSelect, useMessage, useDialog } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
@@ -8,9 +9,12 @@ import { fmt, type Order, type OrderItem, type OrderStatus, type PaymentMethod }
 
 const msg = useMessage()
 const dialog = useDialog()
+const router = useRouter()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
 onMounted(async () => { await Promise.all([orderStore.load(), discountStore.load()]) })
+
+function goMeter(o: Order) { router.push({ path: '/price-meter', query: { open: o.id } }) }
 
 const statusFilter = ref<OrderStatus | 'all'>('all')
 const keyword = ref('')
@@ -23,7 +27,8 @@ const filtered = computed<Order[]>(() => orderStore.orders.filter((o: Order) => 
 
 const statusCfg: Record<OrderStatus, { label: string; type: 'warning' | 'info' | 'success' | 'default' }> = {
   pending: { label: '待处理', type: 'warning' },
-  confirmed: { label: '进行中', type: 'info' },
+  confirmed: { label: '已确认', type: 'info' },
+  in_progress: { label: '执行中', type: 'success' },
   completed: { label: '已完成', type: 'success' },
   cancelled: { label: '已取消', type: 'default' },
 }
@@ -31,7 +36,13 @@ const statusCfg: Record<OrderStatus, { label: string; type: 'warning' | 'info' |
 const doing = ref<Order | null>(null)
 const showDone = ref(false)
 const pay = ref<PaymentMethod>('cash')
-const payOptions = [{ label: '现金', value: 'cash' }, { label: '微信', value: 'wechat' }, { label: '支付宝', value: 'alipay' }, { label: '转账', value: 'transfer' }]
+const payOptions = [
+  { label: '现金', value: 'cash' },
+  { label: '数字人民币', value: 'ecny' },
+  { label: '云闪付', value: 'unionpay' },
+  { label: '微信', value: 'wechat' },
+  { label: '支付宝', value: 'alipay' },
+]
 
 function openComplete(o: Order): void { doing.value = o; pay.value = 'cash'; showDone.value = true }
 
@@ -40,16 +51,20 @@ async function doComplete(): Promise<void> {
   if (!o) return
   try {
     await orderStore.complete(o.id, pay.value)
-    for (const r of o.discountRecords) await discountStore.recordUsage(r.discountId, o.memberId)
     msg.success('已完成'); doing.value = null; showDone.value = false
   } catch (e: unknown) { msg.error(String(e)) }
 }
 
 function doCancel(o: Order) {
-  dialog.warning({ title: '取消订单', content: '确定取消？', positiveText: '取消', negativeText: '返回', onPositiveClick: async () => { await orderStore.cancel(o.id); msg.success('已取消') } })
+  dialog.warning({ title: '取消订单', content: '确定取消？已用优惠将自动退回。', positiveText: '取消', negativeText: '返回', onPositiveClick: async () => { for (const r of o.discountRecords) await discountStore.rollbackUsage(r.discountId, o.memberId); await orderStore.cancel(o.id); msg.success('已取消') } })
 }
 function doDelete(o: Order) {
-  dialog.warning({ title: '删除订单', content: '不可恢复，确定？', positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await orderStore.remove(o.id); msg.success('已删除') } })
+  dialog.warning({ title: '删除订单', content: '不可恢复，已用优惠将自动退回，确定？', positiveText: '删除', negativeText: '取消', onPositiveClick: async () => {
+    for (const r of o.discountRecords) await discountStore.rollbackUsage(r.discountId, o.memberId)
+    await orderStore.cancel(o.id)
+    await orderStore.remove(o.id)
+    msg.success('已删除')
+  } })
 }
 
 const detail = ref<Order | null>(null)
@@ -79,7 +94,7 @@ const itemColumns = computed(() => [
     <NCard size="small">
       <NSpace :size="12">
         <NInput v-model:value="keyword" placeholder="搜索会员名或订单号…" clearable style="width:200px" />
-        <NSelect v-model:value="statusFilter" :options="[{ label: '全部', value: 'all' }, { label: '待处理', value: 'pending' }, { label: '进行中', value: 'confirmed' }, { label: '已完成', value: 'completed' }, { label: '已取消', value: 'cancelled' }]" style="width:120px" />
+        <NSelect v-model:value="statusFilter" :options="[{ label: '全部', value: 'all' }, { label: '待处理', value: 'pending' }, { label: '已确认', value: 'confirmed' }, { label: '执行中', value: 'in_progress' }, { label: '已完成', value: 'completed' }, { label: '已取消', value: 'cancelled' }]" style="width:120px" />
         <span>共 {{ filtered.length }} 条</span>
       </NSpace>
     </NCard>
@@ -103,6 +118,7 @@ const itemColumns = computed(() => [
         { title: '操作', key: 'actions', width: 160,         render: (row: Order) => h(NSpace, { size: 4 }, () => [
           h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, () => '详情'),
           row.status === 'pending'   && h(NButton, { size: 'tiny', type: 'primary', onClick: () => orderStore.confirm(row.id) }, () => '确认'),
+          (row.status === 'confirmed' || row.status === 'in_progress') && h(NButton, { size: 'tiny', type: 'primary', onClick: () => goMeter(row) }, () => '去计价'),
           row.status === 'confirmed' && h(NButton, { size: 'tiny', type: 'success', onClick: () => openComplete(row) }, () => '完成'),
           (row.status !== 'completed' && row.status !== 'cancelled') && h(NButton, { size: 'tiny', type: 'warning', onClick: () => doCancel(row) }, () => '取消'),
           row.status === 'cancelled' && h(NButton, { size: 'tiny', type: 'error', onClick: () => doDelete(row) }, () => '删除'),

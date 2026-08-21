@@ -9,7 +9,7 @@ export function uid(): string {
 export function now(): string { return new Date().toISOString() }
 export function fmt(cents: number): string { return (cents / 100).toFixed(2) }
 export function genCode(): string {
-  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   return Array.from({ length: 6 }, () => c[Math.floor(Math.random() * c.length)]).join('')
 }
 
@@ -43,8 +43,8 @@ export interface DiscountRecord {
   discountId: string; discountType: string; ruleType: string;
   description: string; discountAmount: number
 }
-export type OrderStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
-export type PaymentMethod = 'cash' | 'wechat' | 'alipay' | 'transfer'
+export type OrderStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+export type PaymentMethod = 'cash' | 'ecny' | 'unionpay' | 'wechat' | 'alipay'
 export interface Order {
   id: string; memberId: string; memberName: string; items: OrderItem[]
   subtotal: number; discountRecords: DiscountRecord[]
@@ -64,5 +64,6 @@ export interface Discount {
   memberLimit: number | null; memberUsedCount: Record<string, number>
   repeatThreshold?: number; referrerMemberId?: string
   memberTypeIds?: string[]
+  exclusiveGroup?: string
   isActive: boolean
 }
