@@ -4,7 +4,7 @@ import { NButton, NCard, NSpace, NDataTable, NTag, NModal, NForm, NFormItem, NSe
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { fmt, type Order, type OrderStatus, type PaymentMethod } from '@/stores/types'
+import { fmt, type Order, type OrderItem, type OrderStatus, type PaymentMethod } from '@/stores/types'
 
 const msg = useMessage()
 const dialog = useDialog()
@@ -51,6 +51,23 @@ function doCancel(o: Order) {
 function doDelete(o: Order) {
   dialog.warning({ title: '删除订单', content: '不可恢复，确定？', positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await orderStore.remove(o.id); msg.success('已删除') } })
 }
+
+const detail = ref<Order | null>(null)
+const showDetail = ref(false)
+function openDetail(o: Order) { detail.value = o; showDetail.value = true }
+function itemSubtotal(i: OrderItem): number {
+  if (i.pricingMode === 'hourly' && i.elapsed) return Math.round((i.hourlyRate ?? i.unitPrice) / 3600 * i.elapsed)
+  return i.unitPrice * i.quantity
+}
+const itemColumns = computed(() => [
+  { title: '项目', key: 'serviceName' },
+  { title: '计价', key: 'pm', width: 70, render: (i: OrderItem) => i.pricingMode === 'hourly' ? '工时' : '按件' },
+  { title: '数量/时长', key: 'qty', width: 120, render: (i: OrderItem) => i.pricingMode === 'hourly'
+    ? (() => { const m = Math.floor((i.elapsed || 0) / 60); const s = (i.elapsed || 0) % 60; return `${m}'${s.toString().padStart(2, '0')}` })()
+    : `×${i.quantity}` },
+  { title: '单价', key: 'unit', width: 90, render: (i: OrderItem) => '¥' + fmt(i.unitPrice) + (i.pricingMode === 'hourly' ? '/h' : '') },
+  { title: '小计', key: 'sub', width: 90, render: (i: OrderItem) => '¥' + fmt(itemSubtotal(i)) },
+])
 </script>
 
 <template>
@@ -83,7 +100,8 @@ function doDelete(o: Order) {
         { title: '实收', key: 'finalAmount', width: 80, render: (row: Order) => h('span', { style: { color: 'var(--n-success-color)', fontWeight: 600 } }, '¥' + fmt(row.finalAmount)) },
         { title: '状态', key: 'status', width: 80, render: (row: Order) => h(NTag, { type: statusCfg[row.status].type, size: 'tiny' }, () => statusCfg[row.status].label) },
         { title: '时间', key: 'createdAt', width: 140, render: (row: Order) => new Date(row.createdAt).toLocaleString() },
-        { title: '操作', key: 'actions', width: 160, render: (row: Order) => h(NSpace, { size: 4 }, () => [
+        { title: '操作', key: 'actions', width: 160,         render: (row: Order) => h(NSpace, { size: 4 }, () => [
+          h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, () => '详情'),
           row.status === 'pending'   && h(NButton, { size: 'tiny', type: 'primary', onClick: () => orderStore.confirm(row.id) }, () => '确认'),
           row.status === 'confirmed' && h(NButton, { size: 'tiny', type: 'success', onClick: () => openComplete(row) }, () => '完成'),
           (row.status !== 'completed' && row.status !== 'cancelled') && h(NButton, { size: 'tiny', type: 'warning', onClick: () => doCancel(row) }, () => '取消'),
@@ -101,6 +119,32 @@ function doDelete(o: Order) {
         </NForm>
       </div>
       <template #footer><NSpace justify="end"><NButton @click="doing = null">取消</NButton><NButton type="primary" @click="doComplete">确认收款</NButton></NSpace></template>
+    </NModal>
+
+    <NModal v-model:show="showDetail" title="订单详情" preset="card" style="width:520px">
+      <div v-if="detail">
+        <NSpace :size="6" style="margin-bottom:8px">
+          <NTag size="small">单号 {{ detail.id.slice(-8) }}</NTag>
+          <NTag size="small" type="info">{{ detail.memberName }}</NTag>
+          <NTag size="small" :type="statusCfg[detail.status].type">{{ statusCfg[detail.status].label }}</NTag>
+          <NTag v-if="detail?.paymentMethod" size="small">{{ payOptions.find(p => p.value === detail!.paymentMethod)?.label }}</NTag>
+        </NSpace>
+        <div style="color:var(--n-text-color-3);font-size:12px;margin-bottom:8px">创建：{{ new Date(detail.createdAt).toLocaleString() }}</div>
+        <NDataTable :columns="itemColumns" :data="detail?.items ?? []" :pagination="false" size="small" />
+        <NSpace vertical :size="4" style="margin-top:12px">
+          <NSpace justify="space-between"><span>小计</span><span>¥{{ fmt(detail.subtotal) }}</span></NSpace>
+          <template v-if="(detail?.discountRecords ?? []).length">
+            <NSpace v-for="r in (detail?.discountRecords ?? [])" :key="r.discountId" justify="space-between" style="color:var(--n-warning-color)">
+              <span>优惠 · {{ r.description }}</span><span>-¥{{ fmt(r.discountAmount) }}</span>
+            </NSpace>
+          </template>
+          <NSpace justify="space-between" style="font-weight:700;font-size:16px">
+            <span>实收</span><span style="color:var(--n-success-color)">¥{{ fmt(detail.finalAmount) }}</span>
+          </NSpace>
+          <div v-if="detail.notes" style="font-size:13px;color:var(--n-text-color-3)">备注：{{ detail.notes }}</div>
+        </NSpace>
+      </div>
+      <template #footer><NSpace justify="end"><NButton @click="showDetail = false">关闭</NButton></NSpace></template>
     </NModal>
   </NSpace>
 </template>

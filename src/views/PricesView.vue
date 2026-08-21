@@ -34,17 +34,18 @@ function openEdit(row: PriceEntry) {
   editingId.value = row.id
   form.value = {
     name: row.name, category: row.category, pricingMode: row.pricingMode,
-    basePrice: row.basePrice, description: row.description ?? '', isActive: row.isActive,
+    basePrice: row.basePrice / 100, description: row.description ?? '', isActive: row.isActive,
   }
   showModal.value = true
 }
 async function save() {
   if (!form.value.name.trim()) { msg.warning('请输入名称'); return }
   try {
+    const payload = { ...form.value, basePrice: Math.round((form.value.basePrice || 0) * 100) }
     if (editingId.value) {
-      await priceStore.update(editingId.value, { ...form.value })
+      await priceStore.update(editingId.value, payload)
     } else {
-      await priceStore.create(form.value)
+      await priceStore.create(payload)
     }
     msg.success('已保存')
     showModal.value = false
@@ -55,7 +56,7 @@ const columns = computed(() => [
   { title: '名称', key: 'name' },
   { title: '分类', key: 'category', width: 110 },
   { title: '计价', key: 'pricingMode', width: 70, render: (row: PriceEntry) => row.pricingMode === 'hourly' ? '工时' : '按件' },
-  { title: '价格', key: 'basePrice', width: 100, render: (row: PriceEntry) => '¥' + fmt(row.basePrice) + '/h' },
+  { title: '价格', key: 'basePrice', width: 110, render: (row: PriceEntry) => '¥' + fmt(row.basePrice) + (row.pricingMode === 'hourly' ? '/h' : '/件') },
   { title: '状态', key: 'isActive', width: 80, render: (row: PriceEntry) => h(NTag, { type: row.isActive ? 'success' : 'default', size: 'tiny' }, () => row.isActive ? '启用' : '禁用') },
   {
     title: '操作', key: 'actions', width: 190,
@@ -106,8 +107,8 @@ const columns = computed(() => [
           <NSelect v-model:value="form.pricingMode"
             :options="[{ label: '按件', value: 'perPiece' }, { label: '工时', value: 'hourly' }]" />
         </NFormItem>
-        <NFormItem label="时薪(分)">
-          <NInputNumber v-model:value="form.basePrice" :min="0" style="width:100%" />
+        <NFormItem :label="form.pricingMode === 'hourly' ? '时薪（元/小时）' : '单价（元/件）'">
+          <NInputNumber v-model:value="form.basePrice" :min="0" :precision="2" placeholder="单位：元" style="width:100%" />
         </NFormItem>
         <NFormItem label="备注">
           <NInput v-model:value="form.description" type="textarea" :rows="2" />

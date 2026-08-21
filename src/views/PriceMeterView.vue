@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import {
   NButton, NCard, NSpace, NDivider, NSelect, NInput, NInputOtp, NCheckbox,
   NModal, NTag, NIcon, useMessage,
@@ -11,16 +11,18 @@ import { usePriceStore } from '@/stores/usePriceStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { fmt, type PriceEntry, type Member, type OrderItem, type DiscountRecord, type Discount } from '@/stores/types'
+import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { fmt, type PriceEntry, type Member, type OrderItem, type DiscountRecord, type Discount, type DiscountType } from '@/stores/types'
 
 const msg = useMessage()
 const priceStore = usePriceStore()
 const orderStore = useOrderStore()
 const memberStore = useMemberStore()
 const discountStore = useDiscountStore()
+const memberTypeStore = useMemberTypeStore()
 
 onMounted(async () => {
-  await Promise.all([priceStore.load(), memberStore.load(), discountStore.load(), orderStore.load()])
+  await Promise.all([priceStore.load(), memberStore.load(), discountStore.load(), orderStore.load(), memberTypeStore.load()])
 })
 onBeforeUnmount(stopAllTimers)
 
@@ -43,50 +45,65 @@ const orderNotes = ref('')
 const showDisc = ref(false)
 const codeValue = ref<string[]>([])
 
-// ── 优惠：非券码（自动适用，可开关）+ 券码（OTP 兑换）──
-const nonCouponIds = ref<string[]>([])
+// ── 优惠：非券码（满足条件自动适用，可手动排除）+ 券码（OTP 兑换，输满即兑）──
+const excludedNonCoupon = ref<string[]>([])
 const couponIds = ref<string[]>([])
-const discIds = computed<string[]>(() => [...nonCouponIds.value, ...couponIds.value])
 
 function completedCountOf(memberId: string): number {
   return orderStore.orders.filter(o => o.memberId === memberId && o.status === 'completed').length
 }
 
+const curMemberId = computed(() => selectedMember.value?.id ?? '')
+const curMemberTypeId = computed(() => selectedMember.value?.typeId ?? '')
+const curMemberType = computed(() => memberTypeStore.types.find(t => t.id === curMemberTypeId.value)?.name ?? '')
+
 const eligibleNonCoupon = computed<Discount[]>(() => {
-  const memberId = selectedMember.value?.id ?? ''
+  const memberId = curMemberId.value
   const completed = completedCountOf(memberId)
   return discountStore.discounts.filter(
-    d => d.discountType !== 'coupon' && !!discountStore.calcDiscount(d, subtotal.value, memberId, completed),
+    d => d.discountType !== 'coupon' && !!discountStore.calcDiscount(d, subtotal.value, memberId, completed, curMemberTypeId.value),
   )
 })
+const appliedNonCoupon = computed<Discount[]>(() =>
+  eligibleNonCoupon.value.filter(d => !excludedNonCoupon.value.includes(d.id)),
+)
+const discIds = computed<string[]>(() => [...appliedNonCoupon.value.map(d => d.id), ...couponIds.value])
 
 function discountAmountOf(d: Discount): number {
-  const memberId = selectedMember.value?.id ?? ''
-  return discountStore.calcDiscount(d, subtotal.value, memberId, completedCountOf(memberId))?.amount ?? 0
+  const memberId = curMemberId.value
+  return discountStore.calcDiscount(d, subtotal.value, memberId, completedCountOf(memberId), curMemberTypeId.value)?.amount ?? 0
 }
 
-function addNonCoupon(id: string) { if (!nonCouponIds.value.includes(id)) nonCouponIds.value.push(id) }
-function removeNonCoupon(id: string) { nonCouponIds.value = nonCouponIds.value.filter(x => x !== id) }
-function removeDisc(id: string) {
-  nonCouponIds.value = nonCouponIds.value.filter(x => x !== id)
-  couponIds.value = couponIds.value.filter(x => x !== id)
+function toggleNonCoupon(id: string, on: boolean) {
+  if (on) excludedNonCoupon.value = excludedNonCoupon.value.filter(x => x !== id)
+  else if (!excludedNonCoupon.value.includes(id)) excludedNonCoupon.value.push(id)
+}
+function removeDisc(id: string, type: string) {
+  if (type === 'coupon') couponIds.value = couponIds.value.filter(x => x !== id)
+  else if (!excludedNonCoupon.value.includes(id)) excludedNonCoupon.value.push(id)
 }
 
 function openDisc() {
   showDisc.value = true
   codeValue.value = []
-  nonCouponIds.value = eligibleNonCoupon.value.map(d => d.id)
 }
 
-function applyCode() {
-  const code = (codeValue.value ?? []).join('').toUpperCase()
-  if (code.length < 6) { msg.warning('请输入 6 位券码'); return }
+function applyCode(raw?: string) {
+  const code = (raw ?? (codeValue.value ?? []).join('')).toUpperCase()
+  if (code.length < 6) { if (!raw) msg.warning('请输入 6 位券码'); return }
   const d = discountStore.findByCode(code)
   if (!d || !discountStore.isValidCode(code)) { msg.warning('券码无效、已使用或已过期'); return }
   if (!couponIds.value.includes(d.id)) couponIds.value.push(d.id)
   codeValue.value = []
   msg.success('券码已兑换')
 }
+
+// 券码自动转大写 + 输满即兑
+watch(codeValue, (val) => {
+  const up = (val ?? []).map(c => c.toUpperCase())
+  if ((codeValue.value ?? []).join('') !== up.join('')) codeValue.value = up
+  if (up.length === 6) applyCode(up.join(''))
+}, { deep: true })
 
 // ── 计时器（全局唯一）──
 const timerElapsed = ref<Record<string, number>>({})
@@ -143,14 +160,14 @@ const subtotal = computed(() =>
   cart.value.reduce((s, i) => s + itemCost.value(i), 0))
 
 const discRecords = computed(() => {
-  const out: Array<{ id: string; desc: string; amount: number }> = []
-  const memberId = selectedMember.value?.id ?? ''
+  const out: Array<{ id: string; type: DiscountType; desc: string; amount: number }> = []
+  const memberId = curMemberId.value
   const completed = completedCountOf(memberId)
   for (const id of discIds.value) {
     const d = discountStore.discounts.find(x => x.id === id)
     if (!d) continue
-    const r = discountStore.calcDiscount(d, subtotal.value, memberId, completed)
-    if (r) out.push({ id, ...r })
+    const r = discountStore.calcDiscount(d, subtotal.value, memberId, completed, curMemberTypeId.value)
+    if (r) out.push({ id, type: d.discountType, ...r })
   }
   return out
 })
@@ -223,7 +240,7 @@ async function submitOrder() {
     msg.success('订单已创建')
     selectedMember.value = null
     cart.value = []
-    nonCouponIds.value = []
+    excludedNonCoupon.value = []
     couponIds.value = []
     orderNotes.value = ''
     codeValue.value = []
@@ -245,7 +262,7 @@ async function submitOrder() {
           placeholder="搜索姓名/手机并点选（留空为散客）" />
         <NSpace v-if="selectedMember" align="center" style="margin-top:8px">
           <NTag type="success" size="small">✓ {{ selectedMember.name }}</NTag>
-          <NTag v-for="t in selectedMember.tags" :key="t" size="tiny">{{ t }}</NTag>
+          <NTag v-if="curMemberType" type="info" size="tiny">{{ curMemberType }}</NTag>
         </NSpace>
         <span v-else style="font-size:12px;color:var(--n-text-color-3)">当前为散客</span>
         <NDivider style="margin:12px 0 8px">服务项目</NDivider>
@@ -328,7 +345,7 @@ async function submitOrder() {
 
           <div v-if="discIds.length" style="margin-top:8px">
             <NTag v-for="r in discRecords" :key="r.id" type="warning" size="tiny" closable style="margin-right:4px"
-              @close="removeDisc(r.id)">{{ r.desc }}</NTag>
+              @close="removeDisc(r.id, r.type)">{{ r.desc }}</NTag>
           </div>
 
           <NDivider style="margin:12px 0" />
@@ -357,8 +374,8 @@ async function submitOrder() {
           <NSpace vertical :size="6">
             <div v-for="d in eligibleNonCoupon" :key="d.id"
               style="display:flex;align-items:center;gap:8px">
-              <NCheckbox :checked="nonCouponIds.includes(d.id)"
-                @update:checked="v => v ? addNonCoupon(d.id) : removeNonCoupon(d.id)" />
+              <NCheckbox :checked="!excludedNonCoupon.includes(d.id)"
+                @update:checked="v => toggleNonCoupon(d.id, v)" />
               <span style="flex:1">{{ d.name }}</span>
               <span style="color:var(--n-warning-color)">-¥{{ fmt(discountAmountOf(d)) }}</span>
             </div>
@@ -367,8 +384,8 @@ async function submitOrder() {
         <NDivider v-if="eligibleNonCoupon.length" style="margin:4px 0" />
         <div>
           <div style="font-size:12px;color:var(--n-text-color-3);margin-bottom:6px">券码兑换</div>
-          <NInputOtp :length="6" v-model:value="codeValue" block @keyup.enter="applyCode" />
-          <NButton type="primary" block style="margin-top:8px" @click="applyCode">兑换</NButton>
+          <NInputOtp :length="6" v-model:value="codeValue" block />
+          <NButton type="primary" block style="margin-top:8px" @click="applyCode()">兑换</NButton>
         </div>
       </NSpace>
     </NModal>

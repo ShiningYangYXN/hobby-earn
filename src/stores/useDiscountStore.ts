@@ -51,10 +51,14 @@ export const useDiscountStore = defineStore('discount', () => {
     return !!d && d.isActive && inRange(d) && (d.usageLimit === null || d.usedCount < d.usageLimit)
   }
 
-  function calcDiscount(d: Discount, subtotal: number, memberId: string, completedCount: number): { desc: string; amount: number } | null {
+  function calcDiscount(d: Discount, subtotal: number, memberId: string, completedCount: number, memberTypeId?: string): { desc: string; amount: number } | null {
     if (!d.isActive || !inRange(d) || subtotal < d.minAmount) return null
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return null
     if (d.memberLimit !== null && (d.memberUsedCount[memberId] ?? 0) >= d.memberLimit) return null
+    if (d.discountType === 'member') {
+      if (!d.memberTypeIds || d.memberTypeIds.length === 0) return null
+      if (!memberTypeId || !d.memberTypeIds.includes(memberTypeId)) return null
+    }
     if (d.discountType === 'firstOrder' && completedCount > 0) return null
     if (d.discountType === 'repeatOrder' && completedCount < (d.repeatThreshold ?? 1)) return null
     const amount = d.ruleType === 'percentage'

@@ -16,7 +16,8 @@ export function genCode(): string {
 /* ── 会员 ── */
 export interface Member {
   id: string; name: string; phone?: string;
-  joinDate: string; tags: string[]; referrerId?: string; notes?: string
+  joinDate: string; tags?: string[]; referrerId?: string; notes?: string;
+  typeId?: string
 }
 
 /* ── 会员种类（完全自定义）── */
@@ -62,5 +63,6 @@ export interface Discount {
   usageLimit: number | null; usedCount: number
   memberLimit: number | null; memberUsedCount: Record<string, number>
   repeatThreshold?: number; referrerMemberId?: string
+  memberTypeIds?: string[]
   isActive: boolean
 }

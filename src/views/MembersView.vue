@@ -19,17 +19,17 @@ onMounted(async () => {
 // ── 会员新建 / 编辑 ──
 const showModal = ref(false)
 const editingId = ref<string | null>(null)
-const form = ref({ name: '', phone: '', tags: [] as string[], notes: '' })
-const typeOptions = computed(() => memberTypeStore.types.map((t: MemberType) => ({ label: t.name, value: t.name })))
+const form = ref({ name: '', phone: '', typeId: '', notes: '' })
+const typeOptions = computed(() => memberTypeStore.types.map((t: MemberType) => ({ label: t.name, value: t.id })))
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', phone: '', tags: [], notes: '' }
+  form.value = { name: '', phone: '', typeId: '', notes: '' }
   showModal.value = true
 }
 function openEdit(m: Member) {
   editingId.value = m.id
-  form.value = { name: m.name, phone: m.phone ?? '', tags: [...m.tags], notes: m.notes ?? '' }
+  form.value = { name: m.name, phone: m.phone ?? '', typeId: m.typeId ?? '', notes: m.notes ?? '' }
   showModal.value = true
 }
 async function save() {
@@ -71,7 +71,10 @@ function removeType(t: MemberType) {
 const columns = computed(() => [
   { title: '姓名', key: 'name' },
   { title: '手机', key: 'phone', width: 140, render: (row: Member) => row.phone || '-' },
-  { title: '标签', key: 'tags', width: 200, render: (row: Member) => h(NSpace, { size: 4 }, () => row.tags.map((t: string) => h(NTag, { size: 'tiny' }, () => t))) },
+  { title: '种类', key: 'typeId', width: 200, render: (row: Member) => {
+    const t = memberTypeStore.types.find((x: MemberType) => x.id === row.typeId)
+    return t ? h(NTag, { size: 'tiny', type: 'info' }, () => t.name) : h('span', { style: { color: '#aaa' } }, '未设置')
+  } },
   { title: '加入时间', key: 'joinDate', width: 160, render: (row: Member) => new Date(row.joinDate).toLocaleString() },
   {
     title: '操作', key: 'actions', width: 130,
@@ -107,7 +110,7 @@ const columns = computed(() => [
       <NForm label-width="60">
         <NFormItem label="姓名"><NInput v-model:value="form.name" placeholder="会员姓名" /></NFormItem>
         <NFormItem label="手机"><NInput v-model:value="form.phone" placeholder="选填" /></NFormItem>
-        <NFormItem label="种类"><NSelect v-model:value="form.tags" multiple :options="typeOptions" placeholder="选填" /></NFormItem>
+        <NFormItem label="会员种类"><NSelect v-model:value="form.typeId" :options="typeOptions" placeholder="选择会员种类" clearable /></NFormItem>
         <NFormItem label="备注"><NInput v-model:value="form.notes" type="textarea" :rows="2" /></NFormItem>
       </NForm>
       <template #footer>
