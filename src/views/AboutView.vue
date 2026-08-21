@@ -1,15 +1,39 @@
-<template>
-  <div class="about">
-    <h1>This is an about page</h1>
-  </div>
-</template>
+<script setup lang="ts">
+import { NFlex, NIcon, NResult, NTag } from 'naive-ui';
+import { IconMoodDollar, IconTag, IconCertificate, IconBrandGithub } from '@tabler/icons-vue'
+import { version, license } from '@/../package.json'
+</script>
 
-<style>
-@media (min-width: 1024px) {
-  .about {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-  }
-}
-</style>
+<template>
+  <NResult title="HobbyEarn" description="一起玩赚零花钱" size="huge">
+    <template #icon>
+      <NIcon size="256px">
+        <IconMoodDollar />
+      </NIcon>
+    </template>
+    <template #footer>
+      <NFlex justify="center">
+        <NTag :bordered="false" type="info">
+          <NIcon>
+            <IconTag />
+          </NIcon>
+          {{ version }}
+        </NTag>
+        <NTag :bordered="false" type="success">
+          <NIcon>
+            <IconCertificate />
+          </NIcon>
+          {{ license }}
+        </NTag>
+        <a href="https://github.com/ShiningYangYXN/hobby-earn">
+          <NTag :bordered="false">
+            <NIcon>
+              <IconBrandGithub />
+            </NIcon>
+            ShiningYangYXN / <b>hobby-earn</b>
+          </NTag>
+        </a>
+      </NFlex>
+    </template>
+  </NResult>
+</template>
