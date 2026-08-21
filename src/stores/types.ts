@@ -1,6 +1,11 @@
 /** 业务类型 */
 
-export function uid(): string { return crypto.randomUUID() }
+export function uid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+}
 export function now(): string { return new Date().toISOString() }
 export function fmt(cents: number): string { return (cents / 100).toFixed(2) }
 export function genCode(): string {
@@ -12,6 +17,11 @@ export function genCode(): string {
 export interface Member {
   id: string; name: string; phone?: string;
   joinDate: string; tags: string[]; referrerId?: string; notes?: string
+}
+
+/* ── 会员种类（完全自定义）── */
+export interface MemberType {
+  id: string; name: string
 }
 
 /* ── 价格条目 ── */

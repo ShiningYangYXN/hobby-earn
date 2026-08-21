@@ -10,7 +10,7 @@
 
 const DB_NAME = 'hobby-earn-db'
 const DB_VERSION = 1
-const STORES = ['members', 'orders', 'prices', 'discounts'] as const
+const STORES = ['members', 'orders', 'prices', 'discounts', 'memberTypes'] as const
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -30,6 +30,22 @@ function openDB(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error ?? new Error('IndexedDB 打开失败'))
   })
   return dbPromise
+}
+
+/**
+ * 递归剥离 undefined，避免 IndexedDB structured clone 在部分实现下抛 DataCloneError。
+ * 同时把 NaN 也剔除（NaN 无法被索引/序列化稳定保存）。
+ */
+function sanitize<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => sanitize(v)) as unknown as T
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined && !(typeof v === 'number' && Number.isNaN(v))) out[k] = sanitize(v)
+    }
+    return out as T
+  }
+  return value
 }
 
 /**
@@ -58,11 +74,11 @@ export function getAll<T>(store: string): Promise<T[]> {
 }
 
 export function put<T>(store: string, item: T): Promise<void> {
-  return run(store, 'readwrite', (os) => os.put(item)).then(() => undefined)
+  return run(store, 'readwrite', (os) => os.put(sanitize(item))).then(() => undefined)
 }
 
 export function add<T extends { id: string }>(store: string, item: T): Promise<void> {
-  return run(store, 'readwrite', (os) => os.add(item)).then(() => undefined)
+  return run(store, 'readwrite', (os) => os.add(sanitize(item))).then(() => undefined)
 }
 
 export function del(store: string, id: string): Promise<void> {

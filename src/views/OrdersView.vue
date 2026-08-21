@@ -7,6 +7,7 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { fmt, type Order, type OrderStatus, type PaymentMethod } from '@/stores/types'
 
 const msg = useMessage()
+const dialog = useDialog()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
 onMounted(async () => { await Promise.all([orderStore.load(), discountStore.load()]) })
@@ -45,10 +46,10 @@ async function doComplete(): Promise<void> {
 }
 
 function doCancel(o: Order) {
-  useDialog().warning({ title: '取消订单', content: '确定取消？', positiveText: '取消', negativeText: '返回', onPositiveClick: async () => { await orderStore.cancel(o.id); msg.success('已取消') } })
+  dialog.warning({ title: '取消订单', content: '确定取消？', positiveText: '取消', negativeText: '返回', onPositiveClick: async () => { await orderStore.cancel(o.id); msg.success('已取消') } })
 }
 function doDelete(o: Order) {
-  useDialog().warning({ title: '删除订单', content: '不可恢复，确定？', positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await orderStore.remove(o.id); msg.success('已删除') } })
+  dialog.warning({ title: '删除订单', content: '不可恢复，确定？', positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await orderStore.remove(o.id); msg.success('已删除') } })
 }
 </script>
 

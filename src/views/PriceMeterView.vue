@@ -11,7 +11,7 @@ import { usePriceStore } from '@/stores/usePriceStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { fmt, type PriceEntry, type Member, type OrderItem } from '@/stores/types'
+import { fmt, type PriceEntry, type Member, type OrderItem, type DiscountRecord } from '@/stores/types'
 
 const msg = useMessage()
 const priceStore = usePriceStore()
@@ -158,9 +158,10 @@ function applyCode() {
 }
 
 async function submitOrder() {
-  if (!selectedMember.value) { msg.warning('请选择会员'); return }
   if (!cart.value.length) { msg.warning('请添加服务项目'); return }
   stopAllTimers()
+  const memberId = selectedMember.value?.id ?? ''
+  const memberName = selectedMember.value?.name ?? '散客'
   try {
     // 提交时固化 elapsed 到每个工时项目
     const items = cart.value.map(i => {
@@ -169,7 +170,19 @@ async function submitOrder() {
       }
       return i
     })
-    await orderStore.create(selectedMember.value.id, selectedMember.value.name, items, orderNotes.value)
+    const appliedDiscounts = discIds.value
+      .map(id => {
+        const d = discountStore.discounts.find(x => x.id === id)
+        const r = discRecords.value.find(x => x.id === id)
+        if (!d || !r) return null
+        return { discountId: id, discountType: d.discountType, ruleType: d.ruleType, description: r.desc, discountAmount: r.amount } as DiscountRecord
+      })
+      .filter((x): x is DiscountRecord => x !== null)
+    await orderStore.create(memberId, memberName, items, {
+      discountRecords: appliedDiscounts,
+      discountAmount: appliedDiscounts.reduce((s, r) => s + r.discountAmount, 0),
+      notes: orderNotes.value,
+    })
     msg.success('订单已创建')
     selectedMember.value = null
     search.value = ''

@@ -70,7 +70,10 @@ export const useDiscountStore = defineStore('discount', () => {
 })
 
 function inRange(d: Discount): boolean {
-  const now = new Date().toISOString()
-  return now >= d.validFrom && now <= d.validUntil
+  const now = Date.now()
+  // 空字符串视为不限制（永久有效）
+  if (d.validFrom && now < Date.parse(d.validFrom)) return false
+  if (d.validUntil && now > Date.parse(d.validUntil)) return false
+  return true
 }
 function cents(c: number): string { return (c / 100).toFixed(0) }

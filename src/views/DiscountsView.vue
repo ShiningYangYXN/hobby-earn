@@ -6,6 +6,7 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { fmt, type Discount } from '@/stores/types'
 
 const msg = useMessage()
+const dialog = useDialog()
 const discountStore = useDiscountStore()
 onMounted(() => discountStore.load())
 
@@ -36,7 +37,7 @@ async function save() {
 }
 
 function remove(d: Discount) {
-  useDialog().warning({ title: '确认删除', content: `删除「${d.name}」？`, positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await discountStore.remove(d.id); msg.success('已删除') } })
+  dialog.warning({ title: '确认删除', content: `删除「${d.name}」？`, positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { await discountStore.remove(d.id); msg.success('已删除') } })
 }
 
 async function toggle(d: Discount) { await discountStore.update(d.id, { isActive: !d.isActive }) }
@@ -64,7 +65,7 @@ const isPct = computed(() => form.value.ruleType === 'percentage')
         { title: '状态', key: 'isActive', width: 70, render: (row: Discount) => h(NTag, { type: row.isActive ? 'success' : 'default', size: 'tiny' }, () => row.isActive ? '启用' : '禁用') },
         { title: '操作', key: 'actions', width: 140, render: (row: Discount) => h(NSpace, { size: 4 }, () => [
           h(NButton, { size: 'tiny', onClick: () => openEdit(row) }, () => '编辑'),
-          h(NButton, { size: 'tiny', type: (row.isActive ? 'warning' : 'success') as any, onClick: () => toggle(row) }, () => row.isActive ? '停用' : '启用'),
+          h(NButton, { size: 'tiny', type: row.isActive ? 'warning' : 'success', onClick: () => toggle(row) }, () => row.isActive ? '停用' : '启用'),
           h(NButton, { size: 'tiny', type: 'error', onClick: () => remove(row) }, () => '删除'),
         ]) },
       ]"

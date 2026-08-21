@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
-import type { Order, PaymentMethod } from './types'
+import type { Order, PaymentMethod, DiscountRecord } from './types'
 import { uid, now } from './types'
 
 export const useOrderStore = defineStore('order', () => {
@@ -30,7 +30,10 @@ export const useOrderStore = defineStore('order', () => {
     orders.value = (await getAll<Order>('orders')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
-  async function create(memberId: string, memberName: string, items: Order['items'], notes?: string): Promise<Order> {
+  async function create(
+    memberId: string, memberName: string, items: Order['items'],
+    opts: { discountRecords?: DiscountRecord[]; discountAmount?: number; notes?: string } = {},
+  ): Promise<Order> {
     // 工时项目：按 elapsed 计算实际金额，否则用 unitPrice * quantity
     const subtotal = items.reduce((s, i) => {
       if (i.pricingMode === 'hourly' && i.elapsed) {
@@ -38,10 +41,12 @@ export const useOrderStore = defineStore('order', () => {
       }
       return s + i.unitPrice * i.quantity
     }, 0)
+    const discountAmount = Math.min(opts.discountAmount ?? 0, subtotal)
     const order: Order = {
       id: uid(), memberId, memberName, items,
-      subtotal, discountRecords: [], discountAmount: 0, finalAmount: subtotal,
-      status: 'pending', createdAt: now(), notes,
+      subtotal, discountRecords: opts.discountRecords ?? [], discountAmount,
+      finalAmount: Math.max(0, subtotal - discountAmount),
+      status: 'pending', createdAt: now(), notes: opts.notes,
     }
     await add('orders', order); orders.value.push(order)
     return order
