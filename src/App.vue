@@ -3,7 +3,7 @@ import { ref, h } from 'vue'
 import type { Component } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
-import { NLayout, NButton, NLayoutContent, NMenu, NConfigProvider, darkTheme, NLayoutSider, NPageHeader, NIcon, type MenuOption, NMessageProvider, NDialogProvider } from 'naive-ui'
+import { zhCN, dateZhCN, NLayout, NButton, NLayoutContent, NMenu, NConfigProvider, darkTheme, NLayoutSider, NPageHeader, NIcon, type MenuOption, NMessageProvider, NDialogProvider } from 'naive-ui'
 import { IconMoodDollar, IconMoon, IconSun, IconStopwatch, IconReceipt, IconUsers, IconGift, IconPigMoney, IconInfoCircle, IconTags } from '@tabler/icons-vue'
 
 const isDark = useDark()
@@ -59,46 +59,46 @@ const menuOptions: MenuOption[] = [
 </script>
 
 <template>
-  <NConfigProvider :theme="isDark ? darkTheme : null">
+  <NConfigProvider :theme="isDark ? darkTheme : null" :locale="zhCN" :date-locale="dateZhCN">
     <NMessageProvider>
       <NDialogProvider>
-    <NLayout style="height: 100dvh;">
-      <NLayoutHeader bordered>
-        <NPageHeader style="height: 64px; font-size: 32px;">
-          <template #avatar>
-            <NButton @click="$router.push('/')" text>
-              <NIcon size="64px">
-                <IconMoodDollar style="height: 48px;" />
-              </NIcon>
-            </NButton>
-          </template>
-          <template #title>
-            <span style="font-size: 24px;">HobbyEarn</span>
-          </template>
-          <template #subtitle>
-            玩赚·商家端
-          </template>
-          <template #extra>
-            <NButton @click="toggleDark()" text>
-              <NIcon size="48px">
-                <IconSun v-if="isDark" style="height: 24px;" />
-                <IconMoon v-else style="height: 24px;" />
-              </NIcon>
-            </NButton>
-          </template>
-        </NPageHeader>
-      </NLayoutHeader>
-      <NLayout hasSider style="height: calc(100dvh - 64px);">
-        <NLayoutSider bordered collapseMode="width" :collapsedWidth="64" :width="240" :collapsed="collapsed" showTrigger
-          @collapse="collapsed = true" @expand="collapsed = false">
-          <NMenu :collapsed="collapsed" :collapsedWidth="64" :collapsedIconSize="24" :options="menuOptions"
-            :value="$route.name?.toString()" />
-        </NLayoutSider>
-        <NLayoutContent>
-          <RouterView />
-        </NLayoutContent>
-      </NLayout>
-    </NLayout>
+        <NLayout style="height: 100dvh;">
+          <NLayoutHeader bordered>
+            <NPageHeader style="height: 64px; font-size: 32px;">
+              <template #avatar>
+                <NButton @click="$router.push('/')" text>
+                  <NIcon size="64px">
+                    <IconMoodDollar style="height: 48px;" />
+                  </NIcon>
+                </NButton>
+              </template>
+              <template #title>
+                <span style="font-size: 24px;">HobbyEarn</span>
+              </template>
+              <template #subtitle>
+                玩赚·商家端
+              </template>
+              <template #extra>
+                <NButton @click="toggleDark()" text>
+                  <NIcon size="48px">
+                    <IconSun v-if="isDark" style="height: 24px;" />
+                    <IconMoon v-else style="height: 24px;" />
+                  </NIcon>
+                </NButton>
+              </template>
+            </NPageHeader>
+          </NLayoutHeader>
+          <NLayout hasSider style="height: calc(100dvh - 64px);">
+            <NLayoutSider bordered collapseMode="width" :collapsedWidth="64" :width="240" :collapsed="collapsed"
+              showTrigger @collapse="collapsed = true" @expand="collapsed = false">
+              <NMenu :collapsed="collapsed" :collapsedWidth="64" :collapsedIconSize="24" :options="menuOptions"
+                :value="$route.name?.toString()" />
+            </NLayoutSider>
+            <NLayoutContent>
+              <RouterView />
+            </NLayoutContent>
+          </NLayout>
+        </NLayout>
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

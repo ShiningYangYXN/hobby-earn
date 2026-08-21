@@ -12,11 +12,13 @@ onMounted(() => discountStore.load())
 
 const modal = ref(false)
 const editing = ref<string | null>(null)
-const form = ref<Omit<Discount, 'id' | 'usedCount' | 'memberUsedCount'>>({
+type DiscountForm = Omit<Discount, 'id' | 'usedCount' | 'memberUsedCount' | 'validFrom' | 'validUntil'> & { validFrom: number | null; validUntil: number | null }
+const emptyForm = (): DiscountForm => ({
   name: '', discountType: 'coupon', ruleType: 'fixed',
-  value: 0, minAmount: 0, maxDiscount: 0, code: '',
-  validFrom: '', validUntil: '', usageLimit: null, memberLimit: null, isActive: true,
+  value: 0, minAmount: 0, maxDiscount: 0, code: '', repeatThreshold: 1,
+  validFrom: null, validUntil: null, usageLimit: null, memberLimit: null, isActive: true,
 })
+const form = ref<DiscountForm>(emptyForm())
 const rules = { name: { required: true, message: '必填', trigger: 'blur' }, value: { required: true, message: '必填', trigger: 'change' }, minAmount: { required: true, message: '必填', trigger: 'change' } }
 const typeOpts = [
   { label: '券码优惠', value: 'coupon' }, { label: '限时优惠', value: 'timeLimited' },
@@ -25,13 +27,33 @@ const typeOpts = [
 ]
 const ruleOpts = [{ label: '满减', value: 'fixed' }, { label: '打折', value: 'percentage' }]
 
-function openCreate() { editing.value = null; form.value = { name: '', discountType: 'coupon', ruleType: 'fixed', value: 0, minAmount: 0, maxDiscount: 0, code: '', validFrom: '', validUntil: '', usageLimit: null, memberLimit: null, isActive: true }; modal.value = true }
-function openEdit(d: Discount) { editing.value = d.id; form.value = { name: d.name, discountType: d.discountType, ruleType: d.ruleType, value: d.value, minAmount: d.minAmount, maxDiscount: d.maxDiscount ?? 0, code: d.code ?? '', validFrom: d.validFrom, validUntil: d.validUntil, usageLimit: d.usageLimit, memberLimit: d.memberLimit, isActive: d.isActive }; modal.value = true }
+function openCreate() { editing.value = null; form.value = emptyForm(); modal.value = true }
+function openEdit(d: Discount) {
+  editing.value = d.id
+  form.value = {
+    name: d.name, discountType: d.discountType, ruleType: d.ruleType, value: d.value,
+    minAmount: d.minAmount, maxDiscount: d.maxDiscount ?? 0, code: d.code ?? '', repeatThreshold: d.repeatThreshold ?? 1,
+    validFrom: d.validFrom ? Date.parse(d.validFrom) : null,
+    validUntil: d.validUntil ? Date.parse(d.validUntil) : null,
+    usageLimit: d.usageLimit, memberLimit: d.memberLimit, isActive: d.isActive,
+  }
+  modal.value = true
+}
+
+function toPayload(): Omit<Discount, 'id' | 'usedCount' | 'memberUsedCount'> {
+  const f = form.value
+  return {
+    ...f,
+    validFrom: f.validFrom ? new Date(f.validFrom).toISOString() : '',
+    validUntil: f.validUntil ? new Date(f.validUntil).toISOString() : '',
+  }
+}
 
 async function save() {
   try {
-    if (editing.value) await discountStore.update(editing.value, form.value)
-    else await discountStore.create(form.value)
+    const payload = toPayload()
+    if (editing.value) await discountStore.update(editing.value, payload)
+    else await discountStore.create(payload)
     msg.success('保存成功'); modal.value = false
   } catch (e: unknown) { msg.error(String(e)) }
 }
@@ -51,7 +73,10 @@ const isPct = computed(() => form.value.ruleType === 'percentage')
   <NSpace vertical :size="16" style="padding: 16px;">
     <NSpace justify="space-between" align="center">
       <h2 style="margin:0">优惠管理</h2>
-      <NButton type="primary" @click="openCreate"><IconPlus /> 新建优惠</NButton>
+      <NButton type="primary" @click="openCreate">
+        <template #icon><NIcon><IconPlus /></NIcon></template>
+        新建优惠
+      </NButton>
     </NSpace>
     <NDataTable
       :columns="[
@@ -61,7 +86,11 @@ const isPct = computed(() => form.value.ruleType === 'percentage')
         { title: '值', key: 'value', width: 80, render: (row: Discount) => row.ruleType === 'percentage' ? `${row.value}%` : '¥' + fmt(row.value) },
         { title: '最低', key: 'minAmount', width: 80, render: (row: Discount) => '¥' + fmt(row.minAmount) },
         { title: '已用', key: 'usedCount', width: 80, render: (row: Discount) => `${row.usedCount}/${row.usageLimit ?? '∞'}` },
-        { title: '有效期', key: 'validUntil', width: 150, render: (row: Discount) => row.discountType === 'member' ? '不限' : `${row.validFrom.slice(0,10)} ~ ${row.validUntil.slice(0,10)}` },
+        { title: '有效期', key: 'validUntil', width: 150, render: (row: Discount) => {
+          if (row.discountType === 'member') return '不限'
+          const fmt = (s: string) => s ? s.slice(0, 10) : '永久'
+          return (row.validFrom || row.validUntil) ? `${fmt(row.validFrom)} ~ ${fmt(row.validUntil)}` : '永久'
+        } },
         { title: '状态', key: 'isActive', width: 70, render: (row: Discount) => h(NTag, { type: row.isActive ? 'success' : 'default', size: 'tiny' }, () => row.isActive ? '启用' : '禁用') },
         { title: '操作', key: 'actions', width: 140, render: (row: Discount) => h(NSpace, { size: 4 }, () => [
           h(NButton, { size: 'tiny', onClick: () => openEdit(row) }, () => '编辑'),
@@ -83,10 +112,11 @@ const isPct = computed(() => form.value.ruleType === 'percentage')
           <NInputNumber v-model:value="form.minAmount" :min="0" placeholder="适用最低消费（分）" style="width:100%" />
         </NFormItem>
         <NFormItem v-if="isPct" label="优惠上限"><NInputNumber v-model:value="form.maxDiscount" :min="0" placeholder="最大减免金额（分）" style="width:100%" /></NFormItem>
+        <NFormItem v-if="form.discountType === 'repeatOrder'" label="累次阈值"><NInputNumber v-model:value="form.repeatThreshold" :min="1" placeholder="累计完成订单数达到此值可享" style="width:100%" /></NFormItem>
         <NFormItem v-if="showCode" label="券码"><NInput v-model:value="form.code" placeholder="留空自动生成6位" /></NFormItem>
         <template v-if="showTime">
-          <NFormItem label="开始"><NDatePicker v-model:formatted-value="form.validFrom" type="datetime" style="width:100%" /></NFormItem>
-          <NFormItem label="结束"><NDatePicker v-model:formatted-value="form.validUntil" type="datetime" style="width:100%" /></NFormItem>
+          <NFormItem label="开始"><NDatePicker v-model:value="form.validFrom" type="datetime" clearable style="width:100%" /></NFormItem>
+          <NFormItem label="结束"><NDatePicker v-model:value="form.validUntil" type="datetime" clearable style="width:100%" /></NFormItem>
         </template>
         <NFormItem label="每人上限"><NInputNumber v-model:value="form.memberLimit" :min="0" placeholder="null=不限" style="width:100%" /></NFormItem>
         <NFormItem label="总次数"><NInputNumber v-model:value="form.usageLimit" :min="0" placeholder="null=不限" style="width:100%" /></NFormItem>

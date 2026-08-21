@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
-  NButton, NCard, NSpace, NDivider, NAutoComplete, NInput,
-  NModal, NForm, NFormItem, NTag, NIcon, useMessage,
+  NButton, NCard, NSpace, NDivider, NSelect, NInput, NInputOtp, NCheckbox,
+  NModal, NTag, NIcon, useMessage,
 } from 'naive-ui'
 import {
   IconPlus, IconMinus, IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconTrash,
@@ -11,7 +11,7 @@ import { usePriceStore } from '@/stores/usePriceStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { fmt, type PriceEntry, type Member, type OrderItem, type DiscountRecord } from '@/stores/types'
+import { fmt, type PriceEntry, type Member, type OrderItem, type DiscountRecord, type Discount } from '@/stores/types'
 
 const msg = useMessage()
 const priceStore = usePriceStore()
@@ -24,14 +24,69 @@ onMounted(async () => {
 })
 onBeforeUnmount(stopAllTimers)
 
-// ── 购物车 ──
+// ── 会员选择（可搜索 + 点选，清空即散客）──
 const selectedMember = ref<Member | null>(null)
-const search = ref('')
+const selectedMemberId = computed<string | null>({
+  get: () => selectedMember.value?.id ?? null,
+  set: (id) => { selectedMember.value = id ? memberStore.members.find(m => m.id === id) ?? null : null },
+})
+const memberOptions = computed(() =>
+  memberStore.members.map(m => ({
+    label: m.phone ? `${m.name}（${m.phone}）` : m.name,
+    value: m.id,
+  })),
+)
+
+// ── 购物车 ──
 const cart = ref<OrderItem[]>([])
-const discIds = ref<string[]>([])
 const orderNotes = ref('')
 const showDisc = ref(false)
-const codeInput = ref('')
+const codeValue = ref<string[]>([])
+
+// ── 优惠：非券码（自动适用，可开关）+ 券码（OTP 兑换）──
+const nonCouponIds = ref<string[]>([])
+const couponIds = ref<string[]>([])
+const discIds = computed<string[]>(() => [...nonCouponIds.value, ...couponIds.value])
+
+function completedCountOf(memberId: string): number {
+  return orderStore.orders.filter(o => o.memberId === memberId && o.status === 'completed').length
+}
+
+const eligibleNonCoupon = computed<Discount[]>(() => {
+  const memberId = selectedMember.value?.id ?? ''
+  const completed = completedCountOf(memberId)
+  return discountStore.discounts.filter(
+    d => d.discountType !== 'coupon' && !!discountStore.calcDiscount(d, subtotal.value, memberId, completed),
+  )
+})
+
+function discountAmountOf(d: Discount): number {
+  const memberId = selectedMember.value?.id ?? ''
+  return discountStore.calcDiscount(d, subtotal.value, memberId, completedCountOf(memberId))?.amount ?? 0
+}
+
+function addNonCoupon(id: string) { if (!nonCouponIds.value.includes(id)) nonCouponIds.value.push(id) }
+function removeNonCoupon(id: string) { nonCouponIds.value = nonCouponIds.value.filter(x => x !== id) }
+function removeDisc(id: string) {
+  nonCouponIds.value = nonCouponIds.value.filter(x => x !== id)
+  couponIds.value = couponIds.value.filter(x => x !== id)
+}
+
+function openDisc() {
+  showDisc.value = true
+  codeValue.value = []
+  nonCouponIds.value = eligibleNonCoupon.value.map(d => d.id)
+}
+
+function applyCode() {
+  const code = (codeValue.value ?? []).join('').toUpperCase()
+  if (code.length < 6) { msg.warning('请输入 6 位券码'); return }
+  const d = discountStore.findByCode(code)
+  if (!d || !discountStore.isValidCode(code)) { msg.warning('券码无效、已使用或已过期'); return }
+  if (!couponIds.value.includes(d.id)) couponIds.value.push(d.id)
+  codeValue.value = []
+  msg.success('券码已兑换')
+}
 
 // ── 计时器（全局唯一）──
 const timerElapsed = ref<Record<string, number>>({})
@@ -73,14 +128,6 @@ function stopAllTimers() {
   stopTicker()
 }
 
-const matchedMembers = computed(() =>
-  search.value
-    ? memberStore.members.filter(m =>
-      m.name.includes(search.value.toLowerCase())
-      || (m.phone && m.phone.includes(search.value.toLowerCase())))
-    : []
-)
-
 const itemCost = computed(() => {
   return (item: OrderItem) => {
     if (item.pricingMode === 'hourly') {
@@ -98,11 +145,11 @@ const subtotal = computed(() =>
 const discRecords = computed(() => {
   const out: Array<{ id: string; desc: string; amount: number }> = []
   const memberId = selectedMember.value?.id ?? ''
+  const completed = completedCountOf(memberId)
   for (const id of discIds.value) {
     const d = discountStore.discounts.find(x => x.id === id)
     if (!d) continue
-    const completedCount = orderStore.orders.filter(o => o.memberId === memberId && o.status === 'completed').length
-    const r = discountStore.calcDiscount(d, subtotal.value, memberId, completedCount)
+    const r = discountStore.calcDiscount(d, subtotal.value, memberId, completed)
     if (r) out.push({ id, ...r })
   }
   return out
@@ -148,22 +195,12 @@ function rmCart(i: number) {
   cart.value.splice(i, 1)
 }
 
-function applyCode() {
-  const c = codeInput.value.trim().toUpperCase()
-  if (!discountStore.isValidCode(c)) { msg.warning('券码无效或已过期'); return }
-  const d = discountStore.findByCode(c)
-  if (d && !discIds.value.includes(d.id)) discIds.value.push(d.id)
-  codeInput.value = ''
-  showDisc.value = false
-}
-
 async function submitOrder() {
   if (!cart.value.length) { msg.warning('请添加服务项目'); return }
   stopAllTimers()
   const memberId = selectedMember.value?.id ?? ''
   const memberName = selectedMember.value?.name ?? '散客'
   try {
-    // 提交时固化 elapsed 到每个工时项目
     const items = cart.value.map(i => {
       if (i.pricingMode === 'hourly') {
         return { ...i, elapsed: timerElapsed.value[i.priceEntryId] ?? 0 }
@@ -185,10 +222,11 @@ async function submitOrder() {
     })
     msg.success('订单已创建')
     selectedMember.value = null
-    search.value = ''
     cart.value = []
-    discIds.value = []
+    nonCouponIds.value = []
+    couponIds.value = []
     orderNotes.value = ''
+    codeValue.value = []
     timerElapsed.value = {}
     timerRunning.value = {}
   } catch (e: unknown) { msg.error(String(e)) }
@@ -203,17 +241,13 @@ async function submitOrder() {
       <!-- 左栏：选择会员 + 服务项目 -->
       <NCard size="small">
         <template #header><strong>选择会员</strong></template>
-        <NAutoComplete v-model:value="search"
-          :options="matchedMembers.map(m => ({ label: `${m.name}${m.phone ? ' (' + m.phone + ')' : ''}`, value: m.id }))"
-          placeholder="搜索姓名或手机…" @update:value="selectedMember = null" @select="(option: { label: string; value: string }) => {
-            const m = memberStore.members.find(x => x.id === option.value)
-            if (m) selectedMember = m
-          }" />
+        <NSelect v-model:value="selectedMemberId" :options="memberOptions" filterable clearable
+          placeholder="搜索姓名/手机并点选（留空为散客）" />
         <NSpace v-if="selectedMember" align="center" style="margin-top:8px">
           <NTag type="success" size="small">✓ {{ selectedMember.name }}</NTag>
-          <span style="cursor:pointer;color:var(--n-text-color-3)" @click="selectedMember = null">✕</span>
+          <NTag v-for="t in selectedMember.tags" :key="t" size="tiny">{{ t }}</NTag>
         </NSpace>
-        <span v-else style="font-size:12px;color:var(--n-text-color-3)">散客无需选择</span>
+        <span v-else style="font-size:12px;color:var(--n-text-color-3)">当前为散客</span>
         <NDivider style="margin:12px 0 8px">服务项目</NDivider>
         <NSpace vertical :size="6" style="max-height:400px;overflow-y:auto">
           <NCard v-for="p in priceStore.activePrices" :key="p.id" size="small"
@@ -244,7 +278,6 @@ async function submitOrder() {
               style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--n-border-color)">
               <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.serviceName }}</span>
 
-              <!-- 按件：数量调节 -->
               <div v-if="item.pricingMode === 'perPiece'"
                 style="display:flex;align-items:center;gap:6px;min-width:110px;justify-content:flex-end">
                 <NButton size="tiny" circle @click="item.quantity = Math.max(1, item.quantity - 1)">
@@ -256,7 +289,6 @@ async function submitOrder() {
                 </NButton>
               </div>
 
-              <!-- 工时：计时器 -->
               <div v-else
                 style="display:flex;align-items:center;gap:6px;min-width:110px;justify-content:flex-end">
                 <span
@@ -287,7 +319,7 @@ async function submitOrder() {
           </NSpace>
 
           <NSpace style="margin-top:12px">
-            <NButton size="small" @click="showDisc = true">
+            <NButton size="small" @click="openDisc">
               <template #icon><NIcon><IconPlus /></NIcon></template>
               优惠
             </NButton>
@@ -296,7 +328,7 @@ async function submitOrder() {
 
           <div v-if="discIds.length" style="margin-top:8px">
             <NTag v-for="r in discRecords" :key="r.id" type="warning" size="tiny" closable style="margin-right:4px"
-              @close="discIds = discIds.filter(x => x !== r.id)">{{ r.desc }}</NTag>
+              @close="removeDisc(r.id)">{{ r.desc }}</NTag>
           </div>
 
           <NDivider style="margin:12px 0" />
@@ -318,18 +350,27 @@ async function submitOrder() {
       </NCard>
     </div>
 
-    <NModal v-model:show="showDisc" title="使用优惠" preset="card" style="width:360px">
-      <NForm>
-        <NFormItem label="券码">
-          <NInput v-model:value="codeInput" placeholder="6位字母数字" @keydown.enter="applyCode" />
-        </NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showDisc = false">取消</NButton>
-          <NButton type="primary" @click="applyCode">确认</NButton>
-        </NSpace>
-      </template>
+    <NModal v-model:show="showDisc" title="优惠" preset="card" style="width:380px">
+      <NSpace vertical :size="12">
+        <div v-if="eligibleNonCoupon.length">
+          <div style="font-size:12px;color:var(--n-text-color-3);margin-bottom:6px">自动适用优惠（可手动关闭）</div>
+          <NSpace vertical :size="6">
+            <div v-for="d in eligibleNonCoupon" :key="d.id"
+              style="display:flex;align-items:center;gap:8px">
+              <NCheckbox :checked="nonCouponIds.includes(d.id)"
+                @update:checked="v => v ? addNonCoupon(d.id) : removeNonCoupon(d.id)" />
+              <span style="flex:1">{{ d.name }}</span>
+              <span style="color:var(--n-warning-color)">-¥{{ fmt(discountAmountOf(d)) }}</span>
+            </div>
+          </NSpace>
+        </div>
+        <NDivider v-if="eligibleNonCoupon.length" style="margin:4px 0" />
+        <div>
+          <div style="font-size:12px;color:var(--n-text-color-3);margin-bottom:6px">券码兑换</div>
+          <NInputOtp :length="6" v-model:value="codeValue" block @keyup.enter="applyCode" />
+          <NButton type="primary" block style="margin-top:8px" @click="applyCode">兑换</NButton>
+        </div>
+      </NSpace>
     </NModal>
   </NSpace>
 </template>
