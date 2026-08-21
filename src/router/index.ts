@@ -4,6 +4,7 @@ import PriceMeterView from '@/views/PriceMeterView.vue'
 import MembersView from '@/views/MembersView.vue'
 import OrdersView from '@/views/OrdersView.vue'
 import DiscountsView from '@/views/DiscountsView.vue'
+import PricesView from '@/views/PricesView.vue'
 import RevenueView from '@/views/RevenueView.vue'
 import AboutView from '@/views/AboutView.vue'
 
@@ -29,6 +30,11 @@ const router = createRouter({
       path: '/members',
       name: 'members',
       component: MembersView,
+    },
+    {
+      path: '/prices',
+      name: 'prices',
+      component: PricesView,
     },
     {
       path: '/discounts',

@@ -3,9 +3,8 @@ import { ref, h } from 'vue'
 import type { Component } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
-import { NLayout, NButton, NLayoutContent, NMenu, NConfigProvider, darkTheme, NLayoutSider, NPageHeader, NIcon, type MenuOption } from 'naive-ui'
-import { IconMoodDollar, IconMoon, IconSun, IconStopwatch, IconReceipt, IconUsers, IconGift, IconPigMoney, IconInfoCircle } from '@tabler/icons-vue'
-import router from './router/index.ts'
+import { NLayout, NButton, NLayoutContent, NMenu, NConfigProvider, darkTheme, NLayoutSider, NPageHeader, NIcon, type MenuOption, NMessageProvider, NDialogProvider } from 'naive-ui'
+import { IconMoodDollar, IconMoon, IconSun, IconStopwatch, IconReceipt, IconUsers, IconGift, IconPigMoney, IconInfoCircle, IconTags } from '@tabler/icons-vue'
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
@@ -36,6 +35,11 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(IconUsers)
   },
   {
+    label: renderRouterLink('价格管理', '/prices'),
+    key: 'prices',
+    icon: renderIcon(IconTags)
+  },
+  {
     label: renderRouterLink('优惠管理', '/discounts'),
     key: 'discounts',
     icon: renderIcon(IconGift)
@@ -49,18 +53,20 @@ const menuOptions: MenuOption[] = [
     label: renderRouterLink('关于', '/about'),
     key: 'about',
     icon: renderIcon(IconInfoCircle)
-  },
+  }
 ]
 
 </script>
 
 <template>
   <NConfigProvider :theme="isDark ? darkTheme : null">
+    <NMessageProvider>
+      <NDialogProvider>
     <NLayout style="height: 100dvh;">
       <NLayoutHeader bordered>
         <NPageHeader style="height: 64px; font-size: 32px;">
           <template #avatar>
-            <NButton @click="router.push('/')" text>
+            <NButton @click="$router.push('/')" text>
               <NIcon size="64px">
                 <IconMoodDollar style="height: 48px;" />
               </NIcon>
@@ -74,7 +80,7 @@ const menuOptions: MenuOption[] = [
           </template>
           <template #extra>
             <NButton @click="toggleDark()" text>
-              <NIcon size="64px">
+              <NIcon size="48px">
                 <IconSun v-if="isDark" style="height: 24px;" />
                 <IconMoon v-else style="height: 24px;" />
               </NIcon>
@@ -93,6 +99,8 @@ const menuOptions: MenuOption[] = [
         </NLayoutContent>
       </NLayout>
     </NLayout>
+      </NDialogProvider>
+    </NMessageProvider>
   </NConfigProvider>
 </template>
 
