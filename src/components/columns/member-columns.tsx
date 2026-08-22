@@ -24,7 +24,9 @@ export function buildMemberColumns(opts: {
       render: (row: Member) => {
         const t = memberTypeStore.types.find((x: MemberType) => x.id === row.typeId)
         return t ? (
-          <NTag size="tiny" type="info">{t.name}</NTag>
+          <NTag size="tiny" type="info">
+            {t.name}
+          </NTag>
         ) : (
           <NText depth="3">未设置</NText>
         )
@@ -40,7 +42,11 @@ export function buildMemberColumns(opts: {
       title: '备注',
       key: 'notes',
       width: 160,
-      render: (row: Member) => <NEllipsis line-clamp={1} tooltip>{row.notes || '-'}</NEllipsis>,
+      render: (row: Member) => (
+        <NEllipsis line-clamp={1} tooltip>
+          {row.notes || '-'}
+        </NEllipsis>
+      ),
     },
     {
       title: '操作',
@@ -48,8 +54,12 @@ export function buildMemberColumns(opts: {
       width: 130,
       render: (row: Member) => (
         <NFlex size={4}>
-          <NButton size="tiny" onClick={() => opts.openEdit(row)}>编辑</NButton>
-          <NButton size="tiny" type="error" onClick={() => opts.removeMember(row)}>删除</NButton>
+          <NButton size="tiny" onClick={() => opts.openEdit(row)}>
+            编辑
+          </NButton>
+          <NButton size="tiny" type="error" onClick={() => opts.removeMember(row)}>
+            删除
+          </NButton>
         </NFlex>
       ),
     },

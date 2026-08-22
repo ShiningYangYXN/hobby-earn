@@ -132,7 +132,9 @@ export function buildDiscountColumns(opts: {
       width: 140,
       render: (row: Discount) => (
         <NFlex size={4}>
-          <NButton size="tiny" onClick={() => opts.openEdit(row)}>编辑</NButton>
+          <NButton size="tiny" onClick={() => opts.openEdit(row)}>
+            编辑
+          </NButton>
           <NButton
             size="tiny"
             type={row.isActive ? 'warning' : 'success'}
@@ -140,7 +142,9 @@ export function buildDiscountColumns(opts: {
           >
             {row.isActive ? '停用' : '启用'}
           </NButton>
-          <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>删除</NButton>
+          <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>
+            删除
+          </NButton>
         </NFlex>
       ),
     },

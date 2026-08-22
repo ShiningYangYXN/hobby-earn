@@ -74,10 +74,20 @@ export const useOrderStore = defineStore('order', () => {
   }
 
   // 暂存执行进度（保留已计秒数，不完成）
-  async function saveExecution(id: string, items: OrderItem[]): Promise<void> {
+  async function saveExecution(
+    id: string,
+    items: OrderItem[],
+    discountRecords?: DiscountRecord[],
+  ): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o) return
     o.items = items
+    if (discountRecords) {
+      o.discountRecords = discountRecords
+      o.discountAmount = discountRecords.reduce((s, r) => s + r.discountAmount, 0)
+    }
+    o.subtotal = subtotalOf(items)
+    o.finalAmount = Math.max(0, o.subtotal - (o.discountAmount ?? 0))
     await put('orders', o)
   }
 

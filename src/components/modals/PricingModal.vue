@@ -13,10 +13,14 @@ import {
   NFormItem,
   NScrollbar,
   NSelect,
+  NInputGroup,
+  NInput,
   useMessage,
 } from 'naive-ui'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useDiscountStore } from '@/stores/useDiscountStore'
+import { useDiscountApply } from '@/composables/useDiscountApply'
 import {
   fmt,
   subtotalOf,
@@ -24,6 +28,7 @@ import {
   type OrderItem,
   type OrderStatus,
   type PaymentMethod,
+  type DiscountType,
 } from '@/stores/types'
 
 const props = defineProps<{ show: boolean; orderId: string | null }>()
@@ -36,6 +41,7 @@ const emit = defineEmits<{
 const msg = useMessage()
 const orderStore = useOrderStore()
 const priceStore = usePriceStore()
+const discountStore = useDiscountStore()
 
 const payOpts: { label: string; value: PaymentMethod }[] = [
   { label: '现金', value: 'cash' },
@@ -53,6 +59,16 @@ const statusType = (s: OrderStatus) =>
     | 'info'
     | 'success'
     | 'default'
+
+const discountTypeLabel = (t: DiscountType | string): string =>
+  ({
+    coupon: '优惠券',
+    timeLimited: '限时优惠',
+    member: '会员折扣',
+    firstOrder: '首单优惠',
+    repeatOrder: '复购优惠',
+    referral: '推荐有礼',
+  })[t as DiscountType] ?? t
 
 const order = ref<Order | null>(null)
 const items = ref<OrderItem[]>([])
@@ -85,6 +101,7 @@ function stopTimer() {
 async function load() {
   if (!props.show || !props.orderId) return
   if (!priceStore.prices.length) await priceStore.load()
+  if (!discountStore.discounts.length) await discountStore.load()
   let o = orderStore.orders.find((x) => x.id === props.orderId)
   if (!o) return
   if (o.status === 'pending') await orderStore.beginExecute(o.id)
@@ -93,8 +110,9 @@ async function load() {
   order.value = o
   items.value = o.items.map((it) => ({ ...it }))
   Object.keys(running).forEach((k) => delete running[Number(k)])
-  payMethod.value = 'cash'
+  payMethod.value = o.paymentMethod ?? 'cash'
   newServiceId.value = null
+  hydrate(o.discountRecords)
 }
 
 watch(
@@ -153,6 +171,25 @@ function addService() {
 
 const liveSubtotal = computed(() => subtotalOf(items.value))
 
+// 折扣逻辑：会员取自当前订单，金额项取自实时 items
+const {
+  applied,
+  eligibleAuto,
+  couponInput,
+  couponError,
+  redeemCoupon,
+  toggleAuto,
+  dropApplied,
+  records,
+  discountAmount,
+  finalAmount,
+  commitUsage,
+  hydrate,
+} = useDiscountApply(
+  () => order.value?.memberId ?? null,
+  () => items.value,
+)
+
 async function saveProgress() {
   if (!order.value) return
   stopTimer()
@@ -166,12 +203,18 @@ async function saveProgress() {
 async function finish(m: PaymentMethod) {
   if (!order.value) return
   stopTimer()
-  await orderStore.finalize(
-    order.value.id,
-    items.value.map((it) => ({ ...it })),
-    order.value.discountRecords,
-    m,
-  )
+  try {
+    await orderStore.finalize(
+      order.value.id,
+      items.value.map((it) => ({ ...it })),
+      records.value,
+      m,
+    )
+    await commitUsage().catch(() => {})
+  } catch (e) {
+    msg.error('完成失败：' + (e as Error).message)
+    return
+  }
   msg.success('已完成并收款')
   emit('completed')
   emit('update:show', false)
@@ -249,9 +292,77 @@ function closePricing() {
           </NCard>
 
           <NCard size="small">
-            <NFlex justify="space-between" align="center">
-              <NText depth="3">当前金额</NText>
-              <span class="meter-num">¥{{ fmt(liveSubtotal) }}</span>
+            <NFlex vertical :size="8">
+              <NText depth="3">优惠</NText>
+              <NText v-if="order?.memberId" depth="3" style="font-size: 12px"
+                >当前会员：{{ order.memberName }}</NText
+              >
+              <template v-if="eligibleAuto.length">
+                <NFlex
+                  v-for="d in eligibleAuto"
+                  :key="d.id"
+                  justify="space-between"
+                  align="center"
+                >
+                  <NText style="font-size: 13px"
+                    >{{ d.name }}（{{
+                      d.ruleType === 'percentage' ? d.value + '%' : '¥' + fmt(d.value)
+                    }}）</NText
+                  >
+                  <NButton
+                    size="small"
+                    :type="applied.some((a) => a.id === d.id) ? 'primary' : 'default'"
+                    @click="toggleAuto(d)"
+                    >{{ applied.some((a) => a.id === d.id) ? '已选' : '选择' }}</NButton
+                  >
+                </NFlex>
+              </template>
+              <NInputGroup>
+                <NInput
+                  v-model:value="couponInput[0]"
+                  placeholder="输入优惠券码"
+                  @keyup.enter="redeemCoupon(couponInput[0] ?? '')"
+                />
+                <NButton
+                  type="primary"
+                  :disabled="!couponInput[0]"
+                  @click="redeemCoupon(couponInput[0] ?? '')"
+                  >应用</NButton
+                >
+              </NInputGroup>
+              <NText v-if="couponError" type="error" style="font-size: 12px">{{
+                couponError
+              }}</NText>
+              <NFlex v-if="applied.length" vertical :size="4">
+                <NFlex
+                  v-for="d in applied"
+                  :key="d.id"
+                  justify="space-between"
+                  align="center"
+                >
+                  <NText depth="3" style="font-size: 12px"
+                    >{{ discountTypeLabel(d.discountType) }}：{{ d.name }}</NText
+                  >
+                  <NButton size="tiny" text type="error" @click="dropApplied(d.id)">移除</NButton>
+                </NFlex>
+              </NFlex>
+            </NFlex>
+          </NCard>
+
+          <NCard size="small">
+            <NFlex vertical :size="6">
+              <NFlex justify="space-between" align="center">
+                <NText depth="3">小计</NText>
+                <span class="meter-num">¥{{ fmt(liveSubtotal) }}</span>
+              </NFlex>
+              <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
+                <NText depth="3">优惠</NText>
+                <span class="meter-num" style="color: #d03050">-¥{{ fmt(discountAmount) }}</span>
+              </NFlex>
+              <NFlex justify="space-between" align="center">
+                <NText strong>实收</NText>
+                <span class="meter-num" style="font-size: 20px">¥{{ fmt(finalAmount) }}</span>
+              </NFlex>
             </NFlex>
           </NCard>
 

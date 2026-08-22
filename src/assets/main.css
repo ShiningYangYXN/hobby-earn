@@ -20,18 +20,50 @@ body {
 
 /* 全局工具类：弹窗尺寸 / 卡片 / 等宽字 / 订单详情排版（避免各视图重复定义） */
 /* 弹窗宽度不超过页面 80%；高度由内容区 NScrollbar(.modal-scroll) 约束，标题与底部始终常驻 */
-.n-modal { max-width: 80vw; }
-.modal-sm { width: 380px; max-width: 80vw; }
-.modal-md { width: 520px; max-width: 80vw; }
-.modal-lg { width: 460px; max-width: 80vw; }
-.modal-xl { width: 620px; max-width: 80vw; }
-.modal-scroll { max-height: calc(80vh - 130px); }
-.type-card { display: flex; align-items: center; justify-content: space-between; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-.detail-meta { font-size: 12px; margin-bottom: 8px; }
-.detail-summary { margin-top: 12px; }
-.detail-final { font-weight: 700; font-size: 16px; }
-.detail-note { font-size: 13px; }
+.n-modal {
+  max-width: 80vw;
+}
+.modal-sm {
+  width: 380px;
+  max-width: 80vw;
+}
+.modal-md {
+  width: 520px;
+  max-width: 80vw;
+}
+.modal-lg {
+  width: 460px;
+  max-width: 80vw;
+}
+.modal-xl {
+  width: 620px;
+  max-width: 80vw;
+}
+.modal-scroll {
+  max-height: calc(80vh - 130px);
+}
+.type-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+.detail-meta {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.detail-summary {
+  margin-top: 12px;
+}
+.detail-final {
+  font-weight: 700;
+  font-size: 16px;
+}
+.detail-note {
+  font-size: 13px;
+}
 
 /* 计价器大数字 */
 .meter-num {

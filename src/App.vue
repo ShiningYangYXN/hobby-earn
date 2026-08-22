@@ -16,9 +16,6 @@ import {
   NPageHeader,
   NScrollbar,
   NIcon,
-  NFlex,
-  NText,
-  NSwitch,
   type MenuOption,
   NMessageProvider,
   NDialogProvider,
@@ -34,13 +31,12 @@ import {
   IconPigMoney,
   IconInfoCircle,
   IconTags,
+  IconHome,
 } from '@tabler/icons-vue'
-import { useUiStore } from '@/stores/useUiStore'
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
 const collapsed = ref(true)
-const ui = useUiStore()
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -51,6 +47,11 @@ function renderRouterLink(description: string, path: string) {
 }
 
 const menuOptions: MenuOption[] = [
+  {
+    label: renderRouterLink('首页', '/'),
+    key: 'home',
+    icon: renderIcon(IconHome),
+  },
   {
     label: renderRouterLink('计价器', '/price-meter'),
     key: 'price-meter',
@@ -108,18 +109,12 @@ const menuOptions: MenuOption[] = [
               </template>
               <template #subtitle> 玩赚·商家端 </template>
               <template #extra>
-                <NFlex align="center" :size="16">
-                  <NFlex align="center" :size="6">
-                    <NText>高级模式</NText>
-                    <NSwitch v-model:value="ui.advancedMode" />
-                  </NFlex>
-                  <NButton @click="toggleDark()" text>
-                    <NIcon size="48px">
-                      <IconSun v-if="isDark" style="height: 24px" />
-                      <IconMoon v-else style="height: 24px" />
-                    </NIcon>
-                  </NButton>
-                </NFlex>
+                <NButton @click="toggleDark()" text>
+                  <NIcon size="48px">
+                    <IconSun v-if="isDark" style="height: 24px" />
+                    <IconMoon v-else style="height: 24px" />
+                  </NIcon>
+                </NButton>
               </template>
             </NPageHeader>
           </NLayoutHeader>

@@ -33,12 +33,21 @@ export function buildMeterColumns(opts: MeterColumnsOpts) {
           })
           .join(', '),
     },
-    { title: '实收', key: 'finalAmount', width: 90, render: (o: Order) => `¥${fmt(o.finalAmount)}` },
+    {
+      title: '实收',
+      key: 'finalAmount',
+      width: 90,
+      render: (o: Order) => `¥${fmt(o.finalAmount)}`,
+    },
     {
       title: '状态',
       key: 'status',
       width: 80,
-      render: (o: Order) => <NTag type={statusType(o.status)} size="tiny">{statusLabel(o.status)}</NTag>,
+      render: (o: Order) => (
+        <NTag type={statusType(o.status)} size="tiny">
+          {statusLabel(o.status)}
+        </NTag>
+      ),
     },
     {
       title: '操作',

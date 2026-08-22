@@ -59,7 +59,11 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       title: '实收',
       key: 'finalAmount',
       width: 80,
-      render: (row: Order) => <NText type="success" strong>¥{fmt(row.finalAmount)}</NText>,
+      render: (row: Order) => (
+        <NText type="success" strong>
+          ¥{fmt(row.finalAmount)}
+        </NText>
+      ),
     },
     {
       title: '状态',
@@ -81,7 +85,11 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       title: '备注',
       key: 'notes',
       width: 120,
-      render: (row: Order) => <NEllipsis line-clamp={1} tooltip>{row.notes || '-'}</NEllipsis>,
+      render: (row: Order) => (
+        <NEllipsis line-clamp={1} tooltip>
+          {row.notes || '-'}
+        </NEllipsis>
+      ),
     },
     {
       title: '操作',
@@ -89,7 +97,9 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       width: 190,
       render: (row: Order) => (
         <NFlex size={4}>
-          <NButton size="tiny" onClick={() => opts.openDetail(row)}>详情</NButton>
+          <NButton size="tiny" onClick={() => opts.openDetail(row)}>
+            详情
+          </NButton>
           {(row.status === 'pending' || row.status === 'in_progress') && (
             <NButton size="tiny" type="primary" onClick={() => opts.goMeter(row)}>
               去计价
@@ -100,8 +110,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
               关闭订单
             </NButton>
           )}
-          {(row.status === 'cancelled' ||
-            (row.status === 'completed' && opts.advancedMode)) && (
+          {(row.status === 'cancelled' || (row.status === 'completed' && opts.advancedMode)) && (
             <NButton size="tiny" type="error" onClick={() => opts.doDelete(row)}>
               删除
             </NButton>

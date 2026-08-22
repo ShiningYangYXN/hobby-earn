@@ -1,4 +1,4 @@
-import { NTag, NText } from 'naive-ui'
+import { NTag, NText, NEllipsis } from 'naive-ui'
 import { fmt } from '@/stores/types'
 import type { Order } from '@/stores/types'
 
@@ -6,6 +6,7 @@ export interface HomeViewColumn {
   title: string
   key: string
   width?: number
+  ellipsis?: boolean
   render?: (row: Order) => string | import('vue').VNode
 }
 
@@ -35,7 +36,9 @@ export const homeViewColumns: HomeViewColumn[] = [
     key: 'status',
     width: 80,
     render: (row: Order) => (
-      <NTag type={statusType[row.status]!} size="tiny">{statusLabel[row.status]}</NTag>
+      <NTag type={statusType[row.status]!} size="tiny">
+        {statusLabel[row.status]}
+      </NTag>
     ),
   },
   {
@@ -43,5 +46,15 @@ export const homeViewColumns: HomeViewColumn[] = [
     key: 'createdAt',
     width: 140,
     render: (row: Order) => new Date(row.createdAt).toLocaleString(),
+  },
+  {
+    title: '备注',
+    key: 'notes',
+    ellipsis: true,
+    render: (row: Order) => (
+      <NEllipsis lineClamp={1} tooltip>
+        {row.notes || '—'}
+      </NEllipsis>
+    ),
   },
 ]
