@@ -183,6 +183,27 @@ export const useOrderStore = defineStore('order', () => {
     await del('orders', id)
   }
 
+  // —— 以下为调试 / 作弊权限（仅高级模式可用） ——
+
+  // 调试：直接改写订单最终金额（单位：分），绕过计价器与优惠计算
+  async function setFinalAmount(id: string, amountCents: number): Promise<void> {
+    const o = orders.value.find((x) => x.id === id)
+    if (!o) return
+    o.finalAmount = Math.max(0, Math.round(amountCents))
+    await put('orders', o)
+  }
+
+  // 调试：强制重新打开已关闭订单，绕过优惠过期 / 停用 / 超兑校验
+  async function forceReopen(id: string): Promise<void> {
+    const o = orders.value.find((x) => x.id === id)
+    if (!o || o.status !== 'closed') return
+    for (const rec of o.discountRecords) {
+      await discountStore.recordUsage(rec.discountId, o.memberId)
+    }
+    o.status = 'pending'
+    await put('orders', o)
+  }
+
   return {
     orders,
     pendingOrders,
@@ -199,6 +220,8 @@ export const useOrderStore = defineStore('order', () => {
     reopen,
     updateDraft,
     remove,
+    setFinalAmount,
+    forceReopen,
   }
 })
 

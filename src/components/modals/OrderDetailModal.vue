@@ -284,6 +284,27 @@ function doDelete() {
     },
   })
 }
+
+// —— 调试 / 作弊权限（仅高级模式） ——
+const debugEditing = ref(false)
+const debugAmount = ref(0)
+function startEditAmount() {
+  if (!order.value) return
+  debugAmount.value = order.value.finalAmount / 100
+  debugEditing.value = true
+}
+async function confirmEditAmount() {
+  if (!order.value) return
+  await orderStore.setFinalAmount(order.value.id, Math.round(debugAmount.value * 100))
+  debugEditing.value = false
+  msg.success('调试：订单金额已改写')
+}
+async function forceReopenOrder() {
+  if (!order.value) return
+  await orderStore.forceReopen(order.value.id)
+  msg.success('调试：已强制重新打开订单')
+  close()
+}
 </script>
 
 <template>
@@ -486,6 +507,15 @@ function doDelete() {
           >
             <IconTrash :size="16" /> 删除
           </NButton>
+          <template v-if="ui.advancedMode">
+            <NButton type="warning" @click="forceReopenOrder">调试：强制重开</NButton>
+            <NButton @click="startEditAmount">调试：改金额</NButton>
+            <template v-if="debugEditing">
+              <NInputNumber v-model:value="debugAmount" :min="0" :precision="2" />
+              <NButton type="primary" @click="confirmEditAmount">确认</NButton>
+              <NButton text @click="debugEditing = false">取消</NButton>
+            </template>
+          </template>
         </template>
       </NFlex>
     </template>
