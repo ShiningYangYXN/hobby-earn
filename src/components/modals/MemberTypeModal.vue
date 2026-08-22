@@ -90,8 +90,14 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="isFormMode ? (editId ? '编辑会员种类' : '新建会员种类') : '会员种类管理'" preset="card" class="modal-md"
-    :autoFocus="false" @update:show="close">
+  <NModal
+    :show="true"
+    :title="isFormMode ? (editId ? '编辑会员种类' : '新建会员种类') : '会员种类管理'"
+    preset="card"
+    class="modal-md"
+    :autoFocus="false"
+    @update:show="close"
+  >
     <NForm v-if="isFormMode" labelPlacement="top">
       <NFormItem label="种类名称" required>
         <NInput v-model:value="form.name" placeholder="如：普通会员 / VIP" />
@@ -104,11 +110,17 @@ function close() {
         <NButton type="primary" @click="openNew">
           <NIcon :size="16">
             <IconPlus />
-          </NIcon> 新建种类
+          </NIcon>
+          新建种类
         </NButton>
       </NFlex>
-      <NDataTable v-if="memberTypeStore.types.length" :columns="typeColumns" :data="memberTypeStore.types" size="small"
-        :pagination="false" />
+      <NDataTable
+        v-if="memberTypeStore.types.length"
+        :columns="typeColumns"
+        :data="memberTypeStore.types"
+        size="small"
+        :pagination="false"
+      />
       <NEmpty v-else description="暂无会员种类，点击右上角新建" />
     </NFlex>
 

@@ -199,8 +199,14 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" class="modal-xl" :autoFocus="false"
-    @update:show="close">
+  <NModal
+    :show="true"
+    :title="editing ? '编辑优惠' : '新建优惠'"
+    preset="card"
+    class="modal-xl"
+    :autoFocus="false"
+    @update:show="close"
+  >
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top" class="discount-form">
         <NFormItem label="优惠名称">
@@ -223,56 +229,111 @@ function close() {
         <NGrid cols="3" xGap="16" responsive="screen" itemResponsive>
           <NGi>
             <NFormItem v-if="form.ruleType === 'percentage'" label="折扣力度（90 = 打 9 折）">
-              <NInputNumber v-model:value="form.pct" :min="0" :max="100" style="width: 100%;" />
+              <NInputNumber v-model:value="form.pct" :min="0" :max="100" style="width: 100%" />
             </NFormItem>
             <NFormItem v-else label="减免金额（元）">
-              <NInputNumber v-model:value="form.fixedYuan" :min="0" :precision="2" style="width: 100%;" />
+              <NInputNumber
+                v-model:value="form.fixedYuan"
+                :min="0"
+                :precision="2"
+                style="width: 100%"
+              />
             </NFormItem>
           </NGi>
           <NGi>
             <NFormItem label="保底消费（元，0 = 不限）">
-              <NInputNumber v-model:value="form.minYuan" :min="0" :precision="2" style="width: 100%;" />
+              <NInputNumber
+                v-model:value="form.minYuan"
+                :min="0"
+                :precision="2"
+                style="width: 100%"
+              />
             </NFormItem>
           </NGi>
           <NGi>
             <NFormItem label="最大减免（元，留空不限）">
-              <NInputNumber v-model:value="form.maxYuan" :min="0" :precision="2" clearable style="width: 100%;" />
+              <NInputNumber
+                v-model:value="form.maxYuan"
+                :min="0"
+                :precision="2"
+                clearable
+                style="width: 100%"
+              />
             </NFormItem>
           </NGi>
         </NGrid>
 
-        <NFormItem v-if="form.discountType === 'coupon'" :label="`券码（${CODE_LENGTH} 位字母或数字，自动大写；留空则保存时自动生成）`">
-          <NFlex justify="center" style="width: 100%;">
-            <NInputOtp :length="CODE_LENGTH" :value="(form.code || '').split('')"
-              @update:value="(v: string[]) => (form.code = v.join('').toUpperCase())" placeholder="#" />
+        <NFormItem
+          v-if="form.discountType === 'coupon'"
+          :label="`券码（${CODE_LENGTH} 位字母或数字，自动大写；留空则保存时自动生成）`"
+        >
+          <NFlex justify="center" style="width: 100%">
+            <NInputOtp
+              :length="CODE_LENGTH"
+              :value="(form.code || '').split('')"
+              @update:value="(v: string[]) => (form.code = v.join('').toUpperCase())"
+              placeholder="#"
+            />
           </NFlex>
         </NFormItem>
 
         <NFormItem label="有效期（留空为永久有效）">
-          <NDatePicker type="datetimerange" clearable :value="form.dateRange"
+          <NDatePicker
+            type="datetimerange"
+            clearable
+            :value="form.dateRange"
             @update:value="(v: number[] | null) => (form.dateRange = v as [number, number] | null)"
-            placeholder="开始 - 结束" style="width: 100%;" />
+            placeholder="开始 - 结束"
+            style="width: 100%"
+          />
         </NFormItem>
 
         <NGrid cols="2" xGap="16" responsive="screen" itemResponsive>
           <NGi>
             <NFormItem label="总可用次数（0/空 = 不限）">
-              <NInputNumber v-model:value="form.usageLimit" :min="0" clearable style="width: 100%;" />
+              <NInputNumber
+                v-model:value="form.usageLimit"
+                :min="0"
+                clearable
+                style="width: 100%"
+              />
             </NFormItem>
           </NGi>
           <NGi>
             <NFormItem label="每会员限用次数（0/空 = 不限）">
-              <NInputNumber v-model:value="form.memberLimit" :min="0" clearable style="width: 100%;" />
+              <NInputNumber
+                v-model:value="form.memberLimit"
+                :min="0"
+                clearable
+                style="width: 100%"
+              />
             </NFormItem>
           </NGi>
         </NGrid>
 
-        <NFormItem v-if="form.discountType === 'member'" label="限定会员类型（可多选，不选则不限定）">
-          <NSelect v-model:value="form.memberTypeIds" :options="memberTypeOptions" multiple filterable />
+        <NFormItem
+          v-if="form.discountType === 'member'"
+          label="限定会员类型（可多选，不选则不限定）"
+        >
+          <NSelect
+            v-model:value="form.memberTypeIds"
+            :options="memberTypeOptions"
+            multiple
+            filterable
+          />
         </NFormItem>
 
-        <NFormItem v-if="form.discountType === 'category'" label="限定商品分类（可多选，仅对命中分类的订单项生效）">
-          <NSelect v-model:value="form.categoryIds" :options="categoryOptions" multiple filterable placeholder="选择分类" />
+        <NFormItem
+          v-if="form.discountType === 'category'"
+          label="限定商品分类（可多选，仅对命中分类的订单项生效）"
+        >
+          <NSelect
+            v-model:value="form.categoryIds"
+            :options="categoryOptions"
+            multiple
+            filterable
+            placeholder="选择分类"
+          />
         </NFormItem>
 
         <NFormItem v-if="form.discountType === 'repeatOrder'" label="每几单生效（如 5 = 每 5 单）">

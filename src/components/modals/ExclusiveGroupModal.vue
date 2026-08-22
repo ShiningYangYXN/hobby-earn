@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NModal, NInput, NFlex, NButton, NIcon, NSpace, NText, useMessage, NPopconfirm } from 'naive-ui'
+import {
+  NModal,
+  NInput,
+  NFlex,
+  NButton,
+  NIcon,
+  NSpace,
+  NText,
+  useMessage,
+  NPopconfirm,
+} from 'naive-ui'
 import { IconPlus, IconDeviceFloppy, IconX, IconTrash, IconPencil } from '@tabler/icons-vue'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
@@ -60,7 +70,14 @@ async function removeRow(id: string) {
 </script>
 
 <template>
-  <NModal :show="true" preset="card" title="互斥组管理" style="width: 420px" :bordered="false" @update:show="close">
+  <NModal
+    :show="true"
+    preset="card"
+    title="互斥组管理"
+    style="width: 420px"
+    :bordered="false"
+    @update:show="close"
+  >
     <NFlex vertical :size="12">
       <NFlex :size="8">
         <NInput v-model:value="name" placeholder="输入互斥组名称" @keyup.enter="save" />

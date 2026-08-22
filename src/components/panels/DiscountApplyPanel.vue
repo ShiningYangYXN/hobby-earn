@@ -101,24 +101,42 @@ defineExpose({
       <template v-if="eligibleAuto.length">
         <NText depth="3" style="font-size: 12px">可选优惠（点击添加）</NText>
         <NFlex>
-          <NTag v-for="d in eligibleAuto" :key="d.id" checkable :checked="applied.some((a) => a.id === d.id)"
-            @update:checked="() => onToggle(d)">
+          <NTag
+            v-for="d in eligibleAuto"
+            :key="d.id"
+            checkable
+            :checked="applied.some((a) => a.id === d.id)"
+            @update:checked="() => onToggle(d)"
+          >
             {{ d.name }}（{{ d.ruleType === 'percentage' ? d.value + '%' : '¥' + fmt(d.value) }}）
           </NTag>
         </NFlex>
       </template>
 
-      <NText depth="3" style="font-size: 12px">优惠券码（{{ CODE_LENGTH }} 位，自动大写，输满自动兑换）</NText>
-      <NFlex justify="center" style="width: 100%;">
-        <NInputOtp :length="CODE_LENGTH" :value="(couponInput[0] || '').split('')" @update:value="onOtp"
-          placeholder="#" />
+      <NText depth="3" style="font-size: 12px"
+        >优惠券码（{{ CODE_LENGTH }} 位，自动大写，输满自动兑换）</NText
+      >
+      <NFlex justify="center" style="width: 100%">
+        <NInputOtp
+          :length="CODE_LENGTH"
+          :value="(couponInput[0] || '').split('')"
+          @update:value="onOtp"
+          placeholder="#"
+        />
       </NFlex>
       <NText v-if="couponError" type="error" style="font-size: 12px">{{ couponError }}</NText>
 
       <template v-if="applied.length">
         <NText depth="3" style="font-size: 12px">已应用</NText>
         <NFlex>
-          <NTag v-for="d in applied" :key="d.id" closable type="success" size="small" @close="onDrop(d.id)">
+          <NTag
+            v-for="d in applied"
+            :key="d.id"
+            closable
+            type="success"
+            size="small"
+            @close="onDrop(d.id)"
+          >
             {{ discountTypeLabel(d.discountType) }}：{{ d.name }}
           </NTag>
         </NFlex>

@@ -106,8 +106,14 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑价格项' : '新建价格项'" preset="card" class="modal-md" :autoFocus="false"
-    @update:show="close">
+  <NModal
+    :show="true"
+    :title="editing ? '编辑价格项' : '新建价格项'"
+    preset="card"
+    class="modal-md"
+    :autoFocus="false"
+    @update:show="close"
+  >
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
         <NFormItem label="名称" required>
@@ -120,11 +126,20 @@ function close() {
           <NSelect v-model:value="form.pricingMode" :options="modeOptions" />
         </NFormItem>
         <NFormItem :label="form.pricingMode === 'hourly' ? '工时单价（元/小时）' : '单价（元/件）'">
-          <NInputNumber v-model:value="form.basePriceYuan" :min="0" :precision="2" style="width: 100%" />
+          <NInputNumber
+            v-model:value="form.basePriceYuan"
+            :min="0"
+            :precision="2"
+            style="width: 100%"
+          />
         </NFormItem>
         <NFormItem label="备注 / 描述">
-          <NInput v-model:value="form.description" type="textarea" placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }" />
+          <NInput
+            v-model:value="form.description"
+            type="textarea"
+            placeholder="备注（可选）"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+          />
         </NFormItem>
         <NFormItem label="启用">
           <NSwitch v-model:value="form.isActive" />

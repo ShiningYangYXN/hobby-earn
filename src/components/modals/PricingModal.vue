@@ -362,9 +362,7 @@ function closePricing() {
           保存进度
         </NButton>
         <NButton type="primary" @click="finish(payMethod)">
-          <NIcon>
-            <IconCoinYen /> </NIcon
-          >完成并收款
+          <NIcon> <IconCoinYen /> </NIcon>完成并收款
         </NButton>
       </NFlex>
     </template>

@@ -50,7 +50,11 @@ export const useDiscountStore = defineStore('discount', () => {
     if (idx < 0) throw new Error('not found')
     const next = { ...discounts.value[idx]!, ...patch }
     // 编辑时若改为券码类型且手动填写了券码，需校验位数
-    if (next.discountType === 'coupon' && next.code && !isValidCodeFormat(next.code.toUpperCase())) {
+    if (
+      next.discountType === 'coupon' &&
+      next.code &&
+      !isValidCodeFormat(next.code.toUpperCase())
+    ) {
       throw new Error(`券码必须为 ${CODE_LENGTH} 位字母或数字`)
     }
     discounts.value[idx] = next

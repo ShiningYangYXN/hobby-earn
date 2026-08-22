@@ -106,22 +106,34 @@ onMounted(() => {
     <NCard>
       <NFlex vertical :size="12">
         <NFlex align="center" :size="12" wrap>
-          <NInput v-model:value="keyword" placeholder="搜索名称 / 券码" clearable style="width: 200px" />
+          <NInput
+            v-model:value="keyword"
+            placeholder="搜索名称 / 券码"
+            clearable
+            style="width: 200px"
+          />
           <NSelect v-model:value="filterType" :options="typeOptions" style="width: 140px" />
           <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
           <NButton type="primary" @click="openCreate">
             <NIcon :size="16">
               <IconPlus />
-            </NIcon> 新建优惠
+            </NIcon>
+            新建优惠
           </NButton>
           <NButton @click="openGroups">
             <NIcon :size="16">
               <IconLayersIntersect />
-            </NIcon> 互斥组管理
+            </NIcon>
+            互斥组管理
           </NButton>
         </NFlex>
 
-        <NDataTable :columns="columns" :data="filtered" :pagination="{ pageSize: 10 }" size="small" />
+        <NDataTable
+          :columns="columns"
+          :data="filtered"
+          :pagination="{ pageSize: 10 }"
+          size="small"
+        />
         <NText v-if="!filtered.length" depth="3">没有符合条件的优惠。</NText>
       </NFlex>
     </NCard>

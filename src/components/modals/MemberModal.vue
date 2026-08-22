@@ -85,8 +85,14 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑会员' : '新建会员'" preset="card" class="modal-md" :autoFocus="false"
-    @update:show="close">
+  <NModal
+    :show="true"
+    :title="editing ? '编辑会员' : '新建会员'"
+    preset="card"
+    class="modal-md"
+    :autoFocus="false"
+    @update:show="close"
+  >
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
         <NFormItem label="名称" required>
@@ -96,11 +102,20 @@ function close() {
           <NInput v-model:value="form.phone" placeholder="可选" />
         </NFormItem>
         <NFormItem label="会员类型">
-          <NSelect v-model:value="form.typeId" :options="typeOptions" placeholder="不限定" clearable />
+          <NSelect
+            v-model:value="form.typeId"
+            :options="typeOptions"
+            placeholder="不限定"
+            clearable
+          />
         </NFormItem>
         <NFormItem label="备注">
-          <NInput v-model:value="form.notes" type="textarea" placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }" />
+          <NInput
+            v-model:value="form.notes"
+            type="textarea"
+            placeholder="备注（可选）"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+          />
         </NFormItem>
         <NFormItem label="启用">
           <NSwitch v-model:value="form.isActive" />

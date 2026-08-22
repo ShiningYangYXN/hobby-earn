@@ -108,7 +108,8 @@ watch(
         <NButton type="primary" @click="openTypeManagement">
           <NIcon :size="16">
             <IconVip />
-          </NIcon> 管理会员种类
+          </NIcon>
+          管理会员种类
         </NButton>
       </NFlex>
     </NCard>
@@ -118,14 +119,26 @@ watch(
         <NFlex align="center" :size="12" wrap>
           <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 160px" />
           <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 140px" />
-          <NInput v-model:value="keyword" placeholder="搜索姓名 / 手机" clearable style="width: 200px" />
+          <NInput
+            v-model:value="keyword"
+            placeholder="搜索姓名 / 手机"
+            clearable
+            style="width: 200px"
+          />
           <NButton type="primary" @click="openNew">
             <NIcon :size="16">
               <IconPlus />
-            </NIcon> 新建会员
+            </NIcon>
+            新建会员
           </NButton>
         </NFlex>
-        <NDataTable v-if="list.length" :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />
+        <NDataTable
+          v-if="list.length"
+          :columns="columns"
+          :data="list"
+          :pagination="{ pageSize: 10 }"
+          size="small"
+        />
         <NEmpty v-else description="暂无会员" />
       </NFlex>
     </NCard>
