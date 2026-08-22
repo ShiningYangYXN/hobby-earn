@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
@@ -14,17 +14,14 @@ import {
   NCard,
   NEmpty,
   NScrollbar,
-  NInputOtp,
-  NTag,
-  NDivider,
   useMessage,
 } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
-import { type OrderItem } from '@/stores/types'
-import { useDiscountApply } from '@/composables/useDiscountApply'
+import { type OrderItem, type DiscountRecord } from '@/stores/types'
+import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 
 const router = useRouter()
 const msg = useMessage()
@@ -35,6 +32,11 @@ const memberStore = useMemberStore()
 const newMember = ref<string | null>(null)
 const newItems = ref<{ priceId: string; quantity: number }[]>([])
 const newNotes = ref('')
+
+// 优惠结果（来自复用面板）
+const discountRecords = ref<DiscountRecord[]>([])
+const discountAmount = ref(0)
+const finalAmount = ref(0)
 
 const memberOptions = computed(() =>
   memberStore.members.map((m) => ({ label: m.name, value: m.id })),
@@ -52,8 +54,9 @@ const priceOptions = computed(() =>
 function rowPrice(priceId: string) {
   return priceStore.prices.find((p) => p.id === priceId)
 }
-function currentItems(): OrderItem[] {
-  return newItems.value
+// 实时映射为 OrderItem 数组，供优惠面板计算
+const currentItems = computed<OrderItem[]>(() =>
+  newItems.value
     .filter((r) => r.priceId)
     .map((r) => {
       const p = rowPrice(r.priceId)!
@@ -66,8 +69,11 @@ function currentItems(): OrderItem[] {
         elapsed: p.pricingMode === 'hourly' ? 0 : undefined,
         hourlyRate: p.pricingMode === 'hourly' ? p.basePrice : undefined,
       }
-    })
-}
+    }),
+)
+const memberName = computed(
+  () => memberStore.members.find((m) => m.id === newMember.value)?.name,
+)
 function addRow() {
   newItems.value.push({ priceId: '', quantity: 1 })
 }
@@ -76,33 +82,13 @@ function removeRow(i: number) {
 }
 const canCreate = computed(() => !!newMember.value && newItems.value.some((r) => r.priceId))
 
-const {
-  applied,
-  couponInput,
-  couponError,
-  subtotal,
-  eligibleAuto,
-  redeemCoupon,
-  toggleAuto,
-  dropApplied,
-  records,
-  discountAmount,
-  finalAmount,
-  commitUsage,
-  reset,
-} = useDiscountApply(
-  () => newMember.value,
-  currentItems,
-)
-
-// 切换会员后清空已选优惠（优惠与会员资格相关）
-watch(newMember, () => reset())
-
 function resetForm() {
   newMember.value = null
   newItems.value = []
   newNotes.value = ''
-  reset()
+  discountRecords.value = []
+  discountAmount.value = 0
+  finalAmount.value = 0
 }
 
 onMounted(async () => {
@@ -116,17 +102,16 @@ async function doCreate() {
   if (!newMember.value) return
   const member = memberStore.members.find((m) => m.id === newMember.value)
   if (!member) return
-  const items = currentItems()
+  const items = currentItems.value
   if (!items.length) {
     msg.warning('请至少添加一个服务项')
     return
   }
   await orderStore.create(member.id, member.name, items, {
-    discountRecords: records.value,
+    discountRecords: discountRecords.value,
     discountAmount: discountAmount.value,
     notes: newNotes.value,
   })
-  await commitUsage()
   msg.success('订单已创建')
   router.push('/orders')
 }
@@ -195,46 +180,15 @@ function close() {
 
         <NCard title="优惠" size="small" :bordered="true">
           <NText v-if="!newMember" depth="3">请先选择会员以使用优惠</NText>
-          <template v-else>
-            <NFlex align="center" :size="8">
-              <NInputOtp :length="6" v-model:value="couponInput" placeholder="券码" />
-              <NButton @click="redeemCoupon(couponInput.join(''))">兑换</NButton>
-            </NFlex>
-            <NText v-if="couponError" type="error" depth="3" style="display: block; margin-top: 6px">
-              {{ couponError }}
-            </NText>
-
-            <NDivider title-placement="left" size="small">可勾选优惠</NDivider>
-            <NFlex :size="8">
-              <NTag
-                v-for="d in eligibleAuto"
-                :key="d.id"
-                checkable
-                :checked="applied.some((a) => a.id === d.id)"
-                @update:checked="() => toggleAuto(d)"
-              >
-                {{ d.name }}（{{
-                  d.ruleType === 'percentage' ? d.value + '%' : '¥' + (d.value / 100).toFixed(2)
-                }}）
-              </NTag>
-              <NText v-if="!eligibleAuto.length" depth="3">暂无可自动应用的优惠</NText>
-            </NFlex>
-
-            <NDivider title-placement="left" size="small">已应用</NDivider>
-            <NFlex :size="8">
-              <NTag v-for="d in applied" :key="d.id" closable @close="dropApplied(d.id)">
-                {{ d.name }}
-              </NTag>
-              <NText v-if="!applied.length" depth="3">暂无</NText>
-            </NFlex>
-
-            <NDivider title-placement="left" size="small">金额</NDivider>
-            <NFlex justify="space-between">
-              <NText>小计：¥{{ (subtotal / 100).toFixed(2) }}</NText>
-              <NText type="error">优惠：-¥{{ (discountAmount / 100).toFixed(2) }}</NText>
-              <NText strong>实收：¥{{ (finalAmount / 100).toFixed(2) }}</NText>
-            </NFlex>
-          </template>
+          <DiscountApplyPanel
+            v-else
+            :member-id="newMember"
+            :member-name="memberName"
+            :items="currentItems"
+            @update:records="(r: DiscountRecord[]) => (discountRecords = r)"
+            @update:discountAmount="(v: number) => (discountAmount = v)"
+            @update:finalAmount="(v: number) => (finalAmount = v)"
+          />
         </NCard>
       </NForm>
     </NScrollbar>

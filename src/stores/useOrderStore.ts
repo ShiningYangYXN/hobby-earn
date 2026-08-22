@@ -125,6 +125,26 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
+  // 修改未执行（待处理）订单的草稿内容：备注、服务项、优惠
+  async function updateDraft(
+    id: string,
+    patch: { notes?: string; items?: OrderItem[]; discountRecords?: DiscountRecord[] },
+  ): Promise<void> {
+    const o = orders.value.find((x) => x.id === id)
+    if (!o || o.status !== 'pending') return
+    if (patch.notes !== undefined) o.notes = patch.notes
+    if (patch.items) {
+      o.items = patch.items
+      o.subtotal = subtotalOf(patch.items)
+    }
+    if (patch.discountRecords) {
+      o.discountRecords = patch.discountRecords
+      o.discountAmount = patch.discountRecords.reduce((s, r) => s + r.discountAmount, 0)
+    }
+    o.finalAmount = Math.max(0, o.subtotal - (o.discountAmount ?? 0))
+    await put('orders', o)
+  }
+
   async function remove(id: string): Promise<void> {
     const idx = orders.value.findIndex((x) => x.id === id)
     const o = orders.value[idx]
@@ -147,6 +167,7 @@ export const useOrderStore = defineStore('order', () => {
     saveExecution,
     finalize,
     cancel,
+    updateDraft,
     remove,
   }
 })

@@ -13,14 +13,13 @@ import {
   NFormItem,
   NScrollbar,
   NSelect,
-  NInputGroup,
-  NInput,
+  NInputNumber,
   useMessage,
 } from 'naive-ui'
+import { IconPlayerPlay, IconPlayerPause, IconReload } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { useDiscountApply } from '@/composables/useDiscountApply'
 import {
   fmt,
   subtotalOf,
@@ -28,8 +27,8 @@ import {
   type OrderItem,
   type OrderStatus,
   type PaymentMethod,
-  type DiscountType,
 } from '@/stores/types'
+import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 
 const props = defineProps<{ show: boolean; orderId: string | null }>()
 const emit = defineEmits<{
@@ -60,21 +59,12 @@ const statusType = (s: OrderStatus) =>
     | 'success'
     | 'default'
 
-const discountTypeLabel = (t: DiscountType | string): string =>
-  ({
-    coupon: '优惠券',
-    timeLimited: '限时优惠',
-    member: '会员折扣',
-    firstOrder: '首单优惠',
-    repeatOrder: '复购优惠',
-    referral: '推荐有礼',
-  })[t as DiscountType] ?? t
-
 const order = ref<Order | null>(null)
 const items = ref<OrderItem[]>([])
 const running = reactive<Record<number, boolean>>({})
 const payMethod = ref<PaymentMethod>('cash')
 const newServiceId = ref<string | null>(null)
+const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
 function fmtElapsed(s: number): string {
   const m = Math.floor(s / 60)
@@ -112,7 +102,7 @@ async function load() {
   Object.keys(running).forEach((k) => delete running[Number(k)])
   payMethod.value = o.paymentMethod ?? 'cash'
   newServiceId.value = null
-  hydrate(o.discountRecords)
+  discountPanel.value?.hydrate(o.discountRecords)
 }
 
 watch(
@@ -136,11 +126,11 @@ function toggle(idx: number) {
 function resetItem(idx: number) {
   if (items.value[idx]) items.value[idx]!.elapsed = 0
 }
-function incQty(idx: number) {
-  if (items.value[idx]) items.value[idx]!.quantity += 1
+function onDiscountChange() {
+  // 优惠变化后小计/实收由面板驱动，此处无需额外操作
 }
-function decQty(idx: number) {
-  if (items.value[idx] && items.value[idx]!.quantity > 1) items.value[idx]!.quantity -= 1
+function onQtyEdit() {
+  // 数量经 v-model 直接写入 items，无需额外操作
 }
 
 const priceOptions = computed(() =>
@@ -171,25 +161,6 @@ function addService() {
 
 const liveSubtotal = computed(() => subtotalOf(items.value))
 
-// 折扣逻辑：会员取自当前订单，金额项取自实时 items
-const {
-  applied,
-  eligibleAuto,
-  couponInput,
-  couponError,
-  redeemCoupon,
-  toggleAuto,
-  dropApplied,
-  records,
-  discountAmount,
-  finalAmount,
-  commitUsage,
-  hydrate,
-} = useDiscountApply(
-  () => order.value?.memberId ?? null,
-  () => items.value,
-)
-
 async function saveProgress() {
   if (!order.value) return
   stopTimer()
@@ -207,10 +178,10 @@ async function finish(m: PaymentMethod) {
     await orderStore.finalize(
       order.value.id,
       items.value.map((it) => ({ ...it })),
-      records.value,
+      discountPanel.value?.records ?? [],
       m,
     )
-    await commitUsage().catch(() => {})
+    await discountPanel.value?.commitUsage().catch(() => {})
   } catch (e) {
     msg.error('完成失败：' + (e as Error).message)
     return
@@ -256,16 +227,25 @@ function closePricing() {
                   <template v-if="it.pricingMode === 'hourly'">
                     <NButton
                       size="small"
+                      circle
                       :type="running[idx] ? 'warning' : 'primary'"
                       @click="toggle(idx)"
                     >
-                      {{ running[idx] ? '暂停' : '计时' }}
+                      <IconPlayerPlay v-if="!running[idx]" :size="16" />
+                      <IconPlayerPause v-else :size="16" />
                     </NButton>
-                    <NButton size="small" @click="resetItem(idx)">重置</NButton>
+                    <NButton size="small" circle @click="resetItem(idx)">
+                      <IconReload :size="16" />
+                    </NButton>
                   </template>
                   <template v-else>
-                    <NButton size="small" @click="decQty(idx)">−</NButton>
-                    <NButton size="small" @click="incQty(idx)">+</NButton>
+                    <NInputNumber
+                      v-model:value="it.quantity"
+                      :min="1"
+                      size="small"
+                      style="width: 90px"
+                      @update:value="() => onQtyEdit()"
+                    />
                   </template>
                 </NFlex>
               </NFlex>
@@ -291,63 +271,13 @@ function closePricing() {
             </NFlex>
           </NCard>
 
-          <NCard size="small">
-            <NFlex vertical :size="8">
-              <NText depth="3">优惠</NText>
-              <NText v-if="order?.memberId" depth="3" style="font-size: 12px"
-                >当前会员：{{ order.memberName }}</NText
-              >
-              <template v-if="eligibleAuto.length">
-                <NFlex
-                  v-for="d in eligibleAuto"
-                  :key="d.id"
-                  justify="space-between"
-                  align="center"
-                >
-                  <NText style="font-size: 13px"
-                    >{{ d.name }}（{{
-                      d.ruleType === 'percentage' ? d.value + '%' : '¥' + fmt(d.value)
-                    }}）</NText
-                  >
-                  <NButton
-                    size="small"
-                    :type="applied.some((a) => a.id === d.id) ? 'primary' : 'default'"
-                    @click="toggleAuto(d)"
-                    >{{ applied.some((a) => a.id === d.id) ? '已选' : '选择' }}</NButton
-                  >
-                </NFlex>
-              </template>
-              <NInputGroup>
-                <NInput
-                  v-model:value="couponInput[0]"
-                  placeholder="输入优惠券码"
-                  @keyup.enter="redeemCoupon(couponInput[0] ?? '')"
-                />
-                <NButton
-                  type="primary"
-                  :disabled="!couponInput[0]"
-                  @click="redeemCoupon(couponInput[0] ?? '')"
-                  >应用</NButton
-                >
-              </NInputGroup>
-              <NText v-if="couponError" type="error" style="font-size: 12px">{{
-                couponError
-              }}</NText>
-              <NFlex v-if="applied.length" vertical :size="4">
-                <NFlex
-                  v-for="d in applied"
-                  :key="d.id"
-                  justify="space-between"
-                  align="center"
-                >
-                  <NText depth="3" style="font-size: 12px"
-                    >{{ discountTypeLabel(d.discountType) }}：{{ d.name }}</NText
-                  >
-                  <NButton size="tiny" text type="error" @click="dropApplied(d.id)">移除</NButton>
-                </NFlex>
-              </NFlex>
-            </NFlex>
-          </NCard>
+          <DiscountApplyPanel
+            ref="discountPanel"
+            :member-id="order?.memberId ?? null"
+            :member-name="order?.memberName"
+            :items="items"
+            @change="onDiscountChange"
+          />
 
           <NCard size="small">
             <NFlex vertical :size="6">
@@ -355,13 +285,13 @@ function closePricing() {
                 <NText depth="3">小计</NText>
                 <span class="meter-num">¥{{ fmt(liveSubtotal) }}</span>
               </NFlex>
-              <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
+              <NFlex v-if="(discountPanel?.discountAmount ?? 0) > 0" justify="space-between" align="center">
                 <NText depth="3">优惠</NText>
-                <span class="meter-num" style="color: #d03050">-¥{{ fmt(discountAmount) }}</span>
+                <span class="meter-num" style="color: #d03050">-¥{{ fmt(discountPanel?.discountAmount ?? 0) }}</span>
               </NFlex>
               <NFlex justify="space-between" align="center">
                 <NText strong>实收</NText>
-                <span class="meter-num" style="font-size: 20px">¥{{ fmt(finalAmount) }}</span>
+                <span class="meter-num" style="font-size: 20px">¥{{ fmt(discountPanel?.finalAmount ?? liveSubtotal) }}</span>
               </NFlex>
             </NFlex>
           </NCard>
