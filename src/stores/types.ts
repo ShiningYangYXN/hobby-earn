@@ -17,6 +17,17 @@ export function genCode(): string {
   return Array.from({ length: 6 }, () => c[Math.floor(Math.random() * c.length)]).join('')
 }
 
+// 单个订单项的金额：工时项仅按已计时长计费，未计时为 0（不回落到 unitPrice*quantity）
+export function itemAmount(i: OrderItem): number {
+  if (i.pricingMode === 'hourly') {
+    return i.elapsed ? Math.round(((i.hourlyRate ?? i.unitPrice) / 3600) * i.elapsed) : 0
+  }
+  return i.unitPrice * i.quantity
+}
+export function subtotalOf(items: OrderItem[]): number {
+  return items.reduce((s, i) => s + itemAmount(i), 0)
+}
+
 /* ── 会员 ── */
 export interface Member {
   id: string

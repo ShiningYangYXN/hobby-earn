@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
 import type { Order, PaymentMethod, DiscountRecord, OrderItem } from './types'
-import { uid, now } from './types'
+import { uid, now, subtotalOf } from './types'
 import { useDiscountStore } from './useDiscountStore'
 
 export const useOrderStore = defineStore('order', () => {
@@ -49,12 +49,7 @@ export const useOrderStore = defineStore('order', () => {
     opts: { discountRecords?: DiscountRecord[]; discountAmount?: number; notes?: string } = {},
   ): Promise<Order> {
     // 工时项目：按 elapsed 计算金额（预订时为预计时长），否则用 unitPrice * quantity
-    const subtotal = items.reduce((s, i) => {
-      if (i.pricingMode === 'hourly' && i.elapsed) {
-        return s + Math.round((i.hourlyRate! / 3600) * i.elapsed)
-      }
-      return s + i.unitPrice * i.quantity
-    }, 0)
+    const subtotal = subtotalOf(items)
     const discountAmount = Math.min(opts.discountAmount ?? 0, subtotal)
     const order: Order = {
       id: uid(),
@@ -65,20 +60,13 @@ export const useOrderStore = defineStore('order', () => {
       discountRecords: opts.discountRecords ?? [],
       discountAmount,
       finalAmount: Math.max(0, subtotal - discountAmount),
-      status: 'pending',
+      status: 'in_progress',
       createdAt: now(),
       notes: opts.notes,
     }
     await add('orders', order)
     orders.value.push(order)
     return order
-  }
-
-  async function confirm(id: string): Promise<void> {
-    const o = orders.value.find((x) => x.id === id)
-    if (!o || o.status !== 'pending') return
-    o.status = 'confirmed'
-    await put('orders', o)
   }
 
   // 开始执行（预订 → 执行中），已处于执行中则保持
@@ -108,11 +96,7 @@ export const useOrderStore = defineStore('order', () => {
     if (!o) throw new Error('not found')
     if (o.status !== 'confirmed' && o.status !== 'in_progress')
       throw new Error('order not executable')
-    const subtotal = items.reduce((s, i) => {
-      if (i.pricingMode === 'hourly' && i.elapsed)
-        return s + Math.round((i.hourlyRate! / 3600) * i.elapsed)
-      return s + i.unitPrice * i.quantity
-    }, 0)
+    const subtotal = subtotalOf(items)
     const discountAmount = Math.min(
       discountRecords.reduce((s, r) => s + r.discountAmount, 0),
       subtotal,
@@ -165,7 +149,6 @@ export const useOrderStore = defineStore('order', () => {
     totalIncome,
     load,
     create,
-    confirm,
     beginExecute,
     saveExecution,
     finalize,

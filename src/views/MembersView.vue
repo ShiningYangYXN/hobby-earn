@@ -187,9 +187,3 @@ const columns = computed(() => buildMemberColumns({ openEdit, removeMember }))
   </NFlex>
 </template>
 
-<style scoped>
-.modal-sm { width: 380px; }
-.modal-md { width: 520px; }
-.modal-lg { width: 460px; }
-.type-card { display: flex; align-items: center; justify-content: space-between; }
-</style>

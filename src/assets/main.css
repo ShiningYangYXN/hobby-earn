@@ -10,3 +10,30 @@ body {
   width: 100vw;
   min-height: 100dvh;
 }
+
+/* 主内容容器：四周留白（滚动交由 NScrollbar 处理） */
+.app-content {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+/* 全局工具类：弹窗尺寸 / 卡片 / 等宽字 / 订单详情排版（避免各视图重复定义） */
+.modal-sm { width: 380px; max-width: 92vw; }
+.modal-md { width: 520px; max-width: 92vw; }
+.modal-lg { width: 460px; max-width: 92vw; }
+.modal-xl { width: 620px; max-width: 94vw; }
+.type-card { display: flex; align-items: center; justify-content: space-between; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+.detail-meta { font-size: 12px; margin-bottom: 8px; }
+.detail-summary { margin-top: 12px; }
+.detail-final { font-weight: 700; font-size: 16px; }
+.detail-note { font-size: 13px; }
+
+/* 计价器大数字 */
+.meter-num {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}

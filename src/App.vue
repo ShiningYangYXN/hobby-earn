@@ -14,6 +14,7 @@ import {
   darkTheme,
   NLayoutSider,
   NPageHeader,
+  NScrollbar,
   NIcon,
   type MenuOption,
   NMessageProvider,
@@ -131,7 +132,9 @@ const menuOptions: MenuOption[] = [
               />
             </NLayoutSider>
             <NLayoutContent>
-              <RouterView />
+              <NScrollbar style="height: 100%" class="app-content">
+                <RouterView />
+              </NScrollbar>
             </NLayoutContent>
           </NLayout>
         </NLayout>

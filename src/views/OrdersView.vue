@@ -10,7 +10,10 @@ import {
   NModal,
   NForm,
   NFormItem,
+  NScrollbar,
   NSelect,
+  NInputNumber,
+  NTag,
   useMessage,
   useDialog,
   NH2,
@@ -19,12 +22,14 @@ import {
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
+import { usePriceStore } from '@/stores/usePriceStore'
+import { useMemberStore } from '@/stores/useMemberStore'
 import {
   fmt,
+  itemAmount,
   type Order,
   type OrderItem,
   type OrderStatus,
-  type PaymentMethod,
 } from '@/stores/types'
 import { buildOrderColumns } from '@/components/columns/order-columns'
 
@@ -33,8 +38,15 @@ const dialog = useDialog()
 const router = useRouter()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
+const priceStore = usePriceStore()
+const memberStore = useMemberStore()
 onMounted(async () => {
-  await Promise.all([orderStore.load(), discountStore.load()])
+  await Promise.all([
+    orderStore.load(),
+    discountStore.load(),
+    priceStore.load(),
+    memberStore.load(),
+  ])
 })
 
 function goMeter(o: Order) {
@@ -66,9 +78,6 @@ const statusCfg: Record<
   cancelled: { label: '已取消', type: 'default' },
 }
 
-const doing = ref<Order | null>(null)
-const showDone = ref(false)
-const pay = ref<PaymentMethod>('cash')
 const payOptions = [
   { label: '现金', value: 'cash' },
   { label: '数字人民币', value: 'ecny' },
@@ -76,25 +85,6 @@ const payOptions = [
   { label: '微信', value: 'wechat' },
   { label: '支付宝', value: 'alipay' },
 ]
-
-function openComplete(o: Order): void {
-  doing.value = o
-  pay.value = 'cash'
-  showDone.value = true
-}
-
-async function doComplete(): Promise<void> {
-  const o = doing.value
-  if (!o) return
-  try {
-    await orderStore.complete(o.id, pay.value)
-    msg.success('已完成')
-    doing.value = null
-    showDone.value = false
-  } catch (e: unknown) {
-    msg.error(String(e))
-  }
-}
 
 function doCancel(o: Order) {
   dialog.warning({
@@ -130,12 +120,6 @@ function openDetail(o: Order) {
   detail.value = o
   showDetail.value = true
 }
-function itemSubtotal(i: OrderItem): number {
-  if (i.pricingMode === 'hourly' && i.elapsed)
-    return Math.round(((i.hourlyRate ?? i.unitPrice) / 3600) * i.elapsed)
-  return i.unitPrice * i.quantity
-}
-
 const itemColumns = computed(() => [
   { title: '项目', key: 'serviceName' },
   {
@@ -163,19 +147,79 @@ const itemColumns = computed(() => [
     width: 90,
     render: (i: OrderItem) => '¥' + fmt(i.unitPrice) + (i.pricingMode === 'hourly' ? '/h' : ''),
   },
-  { title: '小计', key: 'sub', width: 90, render: (i: OrderItem) => '¥' + fmt(itemSubtotal(i)) },
+  { title: '小计', key: 'sub', width: 90, render: (i: OrderItem) => '¥' + fmt(itemAmount(i)) },
 ])
 
 const orderColumns = computed(() =>
-  buildOrderColumns({ openDetail, goMeter, openComplete, doCancel, doDelete }),
+  buildOrderColumns({ openDetail, goMeter, doCancel, doDelete }),
 )
+
+/* ── 新建订单弹窗 ── */
+const showCreate = ref(false)
+const newMember = ref<string | null>(null)
+const newItems = ref<{ priceId: string; quantity: number }[]>([])
+const newNotes = ref('')
+
+const memberOptions = computed(() =>
+  memberStore.members.map((m) => ({ label: m.name, value: m.id })),
+)
+const priceOptions = computed(() =>
+  priceStore.prices
+    .filter((p) => p.isActive)
+    .map((p) => ({
+      label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(p.basePrice / 100).toFixed(2)}${p.pricingMode === 'hourly' ? '/h' : '/件'}）`,
+      value: p.id,
+    })),
+)
+function rowPrice(priceId: string) {
+  return priceStore.prices.find((p) => p.id === priceId)
+}
+const canCreate = computed(
+  () => !!newMember.value && newItems.value.some((r) => r.priceId),
+)
+
+function openCreate() {
+  newMember.value = null
+  newItems.value = []
+  newNotes.value = ''
+  showCreate.value = true
+}
+function addItem() {
+  newItems.value.push({ priceId: '', quantity: 1 })
+}
+function removeItem(idx: number) {
+  newItems.value.splice(idx, 1)
+}
+async function doCreate() {
+  if (!newMember.value) return
+  const member = memberStore.members.find((m) => m.id === newMember.value)
+  if (!member) return
+  const items: OrderItem[] = newItems.value
+    .filter((r) => r.priceId)
+    .map((r) => {
+      const p = rowPrice(r.priceId)!
+      return {
+        priceEntryId: p.id,
+        serviceName: p.name,
+        pricingMode: p.pricingMode,
+        quantity: p.pricingMode === 'hourly' ? 1 : r.quantity,
+        unitPrice: p.basePrice,
+        elapsed: p.pricingMode === 'hourly' ? 0 : undefined,
+        hourlyRate: p.pricingMode === 'hourly' ? p.basePrice : undefined,
+      }
+    })
+  if (!items.length) return
+  await orderStore.create(member.id, member.name, items, { notes: newNotes.value })
+  msg.success('订单已创建')
+  showCreate.value = false
+}
 </script>
 
 <template>
   <NFlex vertical :size="16">
     <NFlex justify="space-between" align="center">
       <NH2 prefix="bar">订单管理</NH2>
-      <NButton to="/price-meter" route type="primary"> <IconPlus /> 新建订单 </NButton>
+      <NButton type="primary" @click="openCreate"> <IconPlus /> 新建订单 </NButton>
     </NFlex>
     <NCard size="small">
       <NFlex justify="space-between" align="center">
@@ -208,75 +252,108 @@ const orderColumns = computed(() =>
       :pagination="{ pageSize: 15 }"
       size="small"
     />
-    <NModal v-model:show="showDone" title="完成订单" preset="card" class="modal-sm">
-      <template v-if="doing">
-        <NText>订单：{{ doing.id.slice(-8) }} · {{ doing.memberName }}</NText>
-        <br />
-        <NText
-          >实收：<NText strong type="success">¥{{ fmt(doing.finalAmount) }}</NText>
-        </NText>
-        <NForm label-width="80" style="margin-top: 12px">
-          <NFormItem label="支付方式">
-            <NSelect v-model:value="pay" :options="payOptions" />
-          </NFormItem>
-        </NForm>
-      </template>
+
+    <NModal v-model:show="showDetail" title="订单详情" preset="card" class="modal-md">
+      <NScrollbar style="max-height: 72vh">
+        <template v-if="detail">
+          <NFlex :size="6" style="margin-bottom: 8px">
+            <NTag size="small">单号 {{ detail.id.slice(-8) }}</NTag>
+            <NTag size="small" type="info">{{ detail.memberName }}</NTag>
+            <NTag size="small" :type="statusCfg[detail.status].type">{{
+              statusCfg[detail.status].label
+            }}</NTag>
+            <NTag v-if="detail?.paymentMethod" size="small">{{
+              payOptions.find((p) => p.value === detail!.paymentMethod)?.label
+            }}</NTag>
+          </NFlex>
+          <NText depth="3" class="detail-meta"
+            >创建：{{ new Date(detail.createdAt).toLocaleString() }}</NText
+          >
+          <NDataTable
+            :columns="itemColumns"
+            :data="detail?.items ?? []"
+            :pagination="false"
+            size="small"
+          />
+          <NFlex vertical :size="4" class="detail-summary">
+            <NFlex justify="space-between"
+              ><span>小计</span><span>¥{{ fmt(detail.subtotal) }}</span></NFlex
+            >
+            <template v-if="(detail?.discountRecords ?? []).length">
+              <NFlex
+                v-for="r in detail?.discountRecords ?? []"
+                :key="r.discountId"
+                justify="space-between"
+              >
+                <NText type="warning">优惠 · {{ r.description }}</NText>
+                <NText type="warning">-¥{{ fmt(r.discountAmount) }}</NText>
+              </NFlex>
+            </template>
+            <NFlex justify="space-between" class="detail-final">
+              <span>实收</span>
+              <NText type="success" strong>¥{{ fmt(detail.finalAmount) }}</NText>
+            </NFlex>
+            <NText v-if="detail.notes" depth="3" class="detail-note"
+              >备注：{{ detail.notes }}</NText
+            >
+          </NFlex>
+        </template>
+      </NScrollbar>
       <template #footer>
         <NFlex justify="end">
-          <NButton @click="doing = null">取消</NButton>
-          <NButton type="primary" @click="doComplete">确认收款</NButton>
+          <NButton @click="showDetail = false">关闭</NButton>
         </NFlex>
       </template>
     </NModal>
 
-    <NModal v-model:show="showDetail" title="订单详情" preset="card" class="modal-md">
-      <template v-if="detail">
-        <NFlex :size="6" style="margin-bottom: 8px">
-          <NTag size="small">单号 {{ detail.id.slice(-8) }}</NTag>
-          <NTag size="small" type="info">{{ detail.memberName }}</NTag>
-          <NTag size="small" :type="statusCfg[detail.status].type">{{
-            statusCfg[detail.status].label
-          }}</NTag>
-          <NTag v-if="detail?.paymentMethod" size="small">{{
-            payOptions.find((p) => p.value === detail!.paymentMethod)?.label
-          }}</NTag>
-        </NFlex>
-        <div style="color: var(--n-text-color-3); font-size: 12px; margin-bottom: 8px">
-          创建：{{ new Date(detail.createdAt).toLocaleString() }}
-        </div>
-        <NDataTable
-          :columns="itemColumns"
-          :data="detail?.items ?? []"
-          :pagination="false"
-          size="small"
-        />
-        <NFlex vertical :size="4" style="margin-top: 12px">
-          <NFlex justify="space-between"
-            ><span>小计</span><span>¥{{ fmt(detail.subtotal) }}</span></NFlex
-          >
-          <template v-if="(detail?.discountRecords ?? []).length">
-            <NFlex
-              v-for="r in detail?.discountRecords ?? []"
-              :key="r.discountId"
-              justify="space-between"
-              style="color: var(--n-warning-color)"
-            >
-              <span>优惠 · {{ r.description }}</span
-              ><span>-¥{{ fmt(r.discountAmount) }}</span>
-            </NFlex>
-          </template>
-          <NFlex justify="space-between" style="font-weight: 700; font-size: 16px">
-            <span>实收</span
-            ><span style="color: var(--n-success-color)">¥{{ fmt(detail.finalAmount) }}</span>
+    <NModal v-model:show="showCreate" title="新建订单" preset="card" class="modal-md">
+      <NForm label-placement="top">
+        <NFormItem label="会员" :required="true">
+          <NSelect
+            v-model:value="newMember"
+            :options="memberOptions"
+            placeholder="选择会员"
+            filterable
+            clearable
+          />
+        </NFormItem>
+        <NFlex vertical :size="8">
+          <NFlex justify="space-between" align="center">
+            <NText strong>服务项</NText>
+            <NButton size="small" @click="addItem"><IconPlus /> 添加</NButton>
           </NFlex>
-          <NText v-if="detail.notes" style="font-size: 13px; color: var(--n-text-color-3)"
-            >备注：{{ detail.notes }}</NText
-          >
+          <NCard v-for="(row, idx) in newItems" :key="idx" size="small">
+            <NFlex align="center" :size="8">
+              <NSelect
+                v-model:value="row.priceId"
+                :options="priceOptions"
+                placeholder="选择服务"
+                style="flex: 1; min-width: 0"
+              />
+              <template v-if="rowPrice(row.priceId)?.pricingMode === 'perPiece'">
+                <NInputNumber v-model:value="row.quantity" :min="1" style="width: 110px" />
+              </template>
+              <template v-else>
+                <NText depth="3" style="white-space: nowrap">计时计价</NText>
+              </template>
+              <NButton size="small" type="error" text @click="removeItem(idx)">移除</NButton>
+            </NFlex>
+          </NCard>
+          <NEmpty v-if="!newItems.length" description="请添加至少一个服务项" />
         </NFlex>
-      </template>
+        <NFormItem label="备注" style="margin-top: 8px">
+          <NInput
+            v-model:value="newNotes"
+            type="textarea"
+            :rows="2"
+            placeholder="可填写备注…"
+          />
+        </NFormItem>
+      </NForm>
       <template #footer>
         <NFlex justify="end">
-          <NButton @click="showDetail = false">关闭</NButton>
+          <NButton @click="showCreate = false">取消</NButton>
+          <NButton type="primary" :disabled="!canCreate" @click="doCreate">创建订单</NButton>
         </NFlex>
       </template>
     </NModal>

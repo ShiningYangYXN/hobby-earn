@@ -1,6 +1,5 @@
-import { NTag, NFlex, NButton } from 'naive-ui'
+import { NTag, NFlex, NButton, NText } from 'naive-ui'
 import { fmt, type Order, type OrderItem, type OrderStatus } from '@/stores/types'
-import { useOrderStore } from '@/stores/useOrderStore'
 
 export type OrderCellRenderer = (row: Order) => string | import('vue').VNode
 
@@ -25,13 +24,11 @@ const statusCfg: Record<
 export interface OrderColumnsOpts {
   openDetail: (o: Order) => void
   goMeter: (o: Order) => void
-  openComplete: (o: Order) => void
   doCancel: (o: Order) => void
   doDelete: (o: Order) => void
 }
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
-  const orderStore = useOrderStore()
   return [
     { title: '订单号', key: 'id', width: 100, render: (row: Order) => row.id.slice(-8) },
     { title: '会员', key: 'memberName', width: 100 },
@@ -62,11 +59,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       title: '实收',
       key: 'finalAmount',
       width: 80,
-      render: (row: Order) => (
-        <span style={{ color: 'var(--n-success-color)', fontWeight: 600 }}>
-          ¥{fmt(row.finalAmount)}
-        </span>
-      ),
+      render: (row: Order) => <NText type="success" strong>¥{fmt(row.finalAmount)}</NText>,
     },
     {
       title: '状态',
@@ -91,19 +84,11 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       render: (row: Order) => (
         <NFlex size={4}>
           <NButton size="tiny" onClick={() => opts.openDetail(row)}>详情</NButton>
-          {row.status === 'pending' && (
-            <NButton size="tiny" type="primary" onClick={() => orderStore.confirm(row.id)}>
-              确认
-            </NButton>
-          )}
-          {(row.status === 'confirmed' || row.status === 'in_progress') && (
+          {(row.status === 'pending' ||
+            row.status === 'confirmed' ||
+            row.status === 'in_progress') && (
             <NButton size="tiny" type="primary" onClick={() => opts.goMeter(row)}>
               去计价
-            </NButton>
-          )}
-          {row.status === 'confirmed' && (
-            <NButton size="tiny" type="success" onClick={() => opts.openComplete(row)}>
-              完成
             </NButton>
           )}
           {row.status !== 'completed' && row.status !== 'cancelled' && (

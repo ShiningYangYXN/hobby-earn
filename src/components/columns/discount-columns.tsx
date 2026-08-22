@@ -90,7 +90,7 @@ export function buildDiscountColumns(opts: {
         if (row.discountType !== 'coupon' || !row.code) return '-'
         return (
           <NFlex size={4} align="center">
-            <NText style={{ fontFamily: 'monospace' }}>{row.code}</NText>
+            <NText class="mono">{row.code}</NText>
             <NButton size="tiny" quaternary onClick={() => opts.copyCode(row.code!)}>
               复制
             </NButton>

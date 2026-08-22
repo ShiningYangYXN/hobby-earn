@@ -1,4 +1,4 @@
-import { NTag, NFlex, NButton } from 'naive-ui'
+import { NTag, NFlex, NButton, NText } from 'naive-ui'
 import type { Member, MemberType } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 
@@ -26,7 +26,7 @@ export function buildMemberColumns(opts: {
         return t ? (
           <NTag size="tiny" type="info">{t.name}</NTag>
         ) : (
-          <span style={{ color: 'var(--n-text-color-3)' }}>未设置</span>
+          <NText depth="3">未设置</NText>
         )
       },
     },

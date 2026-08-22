@@ -13,6 +13,8 @@ import {
   NSelect,
   NCheckbox,
   NIcon,
+  NH2,
+  NText,
   useMessage,
   useDialog,
 } from 'naive-ui'
@@ -104,11 +106,11 @@ const columns = computed(() =>
 </script>
 
 <template>
-  <NFlex vertical :size="16" style="padding: 16px">
+  <NFlex vertical :size="16">
     <NFlex justify="space-between" align="center">
-      <h2 style="margin: 0">价格管理</h2>
+      <NH2 prefix="bar">价格管理</NH2>
       <NFlex align="center">
-        <span style="color: var(--n-text-color-3)">共 {{ priceStore.prices.length }} 条</span>
+        <NText depth="3">共 {{ priceStore.prices.length }} 条</NText>
         <NButton type="primary" @click="openCreate">
           <template #icon
             ><NIcon><IconPlus /></NIcon
@@ -119,7 +121,7 @@ const columns = computed(() =>
     </NFlex>
 
     <NCard>
-      <NDataTable :columns="columns" :data="priceStore.prices" :pagination="false" size="small" />
+      <NDataTable :columns="columns" :data="priceStore.prices" :pagination="{ pageSize: 15 }" size="small" />
     </NCard>
 
     <NModal
@@ -169,10 +171,3 @@ const columns = computed(() =>
     </NModal>
   </NFlex>
 </template>
-
-<style scoped>
-.modal-sm { width: 380px; }
-.modal-md { width: 520px; }
-.modal-lg { width: 460px; }
-.type-card { display: flex; align-items: center; justify-content: space-between; }
-</style>

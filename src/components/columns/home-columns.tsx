@@ -1,4 +1,4 @@
-import { NTag } from 'naive-ui'
+import { NTag, NText } from 'naive-ui'
 import { fmt } from '@/stores/types'
 import type { Order } from '@/stores/types'
 
@@ -28,9 +28,7 @@ export const homeViewColumns: HomeViewColumn[] = [
     title: '实收',
     key: 'finalAmount',
     width: 90,
-    render: (row: Order) => (
-      <span style={{ color: 'var(--n-success-color)' }}>¥{fmt(row.finalAmount)}</span>
-    ),
+    render: (row: Order) => <NText type="success">¥{fmt(row.finalAmount)}</NText>,
   },
   {
     title: '状态',
