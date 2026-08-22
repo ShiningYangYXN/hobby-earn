@@ -1,0 +1,123 @@
+import { NTag, NFlex, NButton } from 'naive-ui'
+import { fmt, type Order, type OrderItem, type OrderStatus } from '@/stores/types'
+import { useOrderStore } from '@/stores/useOrderStore'
+
+export type OrderCellRenderer = (row: Order) => string | import('vue').VNode
+
+export interface OrderColumn {
+  title: string
+  key: string
+  width?: number
+  render?: OrderCellRenderer
+}
+
+const statusCfg: Record<
+  OrderStatus,
+  { label: string; type: 'warning' | 'info' | 'success' | 'default' }
+> = {
+  pending: { label: '待处理', type: 'warning' },
+  confirmed: { label: '已确认', type: 'info' },
+  in_progress: { label: '执行中', type: 'success' },
+  completed: { label: '已完成', type: 'success' },
+  cancelled: { label: '已取消', type: 'default' },
+}
+
+export interface OrderColumnsOpts {
+  openDetail: (o: Order) => void
+  goMeter: (o: Order) => void
+  openComplete: (o: Order) => void
+  doCancel: (o: Order) => void
+  doDelete: (o: Order) => void
+}
+
+export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
+  const orderStore = useOrderStore()
+  return [
+    { title: '订单号', key: 'id', width: 100, render: (row: Order) => row.id.slice(-8) },
+    { title: '会员', key: 'memberName', width: 100 },
+    {
+      title: '项目',
+      key: 'items',
+      width: 220,
+      render: (row: Order) =>
+        row.items
+          .map((i: OrderItem) => {
+            if (i.pricingMode === 'hourly' && i.elapsed) {
+              const m = Math.floor(i.elapsed / 60)
+              const s = i.elapsed % 60
+              return `${i.serviceName} ${m}'${s.toString().padStart(2, '0')}`
+            }
+            return `${i.serviceName}×${i.quantity}`
+          })
+          .join(', '),
+    },
+    { title: '小计', key: 'subtotal', width: 80, render: (row: Order) => `¥${fmt(row.subtotal)}` },
+    {
+      title: '优惠',
+      key: 'discountAmount',
+      width: 80,
+      render: (row: Order) => (row.discountAmount > 0 ? `-¥${fmt(row.discountAmount)}` : '—'),
+    },
+    {
+      title: '实收',
+      key: 'finalAmount',
+      width: 80,
+      render: (row: Order) => (
+        <span style={{ color: 'var(--n-success-color)', fontWeight: 600 }}>
+          ¥{fmt(row.finalAmount)}
+        </span>
+      ),
+    },
+    {
+      title: '状态',
+      key: 'status',
+      width: 80,
+      render: (row: Order) => (
+        <NTag type={statusCfg[row.status].type} size="tiny">
+          {statusCfg[row.status].label}
+        </NTag>
+      ),
+    },
+    {
+      title: '时间',
+      key: 'createdAt',
+      width: 140,
+      render: (row: Order) => new Date(row.createdAt).toLocaleString(),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 160,
+      render: (row: Order) => (
+        <NFlex size={4}>
+          <NButton size="tiny" onClick={() => opts.openDetail(row)}>详情</NButton>
+          {row.status === 'pending' && (
+            <NButton size="tiny" type="primary" onClick={() => orderStore.confirm(row.id)}>
+              确认
+            </NButton>
+          )}
+          {(row.status === 'confirmed' || row.status === 'in_progress') && (
+            <NButton size="tiny" type="primary" onClick={() => opts.goMeter(row)}>
+              去计价
+            </NButton>
+          )}
+          {row.status === 'confirmed' && (
+            <NButton size="tiny" type="success" onClick={() => opts.openComplete(row)}>
+              完成
+            </NButton>
+          )}
+          {row.status !== 'completed' && row.status !== 'cancelled' && (
+            <NButton size="tiny" type="warning" onClick={() => opts.doCancel(row)}>
+              取消
+            </NButton>
+          )}
+          {row.status === 'cancelled' && (
+            <NButton size="tiny" type="error" onClick={() => opts.doDelete(row)}>
+              删除
+            </NButton>
+          )}
+        </NFlex>
+      ),
+    },
+  ]
+}

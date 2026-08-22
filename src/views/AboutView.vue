@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NFlex, NIcon, NResult, NTag } from 'naive-ui';
+import { NFlex, NIcon, NResult, NTag } from 'naive-ui'
 import { IconMoodDollar, IconTag, IconCertificate, IconBrandGithub } from '@tabler/icons-vue'
 import { version, license } from '@/../package.json'
 </script>
