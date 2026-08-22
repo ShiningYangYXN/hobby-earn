@@ -11,6 +11,7 @@ import NewOrderModal from '@/components/modals/NewOrderModal.vue'
 import OrderDetailModal from '@/components/modals/OrderDetailModal.vue'
 import DiscountModal from '@/components/modals/DiscountModal.vue'
 import MemberModal from '@/components/modals/MemberModal.vue'
+import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
 import PriceModal from '@/components/modals/PriceModal.vue'
 
 const router = createRouter({
@@ -43,6 +44,13 @@ const router = createRouter({
       children: [
         { path: 'new', name: 'member-new', component: MemberModal },
         { path: ':id', name: 'member-edit', component: MemberModal, props: true },
+        { path: 'types/new', name: 'member-type-new', component: MemberTypeModal },
+        {
+          path: 'types/:id',
+          name: 'member-type-edit',
+          component: MemberTypeModal,
+          props: true,
+        },
       ],
     },
     {

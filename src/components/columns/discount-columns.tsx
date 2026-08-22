@@ -2,6 +2,7 @@ import { NTag, NFlex, NButton, NText } from 'naive-ui'
 import { fmt, type Discount } from '@/stores/types'
 import type { MemberType } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useDiscountStore } from '@/stores/useDiscountStore'
 
 export interface DiscountColumn {
   title: string
@@ -16,7 +17,7 @@ const typeLabelMap: Record<string, string> = {
   member: '会员',
   firstOrder: '首单',
   repeatOrder: '累次',
-  referral: '推广',
+  category: '品类',
 }
 function typeLabel(t: string): string {
   return typeLabelMap[t] ?? t
@@ -26,6 +27,13 @@ function memberTypeNames(ids: string[] = [], types: MemberType[]): string {
   return ids.map((id) => types.find((t) => t.id === id)?.name ?? id).join('、')
 }
 
+const statusMeta: Record<string, { label: string; type: 'success' | 'warning' | 'default' | 'error' }> = {
+  active: { label: '可用', type: 'success' },
+  expired: { label: '已过期', type: 'warning' },
+  disabled: { label: '已停用', type: 'default' },
+  exhausted: { label: '已兑完', type: 'error' },
+}
+
 export function buildDiscountColumns(opts: {
   copyCode: (code: string) => void
   openEdit: (d: Discount) => void
@@ -33,6 +41,7 @@ export function buildDiscountColumns(opts: {
   remove: (d: Discount) => void
 }): DiscountColumn[] {
   const memberTypeStore = useMemberTypeStore()
+  const discountStore = useDiscountStore()
   return [
     { title: '名称', key: 'name' },
     {
@@ -55,7 +64,7 @@ export function buildDiscountColumns(opts: {
         row.ruleType === 'percentage' ? `${row.value}%` : `¥${fmt(row.value)}`,
     },
     {
-      title: '最低',
+      title: '保底',
       key: 'minAmount',
       width: 90,
       render: (row: Discount) => `¥${fmt(row.minAmount)}`,
@@ -67,6 +76,15 @@ export function buildDiscountColumns(opts: {
       render: (row: Discount) =>
         row.discountType === 'member'
           ? memberTypeNames(row.memberTypeIds, memberTypeStore.types)
+          : '-',
+    },
+    {
+      title: '适用品类',
+      key: 'categoryIds',
+      width: 150,
+      render: (row: Discount) =>
+        row.discountType === 'category' && row.categoryIds && row.categoryIds.length
+          ? row.categoryIds.join('、')
           : '-',
     },
     {
@@ -118,13 +136,17 @@ export function buildDiscountColumns(opts: {
     },
     {
       title: '状态',
-      key: 'isActive',
-      width: 70,
-      render: (row: Discount) => (
-        <NTag type={row.isActive ? 'success' : 'default'} size="tiny">
-          {row.isActive ? '启用' : '禁用'}
-        </NTag>
-      ),
+      key: 'status',
+      width: 90,
+      render: (row: Discount) => {
+        const s = discountStore.discountStatus(row)
+        const meta = statusMeta[s] ?? { label: '未知', type: 'default' as const }
+        return (
+          <NTag type={meta.type} size="tiny">
+            {meta.label}
+          </NTag>
+        )
+      },
     },
     {
       title: '操作',

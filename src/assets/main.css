@@ -36,8 +36,8 @@ body {
   max-width: 80vw;
 }
 .modal-xl {
-  width: 620px;
-  max-width: 80vw;
+  width: 780px;
+  max-width: 92vw;
 }
 .modal-scroll {
   max-height: calc(80vh - 130px);

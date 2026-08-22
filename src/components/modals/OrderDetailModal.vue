@@ -24,6 +24,7 @@ import { fmt, itemAmount, type Order, type OrderItem, type OrderStatus, type Dis
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useUiStore } from '@/stores/useUiStore'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 
@@ -34,6 +35,7 @@ const msg = useMessage()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
 const priceStore = usePriceStore()
+const memberTypeStore = useMemberTypeStore()
 const ui = useUiStore()
 
 const order = computed<Order | null>(() => orderStore.orders.find((o) => o.id === props.id) ?? null)
@@ -45,7 +47,7 @@ const statusCfg: Record<
   pending: { label: '待处理', type: 'warning' },
   in_progress: { label: '执行中', type: 'info' },
   completed: { label: '已完成', type: 'success' },
-  cancelled: { label: '已取消', type: 'default' },
+  closed: { label: '已关闭', type: 'default' },
 }
 
 // —— 未执行（待处理）订单：可编辑草稿 ——
@@ -132,6 +134,55 @@ const payOptions = [
   { label: '其他', value: 'ecny' },
 ]
 
+// 优惠记录详情弹窗
+const showDiscountDetail = ref(false)
+const selectedDiscountId = ref<string | null>(null)
+const selectedDiscount = computed(() =>
+  selectedDiscountId.value
+    ? discountStore.discounts.find((d) => d.id === selectedDiscountId.value) ?? null
+    : null,
+)
+const discountTypeLabel: Record<string, string> = {
+  coupon: '券码',
+  timeLimited: '限时',
+  member: '会员',
+  firstOrder: '首单',
+  repeatOrder: '累次',
+  category: '品类',
+}
+function openDiscountDetail(id: string) {
+  selectedDiscountId.value = id
+  showDiscountDetail.value = true
+}
+// 反查优惠名称（按记录中的 discountId），找不到则回退到记录描述
+function discountNameOf(rec: DiscountRecord): string {
+  const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+  return d?.name ?? rec.description ?? '优惠'
+}
+// 将会员类型 id 列表转换为名称串
+function loadMemberTypes(ids: string[]): string {
+  return ids
+    .map((id) => memberTypeStore.types.find((t) => t.id === id)?.name ?? id)
+    .join('、')
+}
+// 将分类 id 列表转换为名称串
+function loadCategories(ids: string[]): string {
+  const names = new Set<string>()
+  for (const id of ids) {
+    const hit = priceStore.prices.find((p) => p.id === id)?.category
+    if (hit) names.add(hit)
+  }
+  return [...names].join('、') || ids.join('、')
+}
+// 日期格式化（Discount.validFrom/validUntil 为 ISO 字符串或空串）
+function formatDate(ts?: string | number): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return String(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function close() {
   router.push('/orders')
 }
@@ -160,7 +211,7 @@ function doCancel() {
   if (!o) return
   dialog.warning({
     title: '关闭订单',
-    content: '关闭后订单将变为「已取消」，可退还已用优惠；确认关闭？',
+    content: '关闭后订单将变为「已关闭」，可退还已用优惠；确认关闭？',
     positiveText: '关闭',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -169,6 +220,46 @@ function doCancel() {
       }
       await orderStore.cancel(o.id)
       msg.success('订单已关闭')
+      close()
+    },
+  })
+}
+
+// 已关闭订单若关联优惠已不可用（过期/停用/超兑），则禁止重新打开
+const reopenBlockedReason = computed(() => {
+  const o = order.value
+  if (!o || o.status !== 'closed') return null
+  for (const rec of o.discountRecords) {
+    const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+    if (!d || !discountStore.isUsable(d, o.memberId)) {
+      const st = d ? discountStore.discountStatus(d, o.memberId) : 'disabled'
+      return st === 'expired'
+        ? '优惠已过期'
+        : st === 'disabled'
+          ? '优惠已停用'
+          : st === 'exhausted'
+            ? '优惠已达使用上限'
+            : '优惠不存在'
+    }
+  }
+  return null
+})
+
+function doReopen() {
+  const o = order.value
+  if (!o) return
+  dialog.info({
+    title: '重新使用优惠',
+    content: '将恢复订单为「待处理」状态，并重新占用该订单关联的优惠（重新使用优惠）。若优惠已过期或已达上限将无法重新打开。确认继续？',
+    positiveText: '重新打开',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const res = await orderStore.reopen(o.id)
+      if (res.ok) {
+        msg.success('订单已重新打开，优惠已重新使用')
+      } else {
+        msg.error(res.reason ?? '无法重新打开')
+      }
       close()
     },
   })
@@ -187,9 +278,6 @@ function doDelete() {
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      for (const rec of o.discountRecords) {
-        await discountStore.rollbackUsage(rec.discountId, o.memberId)
-      }
       await orderStore.remove(o.id)
       msg.success('订单已删除')
       close()
@@ -281,6 +369,30 @@ function doDelete() {
           <NText type="error" v-if="editDiscountAmount">优惠：-{{ fmt(editDiscountAmount) }}</NText>
           <NText strong>应收：{{ fmt(editFinalAmount) }}</NText>
         </NFlex>
+        <NCard
+          v-if="editDiscountRecords.length"
+          size="small"
+          title="优惠明细"
+          style="margin-top: 12px"
+        >
+          <NFlex vertical :size="8">
+            <NFlex
+              v-for="(rec, i) in editDiscountRecords"
+              :key="i"
+              align="center"
+              justify="space-between"
+              style="width: 100%"
+            >
+              <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
+                <NFlex align="center" :size="6">
+                  <NTag size="tiny">{{ discountTypeLabel[rec.discountType] ?? rec.discountType }}</NTag>
+                  {{ discountNameOf(rec) }}
+                </NFlex>
+              </NButton>
+              <NText type="error">- {{ fmt(rec.discountAmount) }}</NText>
+            </NFlex>
+          </NFlex>
+        </NCard>
       </template>
 
       <!-- 其他状态：只读 -->
@@ -300,6 +412,30 @@ function doDelete() {
           >
           <NText strong>应收：{{ fmt(order.finalAmount) }}</NText>
         </NFlex>
+        <NCard
+          v-if="order.discountRecords.length"
+          size="small"
+          title="优惠明细"
+          style="margin-top: 12px"
+        >
+          <NFlex vertical :size="8">
+            <NFlex
+              v-for="(rec, i) in order.discountRecords"
+              :key="i"
+              align="center"
+              justify="space-between"
+              style="width: 100%"
+            >
+              <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
+                <NFlex align="center" :size="6">
+                  <NTag size="tiny">{{ discountTypeLabel[rec.discountType] ?? rec.discountType }}</NTag>
+                  {{ discountNameOf(rec) }}
+                </NFlex>
+              </NButton>
+              <NText type="error">- {{ fmt(rec.discountAmount) }}</NText>
+            </NFlex>
+          </NFlex>
+        </NCard>
         <NText depth="3" v-if="order.paymentMethod" style="display: block; margin-top: 6px">
           收款方式：
           <NTag v-if="order.paymentMethod" size="small">
@@ -331,7 +467,16 @@ function doDelete() {
           >
             <IconShare :size="16" /> 去计价
           </NButton>
-          <NButton v-if="order && order.status === 'cancelled'" type="error" @click="doDelete">
+          <NButton
+            v-if="order && order.status === 'closed'"
+            type="primary"
+            :disabled="!!reopenBlockedReason"
+            :title="reopenBlockedReason || ''"
+            @click="doReopen"
+          >
+            <IconPlus :size="16" /> 重新使用优惠
+          </NButton>
+          <NButton v-if="order && order.status === 'closed'" type="error" @click="doDelete">
             <IconTrash :size="16" /> 删除
           </NButton>
           <NButton
@@ -344,5 +489,80 @@ function doDelete() {
         </template>
       </NFlex>
     </template>
+  </NModal>
+
+  <!-- 优惠（券）详情弹窗 -->
+  <NModal
+    v-model:show="showDiscountDetail"
+    preset="card"
+    title="优惠详情"
+    class="modal-md"
+    :bordered="false"
+  >
+    <NDescriptions
+      v-if="selectedDiscount"
+      label-placement="left"
+      bordered
+      :column="1"
+      size="small"
+    >
+      <NDescriptionsItem label="优惠名称">{{ selectedDiscount.name }}</NDescriptionsItem>
+      <NDescriptionsItem label="优惠类型">
+        {{ discountTypeLabel[selectedDiscount.discountType] ?? selectedDiscount.discountType }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="优惠规则">
+        {{ selectedDiscount.ruleType === 'percentage' ? '打折（按比例）' : '固定金额减免' }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="优惠力度">
+        <template v-if="selectedDiscount.ruleType === 'percentage'">
+          {{ selectedDiscount.value }}（打 {{ (selectedDiscount.value / 10).toFixed(1) }} 折）
+        </template>
+        <template v-else>减 {{ (selectedDiscount.value / 100).toFixed(2) }} 元</template>
+      </NDescriptionsItem>
+      <NDescriptionsItem label="券码" v-if="selectedDiscount.code">
+        {{ selectedDiscount.code }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="保底消费">
+        {{ selectedDiscount.minAmount ? `¥${(selectedDiscount.minAmount / 100).toFixed(2)}` : '不限' }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="最大减免">
+        {{
+          selectedDiscount.maxDiscount
+            ? `¥${(selectedDiscount.maxDiscount / 100).toFixed(2)}`
+            : '不限'
+        }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="有效期">
+        <template v-if="selectedDiscount.validFrom || selectedDiscount.validUntil">
+          {{ formatDate(selectedDiscount.validFrom) || '不限' }} ~
+          {{ formatDate(selectedDiscount.validUntil) || '不限' }}
+        </template>
+        <template v-else>永久有效</template>
+      </NDescriptionsItem>
+      <NDescriptionsItem label="可用次数">
+        {{ selectedDiscount.usageLimit ? `${selectedDiscount.usageLimit} 次` : '不限' }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="每会员限用">
+        {{ selectedDiscount.memberLimit ? `${selectedDiscount.memberLimit} 次` : '不限' }}
+      </NDescriptionsItem>
+      <NDescriptionsItem
+        label="限定会员类型"
+        v-if="selectedDiscount.memberTypeIds?.length"
+      >
+        {{ loadMemberTypes(selectedDiscount.memberTypeIds) }}
+      </NDescriptionsItem>
+      <NDescriptionsItem
+        label="限定商品分类"
+        v-if="selectedDiscount.categoryIds?.length"
+      >
+        {{ loadCategories(selectedDiscount.categoryIds) }}
+      </NDescriptionsItem>
+      <NDescriptionsItem label="状态">
+        <NTag :type="selectedDiscount.isActive ? 'success' : 'default'" size="small">
+          {{ selectedDiscount.isActive ? '启用中' : '已停用' }}
+        </NTag>
+      </NDescriptionsItem>
+    </NDescriptions>
+    <NEmpty v-else description="未找到该优惠" />
   </NModal>
 </template>

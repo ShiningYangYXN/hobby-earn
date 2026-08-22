@@ -51,9 +51,9 @@ const payOpts: { label: string; value: PaymentMethod }[] = [
 ]
 
 const statusLabel = (s: OrderStatus) =>
-  ({ pending: '待处理', in_progress: '执行中', completed: '已完成', cancelled: '已取消' })[s]
+  ({ pending: '待处理', in_progress: '执行中', completed: '已完成', closed: '已关闭' })[s]
 const statusType = (s: OrderStatus) =>
-  ({ pending: 'warning', in_progress: 'info', completed: 'success', cancelled: 'default' })[s] as
+  ({ pending: 'warning', in_progress: 'info', completed: 'success', closed: 'default' })[s] as
     | 'warning'
     | 'info'
     | 'success'
@@ -221,9 +221,9 @@ function closePricing() {
               <NFlex align="center" justify="space-between">
                 <NText depth="3">{{ it.pricingMode === 'hourly' ? '已计时长' : '数量' }}</NText>
                 <NFlex align="center" :size="10">
-                  <span class="meter-num">{{
+                  <NText class="meter-num">{{
                     it.pricingMode === 'hourly' ? fmtElapsed(it.elapsed ?? 0) : it.quantity
-                  }}</span>
+                  }}</NText>
                   <template v-if="it.pricingMode === 'hourly'">
                     <NButton
                       size="small"
@@ -283,15 +283,15 @@ function closePricing() {
             <NFlex vertical :size="6">
               <NFlex justify="space-between" align="center">
                 <NText depth="3">小计</NText>
-                <span class="meter-num">¥{{ fmt(liveSubtotal) }}</span>
+                <NText class="meter-num">¥{{ fmt(liveSubtotal) }}</NText>
               </NFlex>
               <NFlex v-if="(discountPanel?.discountAmount ?? 0) > 0" justify="space-between" align="center">
                 <NText depth="3">优惠</NText>
-                <span class="meter-num" style="color: #d03050">-¥{{ fmt(discountPanel?.discountAmount ?? 0) }}</span>
+                <NText class="meter-num" style="color: #d03050">-¥{{ fmt(discountPanel?.discountAmount ?? 0) }}</NText>
               </NFlex>
               <NFlex justify="space-between" align="center">
-                <NText strong>实收</NText>
-                <span class="meter-num" style="font-size: 20px">¥{{ fmt(discountPanel?.finalAmount ?? liveSubtotal) }}</span>
+                <NText strong>金额</NText>
+                <NText class="meter-num" style="font-size: 20px">¥{{ fmt(discountPanel?.finalAmount ?? liveSubtotal) }}</NText>
               </NFlex>
             </NFlex>
           </NCard>

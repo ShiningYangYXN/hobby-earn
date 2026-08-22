@@ -17,13 +17,14 @@ const statusCfg: Record<
   pending: { label: '待处理', type: 'warning' },
   in_progress: { label: '执行中', type: 'info' },
   completed: { label: '已完成', type: 'success' },
-  cancelled: { label: '已取消', type: 'default' },
+  closed: { label: '已关闭', type: 'default' },
 }
 
 export interface OrderColumnsOpts {
   openDetail: (o: Order) => void
   goMeter: (o: Order) => void
   doCancel: (o: Order) => void
+  doReopen: (o: Order) => void
   doDelete: (o: Order) => void
   advancedMode: boolean
 }
@@ -56,7 +57,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       render: (row: Order) => (row.discountAmount > 0 ? `-¥${fmt(row.discountAmount)}` : '—'),
     },
     {
-      title: '实收',
+      title: '金额',
       key: 'finalAmount',
       width: 80,
       render: (row: Order) => (
@@ -105,12 +106,17 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
               去计价
             </NButton>
           )}
-          {row.status !== 'completed' && row.status !== 'cancelled' && (
+          {row.status !== 'completed' && row.status !== 'closed' && (
             <NButton size="tiny" type="warning" onClick={() => opts.doCancel(row)}>
               关闭订单
             </NButton>
           )}
-          {(row.status === 'cancelled' || (row.status === 'completed' && opts.advancedMode)) && (
+          {row.status === 'closed' && (
+            <NButton size="tiny" type="primary" onClick={() => opts.doReopen(row)}>
+              重新打开
+            </NButton>
+          )}
+          {(row.status === 'closed' || (row.status === 'completed' && opts.advancedMode)) && (
             <NButton size="tiny" type="error" onClick={() => opts.doDelete(row)}>
               删除
             </NButton>

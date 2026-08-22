@@ -73,6 +73,23 @@ export const useDiscountStore = defineStore('discount', () => {
     await put('discounts', discounts.value[idx]!)
   }
 
+  // 优惠当前状态：停用 / 过期 / 已达上限 / 可用
+  function discountStatus(
+    d: Discount,
+    memberId?: string,
+  ): 'active' | 'expired' | 'disabled' | 'exhausted' {
+    if (!d.isActive) return 'disabled'
+    if (!inRange(d)) return 'expired'
+    if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return 'exhausted'
+    if (memberId && d.memberLimit !== null && (d.memberUsedCount[memberId] ?? 0) >= d.memberLimit)
+      return 'exhausted'
+    return 'active'
+  }
+  // 优惠当前是否仍可使用（重新打开订单时用于校验）
+  function isUsable(d: Discount, memberId?: string): boolean {
+    return discountStatus(d, memberId) === 'active'
+  }
+
   function findByCode(code: string): Discount | undefined {
     return discounts.value.find((d) => d.code?.toUpperCase() === code.toUpperCase())
   }
@@ -101,6 +118,7 @@ export const useDiscountStore = defineStore('discount', () => {
     memberId: string,
     completedCount: number,
     memberTypeId?: string,
+    categories?: string[],
   ): { desc: string; amount: number } | null {
     if (!d.isActive || !inRange(d) || subtotal < d.minAmount) return null
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return null
@@ -109,16 +127,27 @@ export const useDiscountStore = defineStore('discount', () => {
       if (!d.memberTypeIds || d.memberTypeIds.length === 0) return null
       if (!memberTypeId || !d.memberTypeIds.includes(memberTypeId)) return null
     }
+    if (d.discountType === 'category') {
+      const cats = d.categoryIds ?? []
+      if (!cats.length) return null
+      // 仅当订单包含命中的品类时才生效
+      if (!categories || !categories.some((c) => cats.includes(c))) return null
+    }
     if (d.discountType === 'firstOrder' && completedCount > 0) return null
     if (d.discountType === 'repeatOrder' && completedCount < (d.repeatThreshold ?? 1)) return null
     const amount =
       d.ruleType === 'percentage'
-        ? Math.min(Math.floor((subtotal * d.value) / 100), d.maxDiscount ?? Infinity)
+        // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%）
+        ? Math.min(subtotal - Math.floor((subtotal * d.value) / 100), d.maxDiscount ?? Infinity)
+        // 减法：直接减固定金额（分）
         : Math.min(d.value, subtotal)
-    const desc =
+    let desc =
       d.ruleType === 'percentage'
-        ? `满${cents(d.minAmount)}打${d.value}折`
+        ? `满${cents(d.minAmount)}打${(d.value / 10).toString()}折`
         : `满${cents(d.minAmount)}减${cents(d.value)}`
+    if (d.discountType === 'category' && d.categoryIds && d.categoryIds.length) {
+      desc += `（限${d.categoryIds.join('/')}）`
+    }
     return { desc, amount }
   }
 
@@ -135,6 +164,8 @@ export const useDiscountStore = defineStore('discount', () => {
     isValidCode,
     checkCode,
     calcDiscount,
+    discountStatus,
+    isUsable,
   }
 })
 

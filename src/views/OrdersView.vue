@@ -10,12 +10,14 @@ import {
   NCard,
   NSelect,
   NInput,
+  NDatePicker,
   useDialog,
   useMessage,
 } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
+import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildOrderColumns } from '@/components/columns/order-columns'
 import { type Order, type OrderStatus } from '@/stores/types'
@@ -25,20 +27,45 @@ const dialog = useDialog()
 const msg = useMessage()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
+const memberStore = useMemberStore()
 const ui = useUiStore()
 
 const statusOptions = [
+  { label: '全部状态', value: 'all' },
   { label: '待处理', value: 'pending' },
   { label: '执行中', value: 'in_progress' },
   { label: '已完成', value: 'completed' },
-  { label: '已取消', value: 'cancelled' },
+  { label: '已关闭', value: 'closed' },
+]
+const discountOptions = [
+  { label: '全部订单', value: '' },
+  { label: '有优惠', value: 'has' },
+  { label: '无优惠', value: 'none' },
 ]
 const statusFilter = ref<OrderStatus | 'all'>('all')
+const memberFilter = ref('')
+const discountFilter = ref('')
+const dateRange = ref<[number, number] | null>(null)
 const keyword = ref('')
+
+const memberOptions = computed(() => [
+  { label: '全部会员', value: '' },
+  ...memberStore.members
+    .filter((m) => m.isActive !== false)
+    .map((m) => ({ label: m.name, value: m.id })),
+])
 
 const list = computed(() =>
   orderStore.orders.filter((o) => {
     if (statusFilter.value !== 'all' && o.status !== statusFilter.value) return false
+    if (memberFilter.value && o.memberId !== memberFilter.value) return false
+    if (discountFilter.value === 'has' && o.discountRecords.length === 0) return false
+    if (discountFilter.value === 'none' && o.discountRecords.length > 0) return false
+    if (dateRange.value) {
+      const [start, end] = dateRange.value
+      const t = new Date(o.createdAt).getTime()
+      if (t < start || t > end + 86400000 - 1) return false
+    }
     if (keyword.value.trim()) {
       const k = keyword.value.trim().toLowerCase()
       if (!(o.memberName.toLowerCase().includes(k) || o.id.toLowerCase().includes(k))) return false
@@ -59,7 +86,7 @@ function goMeter(o: Order) {
 function doCancel(o: Order) {
   dialog.warning({
     title: '关闭订单',
-    content: '关闭后订单将变为「已取消」，可退还已用优惠；确认关闭？',
+    content: '关闭后订单将变为「已关闭」，并退还已用优惠用量；确认关闭？',
     positiveText: '关闭',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -68,6 +95,22 @@ function doCancel(o: Order) {
       }
       await orderStore.cancel(o.id)
       msg.success('订单已关闭')
+    },
+  })
+}
+function doReopen(o: Order) {
+  dialog.info({
+    title: '重新使用优惠',
+    content: '将恢复订单为「待处理」状态，并重新占用该订单关联的优惠（重新使用优惠）。若优惠已过期或已达上限将无法重新打开。确认继续？',
+    positiveText: '重新打开',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const res = await orderStore.reopen(o.id)
+      if (res.ok) {
+        msg.success('订单已重新打开，优惠已重新使用')
+      } else {
+        msg.error(res.reason ?? '无法重新打开')
+      }
     },
   })
 }
@@ -82,9 +125,6 @@ function remove(o: Order) {
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      for (const rec of o.discountRecords) {
-        await discountStore.rollbackUsage(rec.discountId, o.memberId)
-      }
       await orderStore.remove(o.id)
       msg.success('订单已删除')
     },
@@ -95,6 +135,7 @@ const columns = buildOrderColumns({
   openDetail,
   goMeter,
   doCancel,
+  doReopen,
   doDelete: remove,
   advancedMode: ui.advancedMode,
 })
@@ -105,21 +146,33 @@ onMounted(() => {
 </script>
 
 <template>
-  <NCard title="订单管理">
-    <NFlex vertical :size="12">
-      <NFlex align="center" :size="12">
-        <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
-        <NInput
-          v-model:value="keyword"
-          placeholder="搜索会员 / 订单号"
-          clearable
-          style="width: 220px"
-        />
-        <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建订单 </NButton>
+  <NFlex vertical :size="16">
+    <NH2 prefix="bar">订单管理</NH2>
+    <NCard>
+      <NFlex vertical :size="12">
+        <NFlex align="center" :size="12" wrap>
+          <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
+          <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 160px" />
+          <NSelect v-model:value="discountFilter" :options="discountOptions" style="width: 140px" />
+          <NDatePicker
+            v-model:value="dateRange"
+            type="daterange"
+            clearable
+            placeholder="下单日期"
+            style="width: 240px"
+          />
+          <NInput
+            v-model:value="keyword"
+            placeholder="搜索会员 / 订单号"
+            clearable
+            style="width: 200px"
+          />
+          <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建订单 </NButton>
+        </NFlex>
+        <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />
+        <NText v-if="!list.length" depth="3">暂无订单。</NText>
       </NFlex>
-      <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />
-      <NText v-if="!list.length" depth="3">暂无订单。</NText>
-    </NFlex>
-    <RouterView />
-  </NCard>
+      <RouterView />
+    </NCard>
+  </NFlex>
 </template>

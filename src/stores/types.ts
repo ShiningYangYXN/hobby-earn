@@ -34,10 +34,9 @@ export interface Member {
   name: string
   phone?: string
   joinDate: string
-  tags?: string[]
-  referrerId?: string
   notes?: string
   typeId?: string
+  isActive: boolean
 }
 
 /* ── 会员种类（完全自定义）── */
@@ -75,7 +74,7 @@ export interface DiscountRecord {
   description: string
   discountAmount: number
 }
-export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'closed'
 export type PaymentMethod = 'cash' | 'ecny' | 'unionpay' | 'wechat' | 'alipay'
 export interface Order {
   id: string
@@ -100,7 +99,7 @@ export type DiscountType =
   | 'member'
   | 'firstOrder'
   | 'repeatOrder'
-  | 'referral'
+  | 'category'
 export type RuleType = 'fixed' | 'percentage'
 export interface Discount {
   id: string
@@ -118,8 +117,8 @@ export interface Discount {
   memberLimit: number | null
   memberUsedCount: Record<string, number>
   repeatThreshold?: number
-  referrerMemberId?: string
   memberTypeIds?: string[]
+  categoryIds?: string[] // 品类优惠：仅对命中分类的订单项生效
   exclusiveGroup?: string
   isActive: boolean
 }

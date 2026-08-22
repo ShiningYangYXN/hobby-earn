@@ -68,7 +68,7 @@ export const useOrderStore = defineStore('order', () => {
   // 开始执行（待处理 → 执行中），已处于执行中则保持
   async function beginExecute(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
-    if (!o || o.status === 'completed' || o.status === 'cancelled') return
+    if (!o || o.status === 'completed' || o.status === 'closed') return
     o.status = 'in_progress'
     await put('orders', o)
   }
@@ -120,9 +120,38 @@ export const useOrderStore = defineStore('order', () => {
 
   async function cancel(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
-    if (!o || o.status === 'completed' || o.status === 'cancelled') return
-    o.status = 'cancelled'
+    if (!o || o.status === 'completed' || o.status === 'closed') return
+    o.status = 'closed'
     await put('orders', o)
+  }
+
+  // 重新打开已关闭的订单：重新使用优惠（重新占用用量而非退还），状态回到待处理
+  // 若订单关联的任一优惠已过期 / 停用 / 超兑，则禁止重新打开
+  async function reopen(id: string): Promise<{ ok: boolean; reason?: string }> {
+    const o = orders.value.find((x) => x.id === id)
+    if (!o || o.status !== 'closed') return { ok: false, reason: '订单状态不可重开' }
+    for (const rec of o.discountRecords) {
+      const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+      if (!d || !discountStore.isUsable(d, o.memberId)) {
+        const st = d ? discountStore.discountStatus(d, o.memberId) : 'disabled'
+        const why =
+          st === 'expired'
+            ? '优惠已过期'
+            : st === 'disabled'
+              ? '优惠已停用'
+              : st === 'exhausted'
+                ? '优惠已达使用上限'
+                : '优惠不存在'
+        return { ok: false, reason: `无法重新打开：${why}` }
+      }
+    }
+    // 重新占用优惠用量（重新使用优惠）
+    for (const rec of o.discountRecords) {
+      await discountStore.recordUsage(rec.discountId, o.memberId)
+    }
+    o.status = 'pending'
+    await put('orders', o)
+    return { ok: true }
   }
 
   // 修改未执行（待处理）订单的草稿内容：备注、服务项、优惠
@@ -148,8 +177,8 @@ export const useOrderStore = defineStore('order', () => {
   async function remove(id: string): Promise<void> {
     const idx = orders.value.findIndex((x) => x.id === id)
     const o = orders.value[idx]
-    if (idx < 0 || !o || (o.status !== 'cancelled' && o.status !== 'completed')) return
-    for (const r of o.discountRecords) await discountStore.rollbackUsage(r.discountId, o.memberId)
+    // 删除订单不回滚优惠（优惠回滚仅发生在「关闭」时）
+    if (idx < 0 || !o || (o.status !== 'closed' && o.status !== 'completed')) return
     orders.value.splice(idx, 1)
     await del('orders', id)
   }
@@ -167,6 +196,7 @@ export const useOrderStore = defineStore('order', () => {
     saveExecution,
     finalize,
     cancel,
+    reopen,
     updateDraft,
     remove,
   }

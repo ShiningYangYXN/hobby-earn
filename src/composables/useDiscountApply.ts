@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
+import { usePriceStore } from '@/stores/usePriceStore'
 import { subtotalOf, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
 
 /**
@@ -14,6 +15,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
   const discountStore = useDiscountStore()
   const orderStore = useOrderStore()
   const memberStore = useMemberStore()
+  const priceStore = usePriceStore()
 
   const applied = ref<Discount[]>([])
   const countedIds = ref<Set<string>>(new Set())
@@ -21,6 +23,16 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
   const couponError = ref('')
 
   const subtotal = computed(() => subtotalOf(getItems()))
+
+  // 订单项命中的商品分类（用于品类优惠判定）
+  function categories(): string[] {
+    const set = new Set<string>()
+    for (const it of getItems()) {
+      const p = priceStore.prices.find((x) => x.id === it.priceEntryId)
+      if (p?.category) set.add(p.category)
+    }
+    return [...set]
+  }
 
   function memberTypeId(): string | undefined {
     const mid = getMemberId()
@@ -36,7 +48,14 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
   function calc(d: Discount) {
     const mid = getMemberId()
     if (!mid) return null
-    return discountStore.calcDiscount(d, subtotal.value, mid, completedCount(), memberTypeId())
+    return discountStore.calcDiscount(
+      d,
+      subtotal.value,
+      mid,
+      completedCount(),
+      memberTypeId(),
+      categories(),
+    )
   }
 
   const eligibleAuto = computed<Discount[]>(() => {
@@ -105,6 +124,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
 
   const records = computed<DiscountRecord[]>(() => {
     const chosen = applied.value.filter((d) => !!calc(d))
+    // 互斥分组内只保留减免最大者
     const groups = new Map<string, Discount[]>()
     const noGroup: Discount[] = []
     for (const d of chosen) {
@@ -119,16 +139,40 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
       arr.sort((a, b) => discOf(b) - discOf(a))
       picked.push(arr[0]!)
     }
-    return picked.map((d) => {
-      const r = calc(d)!
-      return {
+
+    // 应用顺序：先乘（percentage）后减（fixed），保底不低于 0
+    const result: DiscountRecord[] = []
+    let price = subtotal.value
+    const pcts = picked.filter((d) => d.ruleType === 'percentage')
+    const fixeds = picked.filter((d) => d.ruleType === 'fixed')
+    for (const d of pcts) {
+      const r = calc(d)
+      if (!r) continue
+      const newPrice = Math.floor((price * d.value) / 100)
+      const amt = price - newPrice
+      price = newPrice
+      result.push({
         discountId: d.id,
         discountType: d.discountType,
         ruleType: d.ruleType,
         description: r.desc,
-        discountAmount: r.amount,
-      }
-    })
+        discountAmount: amt,
+      })
+    }
+    for (const d of fixeds) {
+      const r = calc(d)
+      if (!r) continue
+      const amt = Math.min(d.value, price)
+      price = Math.max(0, price - d.value)
+      result.push({
+        discountId: d.id,
+        discountType: d.discountType,
+        ruleType: d.ruleType,
+        description: r.desc,
+        discountAmount: amt,
+      })
+    }
+    return result
   })
   function discOf(d: Discount): number {
     return calc(d)?.amount ?? 0

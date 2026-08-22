@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { RouterView } from 'vue-router'
-import { NDataTable, NButton, NFlex, NText, NCard, useDialog, useMessage } from 'naive-ui'
+import { NDataTable, NButton, NFlex, NText, NCard, NInput, NSelect, useDialog, useMessage } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
@@ -12,6 +12,37 @@ const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const discountStore = useDiscountStore()
+
+const keyword = ref('')
+const filterType = ref('')
+const filterStatus = ref('')
+
+const typeOptions = [
+  { label: '全部类型', value: '' },
+  { label: '限时', value: 'timeLimited' },
+  { label: '会员', value: 'member' },
+  { label: '首单', value: 'firstOrder' },
+  { label: '累次', value: 'repeatOrder' },
+  { label: '品类', value: 'category' },
+  { label: '券码', value: 'coupon' },
+]
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '可用', value: 'active' },
+  { label: '已过期', value: 'expired' },
+  { label: '已停用', value: 'disabled' },
+  { label: '已兑完', value: 'exhausted' },
+]
+
+const filtered = computed<Discount[]>(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  return discountStore.discounts.filter((d) => {
+    if (filterType.value && d.discountType !== filterType.value) return false
+    if (filterStatus.value && discountStore.discountStatus(d) !== filterStatus.value) return false
+    if (kw && !`${d.name}${d.code ?? ''}`.toLowerCase().includes(kw)) return false
+    return true
+  })
+})
 
 function openCreate() {
   router.push({ name: 'discount-new' })
@@ -54,17 +85,31 @@ onMounted(() => {
 </script>
 
 <template>
-  <NCard title="优惠管理">
-    <NFlex justify="end" style="margin-bottom: 12px">
-      <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建优惠 </NButton>
+  <NFlex vertical :size="16">
+    <NH2 prefix="bar">优惠管理</NH2>
+    <NCard>
+      <NFlex vertical :size="12">
+        <NFlex align="center" :size="12" wrap>
+          <NInput
+            v-model:value="keyword"
+            placeholder="搜索名称 / 券码"
+            clearable
+            style="width: 200px"
+          />
+          <NSelect v-model:value="filterType" :options="typeOptions" style="width: 140px" />
+          <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
+          <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建优惠 </NButton>
+        </NFlex>
+
+      <NDataTable
+        :columns="columns"
+        :data="filtered"
+        :pagination="{ pageSize: 10 }"
+        size="small"
+      />
+      <NText v-if="!filtered.length" depth="3">没有符合条件的优惠。</NText>
     </NFlex>
-    <NDataTable
-      :columns="columns"
-      :data="discountStore.discounts"
-      :pagination="{ pageSize: 10 }"
-      size="small"
-    />
-    <NText v-if="!discountStore.discounts.length" depth="3">暂无优惠，点击右上角新建。</NText>
+    </NCard>
     <RouterView />
-  </NCard>
+  </NFlex>
 </template>

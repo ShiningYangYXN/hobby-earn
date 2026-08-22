@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { RouterView } from 'vue-router'
-import { NDataTable, NButton, NFlex, NText, NCard, useDialog, useMessage } from 'naive-ui'
+import { NDataTable, NButton, NFlex, NText, NCard, NInput, NSelect, useDialog, useMessage } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { buildPriceColumns } from '@/components/columns/price-columns'
@@ -12,6 +12,42 @@ const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const priceStore = usePriceStore()
+
+const keyword = ref('')
+const filterCategory = ref('')
+const filterMode = ref('')
+const filterActive = ref('')
+
+const categoryOptions = computed(() => {
+  const set = new Set<string>()
+  for (const p of priceStore.prices) if (p.category) set.add(p.category)
+  return [
+    { label: '全部分类', value: '' },
+    ...[...set].map((c) => ({ label: c, value: c })),
+  ]
+})
+const modeOptions = [
+  { label: '全部计价方式', value: '' },
+  { label: '工时', value: 'hourly' },
+  { label: '按件', value: 'perPiece' },
+]
+const activeOptions = [
+  { label: '全部状态', value: '' },
+  { label: '启用', value: 'active' },
+  { label: '停用', value: 'inactive' },
+]
+
+const filtered = computed<PriceEntry[]>(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  return priceStore.prices.filter((p) => {
+    if (filterCategory.value && p.category !== filterCategory.value) return false
+    if (filterMode.value && p.pricingMode !== filterMode.value) return false
+    if (filterActive.value === 'active' && !p.isActive) return false
+    if (filterActive.value === 'inactive' && p.isActive) return false
+    if (kw && !`${p.name}${p.category ?? ''}`.toLowerCase().includes(kw)) return false
+    return true
+  })
+})
 
 function openCreate() {
   router.push({ name: 'price-new' })
@@ -43,17 +79,32 @@ onMounted(() => {
 </script>
 
 <template>
-  <NCard title="价格管理">
-    <NFlex justify="end" style="margin-bottom: 12px">
-      <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建价格项 </NButton>
-    </NFlex>
-    <NDataTable
-      :columns="columns"
-      :data="priceStore.prices"
-      :pagination="{ pageSize: 10 }"
-      size="small"
-    />
-    <NText v-if="!priceStore.prices.length" depth="3">暂无价格项，点击右上角新建。</NText>
-    <RouterView />
-  </NCard>
+  <NFlex vertical :size="16">
+    <NH2 prefix="bar">价格管理</NH2>
+    <NCard>
+      <NFlex vertical :size="12">
+        <NFlex align="center" :size="12" wrap>
+          <NInput
+            v-model:value="keyword"
+            placeholder="搜索名称 / 分类"
+            clearable
+            style="width: 200px"
+          />
+          <NSelect v-model:value="filterCategory" :options="categoryOptions" style="width: 150px" />
+          <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
+          <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
+          <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建价格项 </NButton>
+        </NFlex>
+
+        <NDataTable
+          :columns="columns"
+          :data="filtered"
+          :pagination="{ pageSize: 10 }"
+          size="small"
+        />
+        <NText v-if="!filtered.length" depth="3">没有符合条件的价格项。</NText>
+      </NFlex>
+      <RouterView />
+    </NCard>
+  </NFlex>
 </template>

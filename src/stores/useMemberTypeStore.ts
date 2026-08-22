@@ -22,12 +22,24 @@ export const useMemberTypeStore = defineStore('memberType', () => {
     types.value.push(item)
   }
 
+  async function update(id: string, patch: Partial<MemberType>): Promise<void> {
+    const t = types.value.find((x) => x.id === id)
+    if (!t) throw new Error('种类不存在')
+    if (patch.name !== undefined) {
+      const name = patch.name.trim()
+      if (types.value.some((x) => x.name === name && x.id !== id))
+        throw new Error('种类已存在')
+    }
+    if (patch.name !== undefined) t.name = patch.name.trim()
+    await put('memberTypes', t)
+  }
+
   async function remove(id: string): Promise<void> {
     types.value = types.value.filter((t) => t.id !== id)
     await del('memberTypes', id)
   }
 
-  return { types, load, create, remove }
+  return { types, load, create, update, remove }
 })
 
 function defaultTypes(): MemberType[] {

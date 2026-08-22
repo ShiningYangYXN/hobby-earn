@@ -16,6 +16,7 @@ import {
   NPageHeader,
   NScrollbar,
   NIcon,
+  NText,
   type MenuOption,
   NMessageProvider,
   NDialogProvider,
@@ -105,7 +106,7 @@ const menuOptions: MenuOption[] = [
                 </NButton>
               </template>
               <template #title>
-                <span style="font-size: 24px">HobbyEarn</span>
+                <NText style="font-size: 24px">HobbyEarn</NText>
               </template>
               <template #subtitle> 玩赚·商家端 </template>
               <template #extra>

@@ -14,19 +14,19 @@ const statusLabel: Record<string, string> = {
   pending: '待处理',
   in_progress: '执行中',
   completed: '已完成',
-  cancelled: '已取消',
+  closed: '已关闭',
 }
 const statusType: Record<string, 'warning' | 'info' | 'success' | 'default'> = {
   pending: 'warning',
   in_progress: 'info',
   completed: 'success',
-  cancelled: 'default',
+  closed: 'default',
 }
 
 export const homeViewColumns: HomeViewColumn[] = [
   { title: '会员', key: 'memberName' },
   {
-    title: '实收',
+    title: '金额',
     key: 'finalAmount',
     width: 90,
     render: (row: Order) => <NText type="success">¥{fmt(row.finalAmount)}</NText>,

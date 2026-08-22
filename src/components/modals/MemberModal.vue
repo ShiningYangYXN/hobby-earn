@@ -9,6 +9,7 @@ import {
   NSelect,
   NScrollbar,
   NButton,
+  NSwitch,
   useMessage,
 } from 'naive-ui'
 import { useMemberStore } from '@/stores/useMemberStore'
@@ -25,7 +26,7 @@ const typeOptions = computed(() =>
   memberTypeStore.types.map((t) => ({ label: t.name, value: t.id })),
 )
 
-const form = ref({ name: '', phone: '', typeId: null as string | null, notes: '' })
+const form = ref({ name: '', phone: '', typeId: null as string | null, notes: '', isActive: true })
 
 watch(
   () => props.id,
@@ -39,10 +40,11 @@ watch(
           phone: m.phone ?? '',
           typeId: m.typeId ?? null,
           notes: m.notes ?? '',
+          isActive: m.isActive !== false,
         }
-      else form.value = { name: '', phone: '', typeId: null, notes: '' }
+      else form.value = { name: '', phone: '', typeId: null, notes: '', isActive: true }
     } else {
-      form.value = { name: '', phone: '', typeId: null, notes: '' }
+      form.value = { name: '', phone: '', typeId: null, notes: '', isActive: true }
     }
   },
   { immediate: true },
@@ -59,6 +61,7 @@ async function save() {
       phone: form.value.phone,
       typeId: form.value.typeId ?? undefined,
       notes: form.value.notes,
+      isActive: form.value.isActive,
     }
     if (editing.value && props.id) {
       await memberStore.update(props.id, payload)
@@ -110,6 +113,9 @@ function close() {
             placeholder="备注（可选）"
             :autosize="{ minRows: 2, maxRows: 4 }"
           />
+        </NFormItem>
+        <NFormItem label="启用">
+          <NSwitch v-model:value="form.isActive" />
         </NFormItem>
       </NForm>
     </NScrollbar>

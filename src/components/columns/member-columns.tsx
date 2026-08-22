@@ -12,6 +12,7 @@ export interface MemberColumn {
 export function buildMemberColumns(opts: {
   openEdit: (m: Member) => void
   removeMember: (m: Member) => void
+  toggleActive: (m: Member) => void
 }): MemberColumn[] {
   const memberTypeStore = useMemberTypeStore()
   return [
@@ -33,6 +34,17 @@ export function buildMemberColumns(opts: {
       },
     },
     {
+      title: '状态',
+      key: 'isActive',
+      width: 90,
+      render: (row: Member) =>
+        row.isActive !== false ? (
+          <NTag size="tiny" type="success">启用</NTag>
+        ) : (
+          <NTag size="tiny" type="default">停用</NTag>
+        ),
+    },
+    {
       title: '加入时间',
       key: 'joinDate',
       width: 160,
@@ -51,11 +63,18 @@ export function buildMemberColumns(opts: {
     {
       title: '操作',
       key: 'actions',
-      width: 130,
+      width: 175,
       render: (row: Member) => (
         <NFlex size={4}>
           <NButton size="tiny" onClick={() => opts.openEdit(row)}>
             编辑
+          </NButton>
+          <NButton
+            size="tiny"
+            type={row.isActive !== false ? 'warning' : 'success'}
+            onClick={() => opts.toggleActive(row)}
+          >
+            {row.isActive !== false ? '停用' : '启用'}
           </NButton>
           <NButton size="tiny" type="error" onClick={() => opts.removeMember(row)}>
             删除

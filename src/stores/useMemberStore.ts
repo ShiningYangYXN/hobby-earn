@@ -11,7 +11,7 @@ export const useMemberStore = defineStore('member', () => {
     members.value = await getAll<Member>('members')
   }
   async function create(m: Omit<Member, 'id' | 'joinDate'>): Promise<Member> {
-    const item: Member = { ...m, id: uid(), joinDate: now() }
+    const item: Member = { ...m, id: uid(), joinDate: now(), isActive: m.isActive !== false }
     await add('members', item)
     members.value.push(item)
     return item

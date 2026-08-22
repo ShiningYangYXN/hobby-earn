@@ -61,7 +61,7 @@ const discountTypeLabel = (t: DiscountType | string): string =>
     member: '会员折扣',
     firstOrder: '首单优惠',
     repeatOrder: '复购优惠',
-    referral: '推荐有礼',
+    category: '品类优惠',
   })[t as DiscountType] ?? t
 
 // 券码实时大写：已选优惠券码用 NInputOtp 直接转大写
@@ -144,7 +144,7 @@ defineExpose({
 
       <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
         <NText depth="3">优惠合计</NText>
-        <span class="meter-num" style="color: #d03050">-¥{{ fmt(discountAmount) }}</span>
+        <NText class="meter-num" style="color: #d03050">-¥{{ fmt(discountAmount) }}</NText>
       </NFlex>
     </NFlex>
   </NCard>
