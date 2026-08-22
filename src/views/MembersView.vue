@@ -132,7 +132,7 @@ const columns = computed(() => buildMemberColumns({ openEdit, removeMember }))
       <NDataTable
         :columns="columns"
         :data="memberStore.members"
-        :pagination="{ pageSize: 15 }"
+        :pagination="{ pageSize: 10 }"
         size="small"
       />
     </NCard>

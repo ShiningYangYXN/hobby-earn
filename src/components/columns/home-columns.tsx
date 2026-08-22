@@ -11,13 +11,13 @@ export interface HomeViewColumn {
 
 const statusLabel: Record<string, string> = {
   pending: '待处理',
-  confirmed: '进行中',
+  in_progress: '执行中',
   completed: '已完成',
   cancelled: '已取消',
 }
 const statusType: Record<string, 'warning' | 'info' | 'success' | 'default'> = {
   pending: 'warning',
-  confirmed: 'info',
+  in_progress: 'info',
   completed: 'success',
   cancelled: 'default',
 }

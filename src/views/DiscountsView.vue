@@ -233,7 +233,7 @@ const showMemberType = computed(() => form.value.discountType === 'member')
         新建优惠
       </NButton>
     </NFlex>
-    <NDataTable :columns="discountColumns" :data="discountStore.discounts" :pagination="{ pageSize: 15 }"
+    <NDataTable :columns="discountColumns" :data="discountStore.discounts" :pagination="{ pageSize: 10 }"
       size="small" />
     <NModal v-model:show="modal" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" class="modal-lg">
       <NForm ref="formRef" :model="form" :rules="rules" label-width="92">

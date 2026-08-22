@@ -6,9 +6,9 @@ export interface MeterColumnsOpts {
 }
 
 const statusLabel = (s: OrderStatus) =>
-  ({ pending: '待处理', confirmed: '已确认', in_progress: '执行中', completed: '已完成', cancelled: '已取消' })[s]
+  ({ pending: '待处理', in_progress: '执行中', completed: '已完成', cancelled: '已取消' })[s]
 const statusType = (s: OrderStatus) =>
-  ({ pending: 'warning', confirmed: 'info', in_progress: 'success', completed: 'success', cancelled: 'default' })[s] as
+  ({ pending: 'warning', in_progress: 'info', completed: 'success', cancelled: 'default' })[s] as
     | 'warning'
     | 'info'
     | 'success'

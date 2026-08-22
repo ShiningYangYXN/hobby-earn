@@ -1,4 +1,4 @@
-import { NTag, NFlex, NButton, NText } from 'naive-ui'
+import { NTag, NFlex, NButton, NText, NEllipsis } from 'naive-ui'
 import type { Member, MemberType } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 
@@ -35,6 +35,12 @@ export function buildMemberColumns(opts: {
       key: 'joinDate',
       width: 160,
       render: (row: Member) => new Date(row.joinDate).toLocaleString(),
+    },
+    {
+      title: '备注',
+      key: 'notes',
+      width: 160,
+      render: (row: Member) => <NEllipsis line-clamp={1} tooltip>{row.notes || '-'}</NEllipsis>,
     },
     {
       title: '操作',

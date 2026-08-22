@@ -121,7 +121,7 @@ const columns = computed(() =>
     </NFlex>
 
     <NCard>
-      <NDataTable :columns="columns" :data="priceStore.prices" :pagination="{ pageSize: 15 }" size="small" />
+      <NDataTable :columns="columns" :data="priceStore.prices" :pagination="{ pageSize: 10 }" size="small" />
     </NCard>
 
     <NModal

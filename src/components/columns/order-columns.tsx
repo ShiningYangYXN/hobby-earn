@@ -1,4 +1,4 @@
-import { NTag, NFlex, NButton, NText } from 'naive-ui'
+import { NTag, NFlex, NButton, NText, NEllipsis } from 'naive-ui'
 import { fmt, type Order, type OrderItem, type OrderStatus } from '@/stores/types'
 
 export type OrderCellRenderer = (row: Order) => string | import('vue').VNode
@@ -15,8 +15,7 @@ const statusCfg: Record<
   { label: string; type: 'warning' | 'info' | 'success' | 'default' }
 > = {
   pending: { label: '待处理', type: 'warning' },
-  confirmed: { label: '已确认', type: 'info' },
-  in_progress: { label: '执行中', type: 'success' },
+  in_progress: { label: '执行中', type: 'info' },
   completed: { label: '已完成', type: 'success' },
   cancelled: { label: '已取消', type: 'default' },
 }
@@ -26,6 +25,7 @@ export interface OrderColumnsOpts {
   goMeter: (o: Order) => void
   doCancel: (o: Order) => void
   doDelete: (o: Order) => void
+  advancedMode: boolean
 }
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
@@ -78,25 +78,30 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       render: (row: Order) => new Date(row.createdAt).toLocaleString(),
     },
     {
+      title: '备注',
+      key: 'notes',
+      width: 120,
+      render: (row: Order) => <NEllipsis line-clamp={1} tooltip>{row.notes || '-'}</NEllipsis>,
+    },
+    {
       title: '操作',
       key: 'actions',
-      width: 160,
+      width: 190,
       render: (row: Order) => (
         <NFlex size={4}>
           <NButton size="tiny" onClick={() => opts.openDetail(row)}>详情</NButton>
-          {(row.status === 'pending' ||
-            row.status === 'confirmed' ||
-            row.status === 'in_progress') && (
+          {(row.status === 'pending' || row.status === 'in_progress') && (
             <NButton size="tiny" type="primary" onClick={() => opts.goMeter(row)}>
               去计价
             </NButton>
           )}
           {row.status !== 'completed' && row.status !== 'cancelled' && (
             <NButton size="tiny" type="warning" onClick={() => opts.doCancel(row)}>
-              取消
+              关闭订单
             </NButton>
           )}
-          {row.status === 'cancelled' && (
+          {(row.status === 'cancelled' ||
+            (row.status === 'completed' && opts.advancedMode)) && (
             <NButton size="tiny" type="error" onClick={() => opts.doDelete(row)}>
               删除
             </NButton>

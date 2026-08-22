@@ -11,9 +11,6 @@ export const useOrderStore = defineStore('order', () => {
 
   const pendingOrders = computed(() => orders.value.filter((o) => o.status === 'pending'))
   const completedOrders = computed(() => orders.value.filter((o) => o.status === 'completed'))
-  const executableOrders = computed(() =>
-    orders.value.filter((o) => o.status === 'confirmed' || o.status === 'in_progress'),
-  )
 
   const todayIncome = computed(() =>
     orders.value
@@ -48,7 +45,6 @@ export const useOrderStore = defineStore('order', () => {
     items: Order['items'],
     opts: { discountRecords?: DiscountRecord[]; discountAmount?: number; notes?: string } = {},
   ): Promise<Order> {
-    // 工时项目：按 elapsed 计算金额（预订时为预计时长），否则用 unitPrice * quantity
     const subtotal = subtotalOf(items)
     const discountAmount = Math.min(opts.discountAmount ?? 0, subtotal)
     const order: Order = {
@@ -60,7 +56,7 @@ export const useOrderStore = defineStore('order', () => {
       discountRecords: opts.discountRecords ?? [],
       discountAmount,
       finalAmount: Math.max(0, subtotal - discountAmount),
-      status: 'in_progress',
+      status: 'pending',
       createdAt: now(),
       notes: opts.notes,
     }
@@ -69,7 +65,7 @@ export const useOrderStore = defineStore('order', () => {
     return order
   }
 
-  // 开始执行（预订 → 执行中），已处于执行中则保持
+  // 开始执行（待处理 → 执行中），已处于执行中则保持
   async function beginExecute(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o || o.status === 'completed' || o.status === 'cancelled') return
@@ -94,8 +90,7 @@ export const useOrderStore = defineStore('order', () => {
   ): Promise<Order> {
     const o = orders.value.find((x) => x.id === id)
     if (!o) throw new Error('not found')
-    if (o.status !== 'confirmed' && o.status !== 'in_progress')
-      throw new Error('order not executable')
+    if (o.status !== 'in_progress') throw new Error('order not executable')
     const subtotal = subtotalOf(items)
     const discountAmount = Math.min(
       discountRecords.reduce((s, r) => s + r.discountAmount, 0),
@@ -113,16 +108,6 @@ export const useOrderStore = defineStore('order', () => {
     return o
   }
 
-  async function complete(id: string, method?: PaymentMethod): Promise<Order> {
-    const o = orders.value.find((x) => x.id === id)
-    if (!o || o.status !== 'confirmed') throw new Error('not confirmed')
-    o.status = 'completed'
-    o.paymentMethod = method
-    o.completedAt = now()
-    await put('orders', o)
-    return o
-  }
-
   async function cancel(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o || o.status === 'completed' || o.status === 'cancelled') return
@@ -133,7 +118,7 @@ export const useOrderStore = defineStore('order', () => {
   async function remove(id: string): Promise<void> {
     const idx = orders.value.findIndex((x) => x.id === id)
     const o = orders.value[idx]
-    if (idx < 0 || !o || o.status !== 'cancelled') return
+    if (idx < 0 || !o || (o.status !== 'cancelled' && o.status !== 'completed')) return
     for (const r of o.discountRecords) await discountStore.rollbackUsage(r.discountId, o.memberId)
     orders.value.splice(idx, 1)
     await del('orders', id)
@@ -143,7 +128,6 @@ export const useOrderStore = defineStore('order', () => {
     orders,
     pendingOrders,
     completedOrders,
-    executableOrders,
     todayIncome,
     monthIncome,
     totalIncome,
@@ -152,7 +136,6 @@ export const useOrderStore = defineStore('order', () => {
     beginExecute,
     saveExecution,
     finalize,
-    complete,
     cancel,
     remove,
   }

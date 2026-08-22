@@ -16,6 +16,9 @@ import {
   NPageHeader,
   NScrollbar,
   NIcon,
+  NFlex,
+  NText,
+  NSwitch,
   type MenuOption,
   NMessageProvider,
   NDialogProvider,
@@ -32,10 +35,12 @@ import {
   IconInfoCircle,
   IconTags,
 } from '@tabler/icons-vue'
+import { useUiStore } from '@/stores/useUiStore'
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
 const collapsed = ref(true)
+const ui = useUiStore()
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -103,12 +108,18 @@ const menuOptions: MenuOption[] = [
               </template>
               <template #subtitle> 玩赚·商家端 </template>
               <template #extra>
-                <NButton @click="toggleDark()" text>
-                  <NIcon size="48px">
-                    <IconSun v-if="isDark" style="height: 24px" />
-                    <IconMoon v-else style="height: 24px" />
-                  </NIcon>
-                </NButton>
+                <NFlex align="center" :size="16">
+                  <NFlex align="center" :size="6">
+                    <NText>高级模式</NText>
+                    <NSwitch v-model:value="ui.advancedMode" />
+                  </NFlex>
+                  <NButton @click="toggleDark()" text>
+                    <NIcon size="48px">
+                      <IconSun v-if="isDark" style="height: 24px" />
+                      <IconMoon v-else style="height: 24px" />
+                    </NIcon>
+                  </NButton>
+                </NFlex>
               </template>
             </NPageHeader>
           </NLayoutHeader>

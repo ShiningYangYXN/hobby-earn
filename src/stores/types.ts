@@ -75,7 +75,7 @@ export interface DiscountRecord {
   description: string
   discountAmount: number
 }
-export type OrderStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 export type PaymentMethod = 'cash' | 'ecny' | 'unionpay' | 'wechat' | 'alipay'
 export interface Order {
   id: string
