@@ -10,6 +10,7 @@ import AboutView from '@/views/AboutView.vue'
 import NewOrderModal from '@/components/modals/NewOrderModal.vue'
 import OrderDetailModal from '@/components/modals/OrderDetailModal.vue'
 import DiscountModal from '@/components/modals/DiscountModal.vue'
+import ExclusiveGroupModal from '@/components/modals/ExclusiveGroupModal.vue'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
 import PriceModal from '@/components/modals/PriceModal.vue'
@@ -44,13 +45,7 @@ const router = createRouter({
       children: [
         { path: 'new', name: 'member-new', component: MemberModal },
         { path: ':id', name: 'member-edit', component: MemberModal, props: true },
-        { path: 'types/new', name: 'member-type-new', component: MemberTypeModal },
-        {
-          path: 'types/:id',
-          name: 'member-type-edit',
-          component: MemberTypeModal,
-          props: true,
-        },
+        { path: 'types', name: 'member-types', component: MemberTypeModal },
       ],
     },
     {
@@ -68,6 +63,7 @@ const router = createRouter({
       component: DiscountsView,
       children: [
         { path: 'new', name: 'discount-new', component: DiscountModal },
+        { path: 'exclusive-groups', name: 'exclusive-groups', component: ExclusiveGroupModal },
         { path: ':id', name: 'discount-edit', component: DiscountModal, props: true },
       ],
     },

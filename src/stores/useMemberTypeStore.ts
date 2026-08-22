@@ -27,8 +27,7 @@ export const useMemberTypeStore = defineStore('memberType', () => {
     if (!t) throw new Error('种类不存在')
     if (patch.name !== undefined) {
       const name = patch.name.trim()
-      if (types.value.some((x) => x.name === name && x.id !== id))
-        throw new Error('种类已存在')
+      if (types.value.some((x) => x.name === name && x.id !== id)) throw new Error('种类已存在')
     }
     if (patch.name !== undefined) t.name = patch.name.trim()
     await put('memberTypes', t)

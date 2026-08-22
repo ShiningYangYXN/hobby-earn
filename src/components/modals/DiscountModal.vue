@@ -17,12 +17,15 @@ import {
   NFlex,
   NGrid,
   NGi,
+  NIcon,
   useMessage,
 } from 'naive-ui'
-import { type Discount, type DiscountType, type RuleType } from '@/stores/types'
+import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
+import { type Discount, type DiscountType, type RuleType, CODE_LENGTH } from '@/stores/types'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
@@ -30,6 +33,7 @@ const msg = useMessage()
 const discountStore = useDiscountStore()
 const memberTypeStore = useMemberTypeStore()
 const priceStore = usePriceStore()
+const exclusiveGroupStore = useExclusiveGroupStore()
 
 const editing = computed(() => !!props.id)
 
@@ -54,6 +58,10 @@ const categoryOptions = computed(() => {
   for (const p of priceStore.prices) if (p.category) set.add(p.category)
   return [...set].map((c) => ({ label: c, value: c }))
 })
+// 互斥组选项（多选）
+const exclusiveGroupOptions = computed(() =>
+  exclusiveGroupStore.groups.map((g) => ({ label: g.name, value: g.id })),
+)
 
 const form = ref({
   name: '',
@@ -70,7 +78,7 @@ const form = ref({
   repeatThreshold: 1,
   memberTypeIds: [] as string[],
   categoryIds: [] as string[],
-  exclusiveGroup: '',
+  exclusiveGroups: [] as string[],
   isActive: true,
 })
 
@@ -100,7 +108,7 @@ watch(
           repeatThreshold: d.repeatThreshold ?? 1,
           memberTypeIds: d.memberTypeIds ?? [],
           categoryIds: d.categoryIds ?? [],
-          exclusiveGroup: d.exclusiveGroup ?? '',
+          exclusiveGroups: d.exclusiveGroups ?? [],
           isActive: d.isActive,
         }
       } else {
@@ -129,7 +137,7 @@ function resetForm() {
     repeatThreshold: 1,
     memberTypeIds: [],
     categoryIds: [],
-    exclusiveGroup: '',
+    exclusiveGroups: [],
     isActive: true,
   }
 }
@@ -151,7 +159,7 @@ function buildPayload(): Omit<Discount, 'id' | 'usedCount' | 'memberUsedCount'> 
     repeatThreshold: f.discountType === 'repeatOrder' ? f.repeatThreshold : undefined,
     memberTypeIds: f.discountType === 'member' ? f.memberTypeIds : undefined,
     categoryIds: f.discountType === 'category' ? f.categoryIds : undefined,
-    exclusiveGroup: f.exclusiveGroup || undefined,
+    exclusiveGroups: f.exclusiveGroups.length ? f.exclusiveGroups : undefined,
     isActive: f.isActive,
   }
 }
@@ -160,6 +168,16 @@ async function save() {
   if (!form.value.name) {
     msg.warning('请填写优惠名称')
     return
+  }
+  if (form.value.discountType === 'coupon' && form.value.code.trim()) {
+    if (!/^[A-Za-z0-9]*$/.test(form.value.code.trim())) {
+      msg.warning('券码只能包含字母和数字')
+      return
+    }
+    if (form.value.code.trim().length !== CODE_LENGTH) {
+      msg.warning(`券码必须为 ${CODE_LENGTH} 位`)
+      return
+    }
   }
   try {
     if (editing.value && props.id) {
@@ -181,15 +199,15 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" class="modal-xl" :auto-focus="false"
+  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" class="modal-xl" :autoFocus="false"
     @update:show="close">
     <NScrollbar class="modal-scroll">
-      <NForm label-placement="top" class="discount-form">
+      <NForm labelPlacement="top" class="discount-form">
         <NFormItem label="优惠名称">
           <NInput v-model:value="form.name" placeholder="如：新客首单9折" />
         </NFormItem>
 
-        <NGrid cols="2" x-gap="16" responsive="screen" item-responsive>
+        <NGrid cols="2" xGap="16" responsive="screen" itemResponsive>
           <NGi>
             <NFormItem label="优惠类型">
               <NSelect v-model:value="form.discountType" :options="typeOptions" />
@@ -202,45 +220,49 @@ function close() {
           </NGi>
         </NGrid>
 
-        <NGrid cols="2" x-gap="16" responsive="screen" item-responsive>
+        <NGrid cols="3" xGap="16" responsive="screen" itemResponsive>
           <NGi>
-            <NFormItem v-if="form.ruleType === 'percentage'" label="折扣力度（90 = 打 9 折，即付 90%）">
-              <NInputNumber v-model:value="form.pct" :min="0" :max="100" />
+            <NFormItem v-if="form.ruleType === 'percentage'" label="折扣力度（90 = 打 9 折）">
+              <NInputNumber v-model:value="form.pct" :min="0" :max="100" style="width: 100%;" />
             </NFormItem>
             <NFormItem v-else label="减免金额（元）">
-              <NInputNumber v-model:value="form.fixedYuan" :min="0" :precision="2" />
+              <NInputNumber v-model:value="form.fixedYuan" :min="0" :precision="2" style="width: 100%;" />
             </NFormItem>
           </NGi>
           <NGi>
             <NFormItem label="保底消费（元，0 = 不限）">
-              <NInputNumber v-model:value="form.minYuan" :min="0" :precision="2" />
+              <NInputNumber v-model:value="form.minYuan" :min="0" :precision="2" style="width: 100%;" />
             </NFormItem>
+          </NGi>
+          <NGi>
             <NFormItem label="最大减免（元，留空不限）">
-              <NInputNumber v-model:value="form.maxYuan" :min="0" :precision="2" clearable />
+              <NInputNumber v-model:value="form.maxYuan" :min="0" :precision="2" clearable style="width: 100%;" />
             </NFormItem>
           </NGi>
         </NGrid>
 
-        <NFormItem v-if="form.discountType === 'coupon'" label="券码（6 位，自动大写；留空则保存时自动生成）">
-          <NInputOtp :length="6" :value="(form.code || '').split('')"
-            @update:value="(v: string[]) => (form.code = v.join('').toUpperCase())" />
+        <NFormItem v-if="form.discountType === 'coupon'" :label="`券码（${CODE_LENGTH} 位字母或数字，自动大写；留空则保存时自动生成）`">
+          <NFlex justify="center" style="width: 100%;">
+            <NInputOtp :length="CODE_LENGTH" :value="(form.code || '').split('')"
+              @update:value="(v: string[]) => (form.code = v.join('').toUpperCase())" placeholder="#" />
+          </NFlex>
         </NFormItem>
 
         <NFormItem label="有效期（留空为永久有效）">
           <NDatePicker type="datetimerange" clearable :value="form.dateRange"
             @update:value="(v: number[] | null) => (form.dateRange = v as [number, number] | null)"
-            placeholder="开始 - 结束" />
+            placeholder="开始 - 结束" style="width: 100%;" />
         </NFormItem>
 
-        <NGrid cols="2" x-gap="16" responsive="screen" item-responsive>
+        <NGrid cols="2" xGap="16" responsive="screen" itemResponsive>
           <NGi>
             <NFormItem label="总可用次数（0/空 = 不限）">
-              <NInputNumber v-model:value="form.usageLimit" :min="0" clearable />
+              <NInputNumber v-model:value="form.usageLimit" :min="0" clearable style="width: 100%;" />
             </NFormItem>
           </NGi>
           <NGi>
             <NFormItem label="每会员限用次数（0/空 = 不限）">
-              <NInputNumber v-model:value="form.memberLimit" :min="0" clearable />
+              <NInputNumber v-model:value="form.memberLimit" :min="0" clearable style="width: 100%;" />
             </NFormItem>
           </NGi>
         </NGrid>
@@ -257,8 +279,14 @@ function close() {
           <NInputNumber v-model:value="form.repeatThreshold" :min="1" />
         </NFormItem>
 
-        <NFormItem label="互斥分组（同组只生效一个，留空不互斥）">
-          <NInput v-model:value="form.exclusiveGroup" placeholder="如：A" />
+        <NFormItem label="互斥分组（可多选，同组只生效减免最大者，留空不互斥）">
+          <NSelect
+            v-model:value="form.exclusiveGroups"
+            :options="exclusiveGroupOptions"
+            multiple
+            filterable
+            placeholder="选择互斥组"
+          />
         </NFormItem>
 
         <NFormItem label="启用">
@@ -272,12 +300,21 @@ function close() {
         券码留空将自动生成
       </NText>
       <NFlex justify="end">
-        <NButton @click="close">取消</NButton>
-        <NButton type="primary" @click="save">保存</NButton>
+        <NButton @click="close">
+          <NIcon>
+            <IconX />
+          </NIcon>
+          取消
+        </NButton>
+        <NButton type="primary" @click="save">
+          <NIcon>
+            <IconDeviceFloppy />
+          </NIcon>
+          保存
+        </NButton>
       </NFlex>
     </template>
   </NModal>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>

@@ -2,30 +2,43 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
 import type { Discount } from './types'
-import { uid, genCode } from './types'
+import { uid, genCode, isValidCodeFormat, CODE_LENGTH } from './types'
 
 export const useDiscountStore = defineStore('discount', () => {
   const discounts = ref<Discount[]>([])
   const activeDiscounts = computed(() => discounts.value.filter((d) => d.isActive && inRange(d)))
 
   async function load() {
-    discounts.value = await getAll<Discount>('discounts')
+    const raw = (await getAll<Discount>('discounts')) as (Discount & { exclusiveGroup?: string })[]
+    // 兼容旧数据：单值 exclusiveGroup 字符串迁移为 exclusiveGroups 数组
+    discounts.value = raw.map((d) => {
+      if (d.exclusiveGroup && (!d.exclusiveGroups || d.exclusiveGroups.length === 0)) {
+        return { ...d, exclusiveGroups: [d.exclusiveGroup] }
+      }
+      return d
+    })
   }
 
   async function create(
     d: Omit<Discount, 'id' | 'usedCount' | 'memberUsedCount'>,
   ): Promise<Discount> {
+    let code: string | undefined
+    if (d.discountType === 'coupon') {
+      if (d.code && d.code.trim()) {
+        if (!isValidCodeFormat(d.code.toUpperCase())) {
+          throw new Error(`券码必须为 ${CODE_LENGTH} 位字母或数字`)
+        }
+        code = d.code.toUpperCase()
+      } else {
+        code = genCode()
+      }
+    }
     const item: Discount = {
       ...d,
       id: uid(),
       usedCount: 0,
       memberUsedCount: {},
-      code:
-        d.discountType === 'coupon'
-          ? d.code && d.code.trim()
-            ? d.code.toUpperCase()
-            : genCode()
-          : undefined,
+      code,
     }
     await add('discounts', item)
     discounts.value.push(item)
@@ -35,7 +48,12 @@ export const useDiscountStore = defineStore('discount', () => {
   async function update(id: string, patch: Partial<Discount>): Promise<void> {
     const idx = discounts.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
-    discounts.value[idx] = { ...discounts.value[idx]!, ...patch }
+    const next = { ...discounts.value[idx]!, ...patch }
+    // 编辑时若改为券码类型且手动填写了券码，需校验位数
+    if (next.discountType === 'coupon' && next.code && !isValidCodeFormat(next.code.toUpperCase())) {
+      throw new Error(`券码必须为 ${CODE_LENGTH} 位字母或数字`)
+    }
+    discounts.value[idx] = next
     await put('discounts', discounts.value[idx]!)
   }
 
@@ -57,6 +75,24 @@ export const useDiscountStore = defineStore('discount', () => {
   async function remove(id: string): Promise<void> {
     discounts.value = discounts.value.filter((x) => x.id !== id)
     await del('discounts', id)
+  }
+
+  // 删除互斥组时，从所有优惠里移除该组归属（级联清理）
+  async function removeExclusiveGroupRef(groupId: string): Promise<void> {
+    for (const d of discounts.value) {
+      if (d.exclusiveGroups && d.exclusiveGroups.includes(groupId)) {
+        const next = {
+          ...d,
+          exclusiveGroups: d.exclusiveGroups.filter((g) => g !== groupId),
+        }
+        await put('discounts', next)
+      }
+    }
+    discounts.value = discounts.value.map((d) =>
+      d.exclusiveGroups && d.exclusiveGroups.includes(groupId)
+        ? { ...d, exclusiveGroups: d.exclusiveGroups.filter((g) => g !== groupId) }
+        : d,
+    )
   }
 
   // 订单取消时回滚用量（防止已用券码被永久占用）
@@ -137,10 +173,10 @@ export const useDiscountStore = defineStore('discount', () => {
     if (d.discountType === 'repeatOrder' && completedCount < (d.repeatThreshold ?? 1)) return null
     const amount =
       d.ruleType === 'percentage'
-        // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%）
-        ? Math.min(subtotal - Math.floor((subtotal * d.value) / 100), d.maxDiscount ?? Infinity)
-        // 减法：直接减固定金额（分）
-        : Math.min(d.value, subtotal)
+        ? // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%）
+          Math.min(subtotal - Math.floor((subtotal * d.value) / 100), d.maxDiscount ?? Infinity)
+        : // 减法：直接减固定金额（分）
+          Math.min(d.value, subtotal)
     let desc =
       d.ruleType === 'percentage'
         ? `满${cents(d.minAmount)}打${(d.value / 10).toString()}折`
@@ -160,6 +196,7 @@ export const useDiscountStore = defineStore('discount', () => {
     recordUsage,
     rollbackUsage,
     remove,
+    removeExclusiveGroupRef,
     findByCode,
     isValidCode,
     checkCode,

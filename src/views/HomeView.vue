@@ -23,7 +23,7 @@ const recent = computed(() => orderStore.orders.slice(0, 8))
   <NFlex vertical :size="16">
     <NH1>HobbyEarn</NH1>
     <NCard title="当前收益">
-      <NGrid cols="s:1 m:2 l:4" responsive="screen" :x-gap="12" :y-gap="12">
+      <NGrid cols="s:1 m:2 l:4" responsive="screen" :xGap="12" :yGap="12">
         <NGridItem><NStatistic label="今日收入" :value="today" prefix="¥" /></NGridItem>
         <NGridItem><NStatistic label="本月收入" :value="month" prefix="¥" /></NGridItem>
         <NGridItem><NStatistic label="累计收入" :value="total" prefix="¥" /></NGridItem>

@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { NFlex, NIcon, NResult, NTag, NCard, NSwitch, NText, NButton, NA, useDialog, useMessage } from 'naive-ui'
+import {
+  NFlex,
+  NIcon,
+  NResult,
+  NTag,
+  NCard,
+  NSwitch,
+  NText,
+  NButton,
+  NA,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import {
   IconMoodDollar,
   IconTag,

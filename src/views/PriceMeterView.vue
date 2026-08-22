@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { NCard, NEmpty, NFlex, NText, NH2, NDataTable } from 'naive-ui'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { buildMeterColumns } from '@/components/columns/meter-columns'
@@ -8,32 +8,33 @@ import PricingModal from '@/components/modals/PricingModal.vue'
 import type { Order } from '@/stores/types'
 
 const route = useRoute()
+const router = useRouter()
 const orderStore = useOrderStore()
 
 const showPricing = ref(false)
 const pricingOrderId = ref<string | null>(null)
 
+function syncFromRoute() {
+  const id = route.params.id
+  pricingOrderId.value = typeof id === 'string' ? id : null
+  showPricing.value = !!pricingOrderId.value
+}
+
 async function openOrder(o: Order) {
-  pricingOrderId.value = o.id
-  showPricing.value = true
+  router.push(`/price-meter/${o.id}`)
+}
+
+function closePricing() {
+  router.push('/price-meter')
 }
 
 onMounted(async () => {
   await orderStore.load()
-  const open = route.query.open
-  if (typeof open === 'string') {
-    pricingOrderId.value = open
-    showPricing.value = true
-  }
+  syncFromRoute()
 })
 watch(
-  () => route.query.open,
-  (v) => {
-    if (typeof v === 'string') {
-      pricingOrderId.value = v
-      showPricing.value = true
-    }
-  },
+  () => route.params.id,
+  () => syncFromRoute(),
 )
 
 const priceable = computed(() =>
@@ -59,6 +60,14 @@ const orderColumns = computed(() => buildMeterColumns({ openOrder }))
       </NFlex>
     </NCard>
 
-    <PricingModal v-model:show="showPricing" :order-id="pricingOrderId" />
+    <PricingModal
+      :show="showPricing"
+      :order-id="pricingOrderId"
+      @update:show="
+        (v: boolean) => {
+          if (!v) closePricing()
+        }
+      "
+    />
   </NFlex>
 </template>

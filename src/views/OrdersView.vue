@@ -11,6 +11,8 @@ import {
   NSelect,
   NInput,
   NDatePicker,
+  NH2,
+  NIcon,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -101,7 +103,8 @@ function doCancel(o: Order) {
 function doReopen(o: Order) {
   dialog.info({
     title: '重新使用优惠',
-    content: '将恢复订单为「待处理」状态，并重新占用该订单关联的优惠（重新使用优惠）。若优惠已过期或已达上限将无法重新打开。确认继续？',
+    content:
+      '将恢复订单为「待处理」状态，并重新占用该订单关联的优惠（重新使用优惠）。若优惠已过期或已达上限将无法重新打开。确认继续？',
     positiveText: '重新打开',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -167,7 +170,9 @@ onMounted(() => {
             clearable
             style="width: 200px"
           />
-          <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建订单 </NButton>
+          <NButton type="primary" @click="openCreate">
+            <NIcon :size="16"><IconPlus /></NIcon> 新建订单
+          </NButton>
         </NFlex>
         <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />
         <NText v-if="!list.length" depth="3">暂无订单。</NText>

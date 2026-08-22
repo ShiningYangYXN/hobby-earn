@@ -10,10 +10,13 @@ import {
   NScrollbar,
   NButton,
   NSwitch,
+  NFlex,
+  NIcon,
   useMessage,
 } from 'naive-ui'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { IconX, IconDeviceFloppy } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
@@ -82,16 +85,10 @@ function close() {
 </script>
 
 <template>
-  <NModal
-    :show="true"
-    :title="editing ? '编辑会员' : '新建会员'"
-    preset="card"
-    class="modal-md"
-    :auto-focus="false"
-    @update:show="close"
-  >
+  <NModal :show="true" :title="editing ? '编辑会员' : '新建会员'" preset="card" class="modal-md" :autoFocus="false"
+    @update:show="close">
     <NScrollbar class="modal-scroll">
-      <NForm label-placement="top">
+      <NForm labelPlacement="top">
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="会员名称" />
         </NFormItem>
@@ -99,20 +96,11 @@ function close() {
           <NInput v-model:value="form.phone" placeholder="可选" />
         </NFormItem>
         <NFormItem label="会员类型">
-          <NSelect
-            v-model:value="form.typeId"
-            :options="typeOptions"
-            placeholder="不限定"
-            clearable
-          />
+          <NSelect v-model:value="form.typeId" :options="typeOptions" placeholder="不限定" clearable />
         </NFormItem>
         <NFormItem label="备注">
-          <NInput
-            v-model:value="form.notes"
-            type="textarea"
-            placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
+          <NInput v-model:value="form.notes" type="textarea" placeholder="备注（可选）"
+            :autosize="{ minRows: 2, maxRows: 4 }" />
         </NFormItem>
         <NFormItem label="启用">
           <NSwitch v-model:value="form.isActive" />
@@ -120,8 +108,20 @@ function close() {
       </NForm>
     </NScrollbar>
     <template #footer>
-      <NButton @click="close">取消</NButton>
-      <NButton type="primary" @click="save">保存</NButton>
+      <NFlex justify="end">
+        <NButton @click="close">
+          <NIcon>
+            <IconX />
+          </NIcon>
+          取消
+        </NButton>
+        <NButton type="primary" @click="save">
+          <NIcon>
+            <IconDeviceFloppy />
+          </NIcon>
+          保存
+        </NButton>
+      </NFlex>
     </template>
   </NModal>
 </template>

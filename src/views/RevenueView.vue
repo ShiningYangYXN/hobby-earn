@@ -17,7 +17,7 @@ const pending = computed(() => orderStore.pendingOrders.length)
 <template>
   <NFlex vertical :size="16">
     <NH2 prefix="bar">收益概览</NH2>
-    <NGrid cols="s:1 m:2 l:3" responsive="screen" :x-gap="12" :y-gap="12">
+    <NGrid cols="s:1 m:2 l:3" responsive="screen" :xGap="12" :yGap="12">
       <NGridItem
         ><NCard><NStatistic label="今日收入" :value="today" prefix="¥" /></NCard
       ></NGridItem>
@@ -28,7 +28,7 @@ const pending = computed(() => orderStore.pendingOrders.length)
         ><NCard><NStatistic label="累计收入" :value="total" prefix="¥" /></NCard
       ></NGridItem>
     </NGrid>
-    <NGrid cols="s:1 m:2" responsive="screen" :x-gap="12" :y-gap="12">
+    <NGrid cols="s:1 m:2" responsive="screen" :xGap="12" :yGap="12">
       <NGridItem
         ><NCard><NStatistic label="已完成订单" :value="done" /></NCard
       ></NGridItem>

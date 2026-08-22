@@ -39,9 +39,13 @@ export function buildMemberColumns(opts: {
       width: 90,
       render: (row: Member) =>
         row.isActive !== false ? (
-          <NTag size="tiny" type="success">启用</NTag>
+          <NTag size="tiny" type="success">
+            启用
+          </NTag>
         ) : (
-          <NTag size="tiny" type="default">停用</NTag>
+          <NTag size="tiny" type="default">
+            停用
+          </NTag>
         ),
     },
     {

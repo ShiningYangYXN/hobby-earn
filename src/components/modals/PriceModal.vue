@@ -12,9 +12,12 @@ import {
   NScrollbar,
   NButton,
   useMessage,
+  NFlex,
+  NIcon,
 } from 'naive-ui'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { type PricingMode } from '@/stores/types'
+import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
@@ -103,10 +106,10 @@ function close() {
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑价格项' : '新建价格项'" preset="card" class="modal-md" :auto-focus="false"
+  <NModal :show="true" :title="editing ? '编辑价格项' : '新建价格项'" preset="card" class="modal-md" :autoFocus="false"
     @update:show="close">
     <NScrollbar class="modal-scroll">
-      <NForm label-placement="top">
+      <NForm labelPlacement="top">
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="如：修电脑" />
         </NFormItem>
@@ -117,7 +120,7 @@ function close() {
           <NSelect v-model:value="form.pricingMode" :options="modeOptions" />
         </NFormItem>
         <NFormItem :label="form.pricingMode === 'hourly' ? '工时单价（元/小时）' : '单价（元/件）'">
-          <NInputNumber v-model:value="form.basePriceYuan" :min="0" :precision="2" />
+          <NInputNumber v-model:value="form.basePriceYuan" :min="0" :precision="2" style="width: 100%" />
         </NFormItem>
         <NFormItem label="备注 / 描述">
           <NInput v-model:value="form.description" type="textarea" placeholder="备注（可选）"
@@ -129,8 +132,20 @@ function close() {
       </NForm>
     </NScrollbar>
     <template #footer>
-      <NButton @click="close">取消</NButton>
-      <NButton type="primary" @click="save">保存</NButton>
+      <NFlex justify="end">
+        <NButton @click="close">
+          <NIcon>
+            <IconX />
+          </NIcon>
+          取消
+        </NButton>
+        <NButton type="primary" @click="save">
+          <NIcon>
+            <IconDeviceFloppy />
+          </NIcon>
+          保存
+        </NButton>
+      </NFlex>
     </template>
   </NModal>
 </template>

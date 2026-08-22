@@ -27,7 +27,11 @@ export function buildMemberTypeColumns(opts: MemberTypeColumnsOpts): MemberTypeC
           </NButton>
           <NPopconfirm onPositiveClick={() => opts.removeType(row)}>
             {{
-              trigger: () => <NButton size="tiny" type="error">删除</NButton>,
+              trigger: () => (
+                <NButton size="tiny" type="error">
+                  删除
+                </NButton>
+              ),
               default: () => '删除该种类？会员记录不受影响。',
             }}
           </NPopconfirm>

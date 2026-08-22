@@ -2,7 +2,19 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { RouterView } from 'vue-router'
-import { NDataTable, NButton, NFlex, NText, NCard, NInput, NSelect, useDialog, useMessage } from 'naive-ui'
+import {
+  NDataTable,
+  NButton,
+  NFlex,
+  NText,
+  NCard,
+  NInput,
+  NSelect,
+  NH2,
+  NIcon,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { buildPriceColumns } from '@/components/columns/price-columns'
@@ -21,10 +33,7 @@ const filterActive = ref('')
 const categoryOptions = computed(() => {
   const set = new Set<string>()
   for (const p of priceStore.prices) if (p.category) set.add(p.category)
-  return [
-    { label: '全部分类', value: '' },
-    ...[...set].map((c) => ({ label: c, value: c })),
-  ]
+  return [{ label: '全部分类', value: '' }, ...[...set].map((c) => ({ label: c, value: c }))]
 })
 const modeOptions = [
   { label: '全部计价方式', value: '' },
@@ -93,7 +102,9 @@ onMounted(() => {
           <NSelect v-model:value="filterCategory" :options="categoryOptions" style="width: 150px" />
           <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
           <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
-          <NButton type="primary" @click="openCreate"> <IconPlus :size="16" /> 新建价格项 </NButton>
+          <NButton type="primary" @click="openCreate">
+            <NIcon :size="16"><IconPlus /></NIcon> 新建价格项
+          </NButton>
         </NFlex>
 
         <NDataTable

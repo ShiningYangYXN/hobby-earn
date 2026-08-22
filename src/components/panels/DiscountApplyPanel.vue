@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import {
-  NCard,
-  NFlex,
-  NText,
-  NButton,
-  NInputOtp,
-  NTag,
-} from 'naive-ui'
+import { NCard, NFlex, NText, NButton, NInputOtp, NTag } from 'naive-ui'
 import { useDiscountApply } from '@/composables/useDiscountApply'
-import { fmt, type Discount, type DiscountType, type OrderItem, type DiscountRecord } from '@/stores/types'
+import {
+  fmt,
+  CODE_LENGTH,
+  type Discount,
+  type DiscountType,
+  type OrderItem,
+  type DiscountRecord,
+} from '@/stores/types'
 
 const props = defineProps<{
   memberId: string | null
@@ -66,7 +66,12 @@ const discountTypeLabel = (t: DiscountType | string): string =>
 
 // 券码实时大写：已选优惠券码用 NInputOtp 直接转大写
 function onOtp(v: string[]) {
-  couponInput.value = [v.join('').toUpperCase()]
+  const code = v.join('').toUpperCase()
+  couponInput.value = [code]
+  // 输满自动兑换
+  if (code.length >= CODE_LENGTH) {
+    redeemCoupon(code)
+  }
 }
 function applyCoupon() {
   redeemCoupon(couponInput.value[0] ?? '')
@@ -96,47 +101,24 @@ defineExpose({
       <template v-if="eligibleAuto.length">
         <NText depth="3" style="font-size: 12px">可选优惠（点击添加）</NText>
         <NFlex>
-          <NTag
-            v-for="d in eligibleAuto"
-            :key="d.id"
-            checkable
-            :checked="applied.some((a) => a.id === d.id)"
-            @update:checked="() => onToggle(d)"
-          >
-            {{ d.name }}（{{
-              d.ruleType === 'percentage' ? d.value + '%' : '¥' + fmt(d.value)
-            }}）
+          <NTag v-for="d in eligibleAuto" :key="d.id" checkable :checked="applied.some((a) => a.id === d.id)"
+            @update:checked="() => onToggle(d)">
+            {{ d.name }}（{{ d.ruleType === 'percentage' ? d.value + '%' : '¥' + fmt(d.value) }}）
           </NTag>
         </NFlex>
       </template>
 
-      <NText depth="3" style="font-size: 12px">优惠券码（6 位，自动大写）</NText>
-      <NFlex align="center" :size="8">
-        <NInputOtp
-          :length="6"
-          :value="(couponInput[0] || '').split('')"
-          @update:value="onOtp"
-        />
-        <NButton
-          type="primary"
-          :disabled="!couponInput[0]"
-          @click="applyCoupon"
-          >应用</NButton
-        >
+      <NText depth="3" style="font-size: 12px">优惠券码（{{ CODE_LENGTH }} 位，自动大写，输满自动兑换）</NText>
+      <NFlex justify="center" style="width: 100%;">
+        <NInputOtp :length="CODE_LENGTH" :value="(couponInput[0] || '').split('')" @update:value="onOtp"
+          placeholder="#" />
       </NFlex>
       <NText v-if="couponError" type="error" style="font-size: 12px">{{ couponError }}</NText>
 
       <template v-if="applied.length">
         <NText depth="3" style="font-size: 12px">已应用</NText>
         <NFlex>
-          <NTag
-            v-for="d in applied"
-            :key="d.id"
-            closable
-            type="success"
-            size="small"
-            @close="onDrop(d.id)"
-          >
+          <NTag v-for="d in applied" :key="d.id" closable type="success" size="small" @close="onDrop(d.id)">
             {{ discountTypeLabel(d.discountType) }}：{{ d.name }}
           </NTag>
         </NFlex>
@@ -144,7 +126,7 @@ defineExpose({
 
       <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
         <NText depth="3">优惠合计</NText>
-        <NText class="meter-num" style="color: #d03050">-¥{{ fmt(discountAmount) }}</NText>
+        <NText type="error">-¥{{ fmt(discountAmount) }}</NText>
       </NFlex>
     </NFlex>
   </NCard>

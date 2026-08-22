@@ -12,9 +12,20 @@ export function now(): string {
 export function fmt(cents: number): string {
   return (cents / 100).toFixed(2)
 }
+export function fmtElapsed(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+}
+export const CODE_LENGTH = 6
 export function genCode(): string {
   const c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  return Array.from({ length: 6 }, () => c[Math.floor(Math.random() * c.length)]).join('')
+  return Array.from({ length: CODE_LENGTH }, () => c[Math.floor(Math.random() * c.length)]).join('')
+}
+// 校验券码格式：必须为 CODE_LENGTH 位大写字母或数字
+export function isValidCodeFormat(code: string): boolean {
+  const re = new RegExp(`^[A-Z0-9]{${CODE_LENGTH}}$`)
+  return re.test(code)
 }
 
 // 单个订单项的金额：工时项仅按已计时长计费，未计时为 0（不回落到 unitPrice*quantity）
@@ -92,6 +103,12 @@ export interface Order {
   notes?: string
 }
 
+/* ── 互斥组（独立管理，优惠可多选归属）── */
+export interface ExclusiveGroup {
+  id: string
+  name: string
+}
+
 /* ── 优惠 ── */
 export type DiscountType =
   | 'coupon'
@@ -119,6 +136,6 @@ export interface Discount {
   repeatThreshold?: number
   memberTypeIds?: string[]
   categoryIds?: string[] // 品类优惠：仅对命中分类的订单项生效
-  exclusiveGroup?: string
+  exclusiveGroups?: string[] // 互斥组（多选）：归属同一组的优惠只生效减免最大者
   isActive: boolean
 }

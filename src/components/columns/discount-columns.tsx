@@ -3,6 +3,7 @@ import { fmt, type Discount } from '@/stores/types'
 import type { MemberType } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
+import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 
 export interface DiscountColumn {
   title: string
@@ -27,7 +28,10 @@ function memberTypeNames(ids: string[] = [], types: MemberType[]): string {
   return ids.map((id) => types.find((t) => t.id === id)?.name ?? id).join('、')
 }
 
-const statusMeta: Record<string, { label: string; type: 'success' | 'warning' | 'default' | 'error' }> = {
+const statusMeta: Record<
+  string,
+  { label: string; type: 'success' | 'warning' | 'default' | 'error' }
+> = {
   active: { label: '可用', type: 'success' },
   expired: { label: '已过期', type: 'warning' },
   disabled: { label: '已停用', type: 'default' },
@@ -42,6 +46,7 @@ export function buildDiscountColumns(opts: {
 }): DiscountColumn[] {
   const memberTypeStore = useMemberTypeStore()
   const discountStore = useDiscountStore()
+  const exclusiveGroupStore = useExclusiveGroupStore()
   return [
     { title: '名称', key: 'name' },
     {
@@ -89,16 +94,21 @@ export function buildDiscountColumns(opts: {
     },
     {
       title: '互斥组',
-      key: 'exclusiveGroup',
-      width: 90,
-      render: (row: Discount) =>
-        row.exclusiveGroup?.trim() ? (
-          <NTag size="tiny" type="error">
-            {row.exclusiveGroup!.trim()}
-          </NTag>
-        ) : (
-          '-'
-        ),
+      key: 'exclusiveGroups',
+      width: 140,
+      render: (row: Discount) => {
+        const gs = row.exclusiveGroups ?? []
+        if (!gs.length) return '-'
+        return (
+          <NFlex size={4} wrap={true}>
+            {gs.map((g) => (
+              <NTag size="tiny" type="error">
+                {exclusiveGroupStore.groups.find((x) => x.id === g)?.name ?? g}
+              </NTag>
+            ))}
+          </NFlex>
+        )
+      },
     },
     {
       title: '券码',

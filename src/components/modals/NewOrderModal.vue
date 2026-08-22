@@ -14,9 +14,10 @@ import {
   NCard,
   NEmpty,
   NScrollbar,
+  NIcon,
   useMessage,
 } from 'naive-ui'
-import { IconPlus } from '@tabler/icons-vue'
+import { IconCheck, IconPlus, IconTrash, IconX } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
@@ -71,9 +72,7 @@ const currentItems = computed<OrderItem[]>(() =>
       }
     }),
 )
-const memberName = computed(
-  () => memberStore.members.find((m) => m.id === newMember.value)?.name,
-)
+const memberName = computed(() => memberStore.members.find((m) => m.id === newMember.value)?.name)
 function addRow() {
   newItems.value.push({ priceId: '', quantity: 1 })
 }
@@ -122,81 +121,67 @@ function close() {
 </script>
 
 <template>
-  <NModal
-    :show="true"
-    title="新建订单"
-    preset="card"
-    class="modal-lg"
-    :auto-focus="false"
-    @update:show="close"
-  >
+  <NModal :show="true" title="新建订单" preset="card" class="modal-lg" :autoFocus="false" @update:show="close">
     <NScrollbar class="modal-scroll">
       <NEmpty v-if="!memberOptions.length" description="请先在「会员」中录入会员" />
-      <NForm v-else label-placement="top">
+      <NForm v-else labelPlacement="top">
         <NFormItem label="会员">
-          <NSelect
-            v-model:value="newMember"
-            :options="memberOptions"
-            placeholder="选择会员"
-            filterable
-          />
+          <NSelect v-model:value="newMember" :options="memberOptions" placeholder="选择会员" filterable />
         </NFormItem>
 
         <NFormItem label="服务项">
           <NFlex vertical :size="8" style="width: 100%">
-            <NFlex v-for="(row, i) in newItems" :key="i" align="center" :size="8">
-              <NSelect
-                v-model:value="row.priceId"
-                :options="priceOptions"
-                placeholder="选择服务"
-                filterable
-                style="min-width: 240px"
-              />
-              <NInputNumber
-                v-if="row.priceId && rowPrice(row.priceId)?.pricingMode === 'perPiece'"
-                v-model:value="row.quantity"
-                :min="1"
-                :show-button="false"
-                style="width: 100px"
-              />
-              <NText v-else depth="3">工时计</NText>
-              <NButton text type="error" @click="removeRow(i)">删除</NButton>
+            <NFlex v-for="(row, i) in newItems" :key="i" align="center" :size="8" justify="space-between">
+              <NSelect v-model:value="row.priceId" :options="priceOptions" placeholder="选择服务" filterable
+                style="min-width: 240px" />
+              <NInputNumber v-if="row.priceId && rowPrice(row.priceId)?.pricingMode === 'perPiece'"
+                v-model:value="row.quantity" :min="1" style="width: 100px" />
+              <NText v-else depth="3">待计费</NText>
+              <NButton text type="error" @click="removeRow(i)">
+                <NIcon>
+                  <IconTrash />
+                </NIcon>
+                删除
+              </NButton>
             </NFlex>
             <NButton dashed block @click="addRow">
-              <IconPlus :size="16" />
+              <NIcon :size="16">
+                <IconPlus />
+              </NIcon>
               添加服务项
             </NButton>
           </NFlex>
         </NFormItem>
 
         <NFormItem label="备注">
-          <NInput
-            v-model:value="newNotes"
-            type="textarea"
-            placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
+          <NInput v-model:value="newNotes" type="textarea" placeholder="备注（可选）"
+            :autosize="{ minRows: 2, maxRows: 4 }" />
         </NFormItem>
 
         <NCard title="优惠" size="small" :bordered="true">
           <NText v-if="!newMember" depth="3">请先选择会员以使用优惠</NText>
-          <DiscountApplyPanel
-            v-else
-            :member-id="newMember"
-            :member-name="memberName"
-            :items="currentItems"
+          <DiscountApplyPanel v-else :member-id="newMember" :member-name="memberName" :items="currentItems"
             @update:records="(r: DiscountRecord[]) => (discountRecords = r)"
             @update:discountAmount="(v: number) => (discountAmount = v)"
-            @update:finalAmount="(v: number) => (finalAmount = v)"
-          />
+            @update:finalAmount="(v: number) => (finalAmount = v)" />
         </NCard>
       </NForm>
     </NScrollbar>
 
     <template #footer>
       <NFlex justify="end">
-        <NButton @click="close">取消</NButton>
-        <NButton type="primary" :disabled="!canCreate" @click="doCreate">创建</NButton>
+        <NButton @click="close">
+          <NIcon>
+            <IconX />
+          </NIcon>
+          取消
+        </NButton>
+        <NButton type="primary" :disabled="!canCreate" @click="doCreate">
+          <NIcon>
+            <IconCheck />
+          </NIcon>
+          创建
+        </NButton>
       </NFlex>
     </template>
   </NModal>

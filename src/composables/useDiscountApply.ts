@@ -124,14 +124,16 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
 
   const records = computed<DiscountRecord[]>(() => {
     const chosen = applied.value.filter((d) => !!calc(d))
-    // 互斥分组内只保留减免最大者
+    // 互斥分组内只保留减免最大者（单优惠可归属多个组）
     const groups = new Map<string, Discount[]>()
     const noGroup: Discount[] = []
     for (const d of chosen) {
-      const g = (d.exclusiveGroup ?? '').trim()
-      if (g) {
-        if (!groups.has(g)) groups.set(g, [])
-        groups.get(g)!.push(d)
+      const gs = d.exclusiveGroups ?? []
+      if (gs.length) {
+        for (const g of gs) {
+          if (!groups.has(g)) groups.set(g, [])
+          groups.get(g)!.push(d)
+        }
       } else noGroup.push(d)
     }
     const picked: Discount[] = [...noGroup]

@@ -1,5 +1,5 @@
 import { NTag, NButton } from 'naive-ui'
-import { fmt, type Order, type OrderStatus } from '@/stores/types'
+import { fmt, fmtElapsed, type Order, type OrderStatus } from '@/stores/types'
 
 export interface MeterColumnsOpts {
   openOrder: (o: Order) => void
@@ -25,9 +25,7 @@ export function buildMeterColumns(opts: MeterColumnsOpts) {
         o.items
           .map((i) => {
             if (i.pricingMode === 'hourly' && i.elapsed) {
-              const m = Math.floor(i.elapsed / 60)
-              const s = i.elapsed % 60
-              return `${i.serviceName} ${m}'${s.toString().padStart(2, '0')}`
+              return `${i.serviceName} ${fmtElapsed(i.elapsed)}`
             }
             return `${i.serviceName}×${i.quantity}`
           })
