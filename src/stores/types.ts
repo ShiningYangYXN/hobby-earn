@@ -56,12 +56,18 @@ export interface MemberType {
   name: string
 }
 
+/* ── 服务分类（独立管理，可多选）── */
+export interface Category {
+  id: string
+  name: string
+}
+
 /* ── 价格条目 ── */
 export type PricingMode = 'hourly' | 'perPiece'
 export interface PriceEntry {
   id: string
   name: string
-  category: string
+  categoryIds: string[] // 可归属多个分类
   pricingMode: PricingMode
   basePrice: number
   description?: string
@@ -109,6 +115,17 @@ export interface ExclusiveGroup {
   name: string
 }
 
+/* ── 上限组（组内优惠可叠加，但合计不得超过组上限）── */
+export interface DiscountLimitGroup {
+  id: string
+  name: string
+  limitType: 'amount' | 'ratio' // amount=定值（分）；ratio=比例（百分比 0-100）
+  limit: number // amount 时为分；ratio 时为百分比
+  scope: 'all' | 'items' | 'categories' // 计算上限的基准范围
+  itemIds?: string[] // scope=items 时生效
+  categoryIds?: string[] // scope=categories 时生效
+}
+
 /* ── 优惠 ── */
 export const discountTypeLabel: Record<string, string> = {
   coupon: '优惠券',
@@ -117,6 +134,10 @@ export const discountTypeLabel: Record<string, string> = {
   firstOrder: '首单优惠',
   repeatOrder: '复购优惠',
   category: '品类优惠',
+  exclusive: '专属优惠',
+  periodic: '周期优惠',
+  item: '单品优惠',
+  custom: '自定义',
 }
 export type DiscountType =
   | 'coupon'
@@ -125,7 +146,28 @@ export type DiscountType =
   | 'firstOrder'
   | 'repeatOrder'
   | 'category'
-export type RuleType = 'fixed' | 'percentage'
+  | 'exclusive'
+  | 'periodic'
+  | 'item'
+  | 'custom'
+
+// 周期生效维度：daily 每日 / weekly 按星期 / monthly 按日期 / cron 表达式
+export type PeriodType = 'daily' | 'weekly' | 'monthly' | 'cron'
+
+export function discountTypeLabelOf(t: string): string {
+  return discountTypeLabel[t] ?? t
+}
+
+export const ruleTypeLabel: Record<string, string> = {
+  fixed: '满减',
+  percentage: '打折',
+  stepDown: '每满减',
+}
+export type RuleType = 'fixed' | 'percentage' | 'stepDown'
+
+export function ruleTypeLabelOf(t: string): string {
+  return ruleTypeLabel[t] ?? t
+}
 export interface Discount {
   id: string
   name: string
@@ -142,8 +184,16 @@ export interface Discount {
   memberLimit: number | null
   memberUsedCount: Record<string, number>
   repeatThreshold?: number
-  memberTypeIds?: string[]
+  memberTypeIds?: string[] // 会员类型限定（member 类型 / 自定义）
   categoryIds?: string[] // 品类优惠：仅对命中分类的订单项生效
+  itemIds?: string[] // 单品优惠：指定具体价格项参与
   exclusiveGroups?: string[] // 互斥组（多选）：归属同一组的优惠只生效减免最大者
+  limitGroupId?: string // 上限组：组内优惠可叠加但合计受组上限约束
+  // 专属优惠：限定可使用的会员
+  memberIds?: string[]
+  // 周期优惠：按周期生效
+  periodType?: PeriodType
+  periodValues?: number[] // weekly: 0-6（周日-周六）；monthly: 1-31
+  cronExpr?: string // periodType=cron 时的 cron 表达式（5 字段，参考 cron 规则）
   isActive: boolean
 }

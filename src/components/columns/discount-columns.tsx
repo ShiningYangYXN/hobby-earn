@@ -2,8 +2,12 @@ import { NTag, NFlex, NButton, NText } from 'naive-ui'
 import { fmt, type Discount } from '@/stores/types'
 import type { MemberType } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useMemberStore } from '@/stores/useMemberStore'
+import { usePriceStore } from '@/stores/usePriceStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
+import { useCategoryStore } from '@/stores/useCategoryStore'
+import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 
 export interface DiscountColumn {
   title: string
@@ -19,6 +23,8 @@ const typeLabelMap: Record<string, string> = {
   firstOrder: '首单',
   repeatOrder: '累次',
   category: '品类',
+  exclusive: '专属',
+  periodic: '周期',
 }
 function typeLabel(t: string): string {
   return typeLabelMap[t] ?? t
@@ -27,12 +33,26 @@ function memberTypeNames(ids: string[] = [], types: MemberType[]): string {
   if (!ids.length) return '-'
   return ids.map((id) => types.find((t) => t.id === id)?.name ?? id).join('、')
 }
+// 周期优惠的生效描述（含 cron）
+function periodLabel(d: Discount): string {
+  if (d.discountType !== 'periodic') return ''
+  const t = d.periodType
+  if (t === 'daily') return '每日'
+  if (t === 'cron') return `Cron: ${d.cronExpr ?? ''}`.trim()
+  if (t === 'weekly') {
+    const w = ['日', '一', '二', '三', '四', '五', '六']
+    return '每周' + (d.periodValues ?? []).map((v) => '周' + (w[v] ?? v)).join('、')
+  }
+  if (t === 'monthly') return '每月' + (d.periodValues ?? []).map((v) => `${v}号`).join('、')
+  return ''
+}
 
 const statusMeta: Record<
   string,
-  { label: string; type: 'success' | 'warning' | 'default' | 'error' }
+  { label: string; type: 'success' | 'warning' | 'default' | 'error' | 'info' }
 > = {
   active: { label: '可用', type: 'success' },
+  upcoming: { label: '未开始', type: 'info' },
   expired: { label: '已过期', type: 'warning' },
   disabled: { label: '已停用', type: 'default' },
   exhausted: { label: '已兑完', type: 'error' },
@@ -45,8 +65,14 @@ export function buildDiscountColumns(opts: {
   remove: (d: Discount) => void
 }): DiscountColumn[] {
   const memberTypeStore = useMemberTypeStore()
+  const memberStore = useMemberStore()
   const discountStore = useDiscountStore()
   const exclusiveGroupStore = useExclusiveGroupStore()
+  const categoryStore = useCategoryStore()
+  const limitGroupStore = useLimitGroupStore()
+  const priceStore = usePriceStore()
+  const catName = (id: string) => categoryStore.categories.find((c) => c.id === id)?.name ?? id
+  const itemName = (id: string) => priceStore.prices.find((p) => p.id === id)?.name ?? id
   return [
     { title: '名称', key: 'name' },
     {
@@ -59,7 +85,12 @@ export function buildDiscountColumns(opts: {
       title: '规则',
       key: 'ruleType',
       width: 70,
-      render: (row: Discount) => (row.ruleType === 'percentage' ? '打折' : '满减'),
+      render: (row: Discount) =>
+        row.ruleType === 'percentage'
+          ? '打折'
+          : row.ruleType === 'stepDown'
+            ? '每满减'
+            : '满减',
     },
     {
       title: '值',
@@ -88,8 +119,28 @@ export function buildDiscountColumns(opts: {
       key: 'categoryIds',
       width: 150,
       render: (row: Discount) =>
-        row.discountType === 'category' && row.categoryIds && row.categoryIds.length
-          ? row.categoryIds.join('、')
+        row.categoryIds && row.categoryIds.length
+          ? row.categoryIds.map(catName).join('、')
+          : '-',
+    },
+    {
+      title: '参与单品',
+      key: 'itemIds',
+      width: 150,
+      render: (row: Discount) =>
+        row.itemIds && row.itemIds.length
+          ? row.itemIds.map(itemName).join('、')
+          : '-',
+    },
+    {
+      title: '专属会员',
+      key: 'memberIds',
+      width: 150,
+      render: (row: Discount) =>
+        row.discountType === 'exclusive' && row.memberIds && row.memberIds.length
+          ? row.memberIds
+              .map((id) => memberStore.members.find((m) => m.id === id)?.name ?? id)
+              .join('、')
           : '-',
     },
     {
@@ -109,6 +160,15 @@ export function buildDiscountColumns(opts: {
           </NFlex>
         )
       },
+    },
+    {
+      title: '上限组',
+      key: 'limitGroupId',
+      width: 130,
+      render: (row: Discount) =>
+        row.limitGroupId
+          ? (limitGroupStore.groups.find((g) => g.id === row.limitGroupId)?.name ?? row.limitGroupId)
+          : '-',
     },
     {
       title: '券码',
@@ -139,6 +199,12 @@ export function buildDiscountColumns(opts: {
       render: (row: Discount) => {
         if (row.discountType === 'member') return '不限'
         const f = (s: string) => (s ? s.slice(0, 10) : '永久')
+        const period = periodLabel(row)
+        if (period) {
+          const range =
+            row.validFrom || row.validUntil ? `（${f(row.validFrom)} ~ ${f(row.validUntil)}）` : '（永久）'
+          return `${period}${range}`
+        }
         return row.validFrom || row.validUntil
           ? `${f(row.validFrom)} ~ ${f(row.validUntil)}`
           : '永久'

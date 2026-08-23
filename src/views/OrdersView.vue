@@ -18,7 +18,6 @@ import {
 } from 'naive-ui'
 import { IconPlus } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
-import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildOrderColumns } from '@/components/columns/order-columns'
@@ -28,7 +27,6 @@ const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const orderStore = useOrderStore()
-const discountStore = useDiscountStore()
 const memberStore = useMemberStore()
 const ui = useUiStore()
 
@@ -154,21 +152,12 @@ onMounted(() => {
           <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
           <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 160px" />
           <NSelect v-model:value="discountFilter" :options="discountOptions" style="width: 140px" />
-          <NDatePicker
-            v-model:value="dateRange"
-            type="daterange"
-            clearable
-            placeholder="下单日期"
-            style="width: 240px"
-          />
-          <NInput
-            v-model:value="keyword"
-            placeholder="搜索会员 / 订单号"
-            clearable
-            style="width: 200px"
-          />
+          <NDatePicker v-model:value="dateRange" type="daterange" clearable placeholder="下单日期" style="width: 240px" />
+          <NInput v-model:value="keyword" placeholder="搜索会员 / 订单号" clearable style="width: 200px" />
           <NButton type="primary" @click="openCreate">
-            <NIcon :size="16"><IconPlus /></NIcon> 新建订单
+            <NIcon :size="16">
+              <IconPlus />
+            </NIcon> 新建订单
           </NButton>
         </NFlex>
         <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />

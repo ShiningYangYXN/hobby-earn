@@ -62,5 +62,5 @@ export const useMemberTypeStore = defineStore('memberType', () => {
 })
 
 function defaultTypes(): MemberType[] {
-  return ['普通', 'VIP', '学生', '新会员'].map((name) => ({ id: uid(), name }))
+  return [].map((name) => ({ id: uid(), name }))
 }

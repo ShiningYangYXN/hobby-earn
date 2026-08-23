@@ -14,6 +14,8 @@ import ExclusiveGroupModal from '@/components/modals/ExclusiveGroupModal.vue'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
 import PriceModal from '@/components/modals/PriceModal.vue'
+import CategoryManagerModal from '@/components/modals/CategoryManagerModal.vue'
+import LimitGroupModal from '@/components/modals/LimitGroupModal.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -55,6 +57,7 @@ const router = createRouter({
       children: [
         { path: 'new', name: 'price-new', component: PriceModal },
         { path: ':id', name: 'price-edit', component: PriceModal, props: true },
+        { path: 'categories', name: 'categories', component: CategoryManagerModal },
       ],
     },
     {
@@ -64,6 +67,7 @@ const router = createRouter({
       children: [
         { path: 'new', name: 'discount-new', component: DiscountModal },
         { path: 'exclusive-groups', name: 'exclusive-groups', component: ExclusiveGroupModal },
+        { path: 'limit-groups', name: 'limit-groups', component: LimitGroupModal },
         { path: ':id', name: 'discount-edit', component: DiscountModal, props: true },
       ],
     },

@@ -9,7 +9,7 @@
  */
 
 const DB_NAME = 'hobby-earn-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORES = [
   'members',
   'orders',
@@ -17,6 +17,8 @@ const STORES = [
   'discounts',
   'memberTypes',
   'exclusiveGroups',
+  'categories',
+  'limitGroups',
 ] as const
 
 let dbPromise: Promise<IDBDatabase> | null = null

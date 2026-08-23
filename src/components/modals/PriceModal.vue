@@ -16,13 +16,16 @@ import {
   NIcon,
 } from 'naive-ui'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useCategoryStore } from '@/stores/useCategoryStore'
 import { type PricingMode } from '@/stores/types'
+import CategorySelect from '@/components/CategorySelect.vue'
 import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
 const msg = useMessage()
 const priceStore = usePriceStore()
+const categoryStore = useCategoryStore()
 
 const editing = computed(() => !!props.id)
 const modeOptions: { label: string; value: PricingMode }[] = [
@@ -32,7 +35,7 @@ const modeOptions: { label: string; value: PricingMode }[] = [
 
 const form = ref({
   name: '',
-  category: '',
+  categoryIds: [] as string[],
   pricingMode: 'hourly' as PricingMode,
   basePriceYuan: 0,
   description: '',
@@ -42,12 +45,13 @@ const form = ref({
 watch(
   () => props.id,
   async (id) => {
+    if (!categoryStore.categories.length) await categoryStore.load()
     if (id) {
       const p = priceStore.prices.find((x) => x.id === id)
       if (p)
         form.value = {
           name: p.name,
-          category: p.category ?? '',
+          categoryIds: [...(p.categoryIds ?? [])],
           pricingMode: p.pricingMode,
           basePriceYuan: p.basePrice / 100,
           description: p.description ?? '',
@@ -56,7 +60,7 @@ watch(
       else
         form.value = {
           name: '',
-          category: '',
+          categoryIds: [],
           pricingMode: 'hourly',
           basePriceYuan: 0,
           description: '',
@@ -65,7 +69,7 @@ watch(
     } else {
       form.value = {
         name: '',
-        category: '',
+        categoryIds: [],
         pricingMode: 'hourly',
         basePriceYuan: 0,
         description: '',
@@ -119,8 +123,8 @@ function close() {
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="如：修电脑" />
         </NFormItem>
-        <NFormItem label="分类">
-          <NInput v-model:value="form.category" placeholder="可选" />
+        <NFormItem label="分类（可多选）">
+          <CategorySelect v-model="form.categoryIds" />
         </NFormItem>
         <NFormItem label="计价方式">
           <NSelect v-model:value="form.pricingMode" :options="modeOptions" />

@@ -15,8 +15,9 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { IconPlus } from '@tabler/icons-vue'
+import { IconPlus, IconTag } from '@tabler/icons-vue'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useCategoryStore } from '@/stores/useCategoryStore'
 import { buildPriceColumns } from '@/components/columns/price-columns'
 import { type PriceEntry } from '@/stores/types'
 
@@ -24,17 +25,17 @@ const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const priceStore = usePriceStore()
+const categoryStore = useCategoryStore()
 
 const keyword = ref('')
 const filterCategory = ref('')
 const filterMode = ref('')
 const filterActive = ref('')
 
-const categoryOptions = computed(() => {
-  const set = new Set<string>()
-  for (const p of priceStore.prices) if (p.category) set.add(p.category)
-  return [{ label: '全部分类', value: '' }, ...[...set].map((c) => ({ label: c, value: c }))]
-})
+const categoryOptions = computed(() => [
+  { label: '全部分类', value: '' },
+  ...categoryStore.categories.map((c) => ({ label: c.name, value: c.id })),
+])
 const modeOptions = [
   { label: '全部计价方式', value: '' },
   { label: '工时', value: 'hourly' },
@@ -49,11 +50,13 @@ const activeOptions = [
 const filtered = computed<PriceEntry[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
   return priceStore.prices.filter((p) => {
-    if (filterCategory.value && p.category !== filterCategory.value) return false
+    if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value))
+      return false
     if (filterMode.value && p.pricingMode !== filterMode.value) return false
     if (filterActive.value === 'active' && !p.isActive) return false
     if (filterActive.value === 'inactive' && p.isActive) return false
-    if (kw && !`${p.name}${p.category ?? ''}`.toLowerCase().includes(kw)) return false
+    if (kw && !`${p.name}${(p.categoryIds ?? []).join('')}`.toLowerCase().includes(kw))
+      return false
     return true
   })
 })
@@ -84,6 +87,7 @@ function remove(p: PriceEntry) {
 
 onMounted(() => {
   if (!priceStore.prices.length) priceStore.load()
+  if (!categoryStore.categories.length) categoryStore.load()
 })
 </script>
 
@@ -104,6 +108,9 @@ onMounted(() => {
           <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
           <NButton type="primary" @click="openCreate">
             <NIcon :size="16"><IconPlus /></NIcon> 新建价格项
+          </NButton>
+          <NButton @click="router.push({ name: 'categories' })">
+            <NIcon :size="16"><IconTag /></NIcon> 管理分类
           </NButton>
         </NFlex>
 

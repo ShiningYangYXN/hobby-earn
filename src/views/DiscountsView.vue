@@ -15,18 +15,21 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { IconPlus, IconLayersIntersect } from '@tabler/icons-vue'
+import { IconPlus, IconLayersIntersect, IconStack2 } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
-import { type Discount } from '@/stores/types'
+import { type Discount, discountTypeLabelOf } from '@/stores/types'
 
 const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const discountStore = useDiscountStore()
 
-function openGroups() {
+function openExclusiveGroups() {
   router.push('/discounts/exclusive-groups')
+}
+function openLimitGroups() {
+  router.push('/discounts/limit-groups')
 }
 
 const keyword = ref('')
@@ -35,16 +38,21 @@ const filterStatus = ref('')
 
 const typeOptions = [
   { label: '全部类型', value: '' },
-  { label: '限时', value: 'timeLimited' },
-  { label: '会员', value: 'member' },
-  { label: '首单', value: 'firstOrder' },
-  { label: '累次', value: 'repeatOrder' },
-  { label: '品类', value: 'category' },
-  { label: '券码', value: 'coupon' },
+  { label: discountTypeLabelOf('timeLimited'), value: 'timeLimited' },
+  { label: discountTypeLabelOf('member'), value: 'member' },
+  { label: discountTypeLabelOf('firstOrder'), value: 'firstOrder' },
+  { label: discountTypeLabelOf('repeatOrder'), value: 'repeatOrder' },
+  { label: discountTypeLabelOf('category'), value: 'category' },
+  { label: discountTypeLabelOf('item'), value: 'item' },
+  { label: discountTypeLabelOf('exclusive'), value: 'exclusive' },
+  { label: discountTypeLabelOf('periodic'), value: 'periodic' },
+  { label: discountTypeLabelOf('custom'), value: 'custom' },
+  { label: discountTypeLabelOf('coupon'), value: 'coupon' },
 ]
 const statusOptions = [
   { label: '全部状态', value: '' },
   { label: '可用', value: 'active' },
+  { label: '未开始', value: 'upcoming' },
   { label: '已过期', value: 'expired' },
   { label: '已停用', value: 'disabled' },
   { label: '已兑完', value: 'exhausted' },
@@ -120,11 +128,17 @@ onMounted(() => {
             </NIcon>
             新建优惠
           </NButton>
-          <NButton @click="openGroups">
+          <NButton @click="openExclusiveGroups">
             <NIcon :size="16">
               <IconLayersIntersect />
             </NIcon>
             互斥组管理
+          </NButton>
+          <NButton @click="openLimitGroups">
+            <NIcon :size="16">
+              <IconStack2 />
+            </NIcon>
+            上限组管理
           </NButton>
         </NFlex>
 

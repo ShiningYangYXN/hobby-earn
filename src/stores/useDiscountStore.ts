@@ -118,12 +118,15 @@ export const useDiscountStore = defineStore('discount', () => {
     discounts.value[idx] = next
   }
 
-  // 优惠当前状态：停用 / 过期 / 已达上限 / 可用
+  // 优惠当前状态：停用 / 未开始 / 过期 / 已达上限 / 可用
   function discountStatus(
     d: Discount,
     memberId?: string,
-  ): 'active' | 'expired' | 'disabled' | 'exhausted' {
+  ): 'active' | 'expired' | 'disabled' | 'exhausted' | 'upcoming' {
     if (!d.isActive) return 'disabled'
+    const now = Date.now()
+    // 未开始：设置了开始时间且尚未到达（结束时间用于「过期」判定）
+    if (d.validFrom && now < Date.parse(d.validFrom)) return 'upcoming'
     if (!inRange(d)) return 'expired'
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return 'exhausted'
     if (memberId && d.memberLimit !== null && (d.memberUsedCount[memberId] ?? 0) >= d.memberLimit)
@@ -141,7 +144,9 @@ export const useDiscountStore = defineStore('discount', () => {
 
   function isValidCode(code: string): boolean {
     const d = findByCode(code.toUpperCase())
-    return !!d && d.isActive && inRange(d) && (d.usageLimit === null || d.usedCount < d.usageLimit)
+    if (!d) return false
+    const st = discountStatus(d)
+    return st === 'active' || st === 'upcoming'
   }
 
   // 详细校验券码可用性（含每人上限），用于兑换时拦截超兑
@@ -150,6 +155,8 @@ export const useDiscountStore = defineStore('discount', () => {
     if (!d) return { ok: false, reason: '券码不存在' }
     if (!d.isActive) return { ok: false, reason: '券码已停用' }
     if (!inRange(d)) return { ok: false, reason: '券码已过期' }
+    if (d.validFrom && Date.now() < Date.parse(d.validFrom))
+      return { ok: false, reason: '券码未到使用时间' }
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit)
       return { ok: false, reason: '券码已达使用上限' }
     if (memberId && d.memberLimit !== null && (d.memberUsedCount[memberId] ?? 0) >= d.memberLimit)
@@ -165,8 +172,14 @@ export const useDiscountStore = defineStore('discount', () => {
     memberTypeId?: string,
     categories?: string[],
     categoryAmount?: number,
+    itemIds?: string[],
+    itemAmount?: number,
   ): { desc: string; amount: number } | null {
-    if (!d.isActive || !inRange(d) || subtotal < d.minAmount) return null
+    if (!d.isActive) return null
+    // 自定义/通用优惠：validFrom 之前视为未开始，不生效
+    if (d.validFrom && Date.now() < Date.parse(d.validFrom)) return null
+    if (!inRange(d)) return null
+    if (subtotal < (d.minAmount ?? 0)) return null
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return null
     if (d.memberLimit !== null && (d.memberUsedCount[memberId] ?? 0) >= d.memberLimit) return null
     if (d.discountType === 'member') {
@@ -176,8 +189,21 @@ export const useDiscountStore = defineStore('discount', () => {
     if (d.discountType === 'category') {
       const cats = d.categoryIds ?? []
       if (!cats.length) return null
-      // 仅当订单包含命中的品类时才生效
       if (!categories || !categories.some((c) => cats.includes(c))) return null
+    }
+    if (d.discountType === 'item') {
+      const ids = d.itemIds ?? []
+      if (!ids.length) return null
+      if (!itemIds || !itemIds.some((i) => ids.includes(i))) return null
+    }
+    // 自定义模板下，categoryIds/itemIds 同样用来限定生效范围（不限定时作用于全单）
+    if (d.discountType === 'custom') {
+      if (d.categoryIds && d.categoryIds.length) {
+        if (!categories || !categories.some((c) => d.categoryIds!.includes(c))) return null
+      }
+      if (d.itemIds && d.itemIds.length) {
+        if (!itemIds || !itemIds.some((i) => d.itemIds!.includes(i))) return null
+      }
     }
     if (d.discountType === 'firstOrder' && completedCount > 0) return null
     // 累次优惠：仅在第 N、2N、3N...单时生效（如 threshold=5：第5单、第10单、第15单…）
@@ -185,22 +211,49 @@ export const useDiscountStore = defineStore('discount', () => {
       const threshold = d.repeatThreshold ?? 1
       if (threshold < 1 || completedCount % threshold !== threshold - 1) return null
     }
-    // 品类优惠：只对命中品类的订单项金额计算折扣
-    const baseAmount = d.discountType === 'category' && categoryAmount !== undefined
-      ? categoryAmount
-      : subtotal
-    const amount =
-      d.ruleType === 'percentage'
-        ? // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%）
-          Math.min(baseAmount - Math.floor((baseAmount * d.value) / 100), d.maxDiscount ?? Infinity)
-        : // 减法：直接减固定金额（分），同时受 maxDiscount 约束
-          Math.min(d.value, baseAmount, d.maxDiscount ?? Infinity)
-    let desc =
-      d.ruleType === 'percentage'
-        ? `满${cents(d.minAmount)}打${(d.value / 10).toString()}折`
-        : `满${cents(d.minAmount)}减${cents(d.value)}`
+    // 专属优惠：仅限指定会员可用
+    if (d.discountType === 'exclusive') {
+      if (!d.memberIds || d.memberIds.length === 0) return null
+      if (!d.memberIds.includes(memberId)) return null
+    }
+    // 周期优惠：按周期维度判断是否当天生效
+    if (d.discountType === 'periodic' && !matchesPeriod(d)) return null
+    // 品类/单品优惠：只对命中分类/单品的订单项金额计算折扣
+    let baseAmount = subtotal
+    if (d.discountType === 'category') {
+      baseAmount = categoryAmount !== undefined ? categoryAmount : 0
+    } else if (d.discountType === 'item') {
+      baseAmount = itemAmount !== undefined ? itemAmount : 0
+    } else if (d.discountType === 'custom') {
+      if (d.categoryIds && d.categoryIds.length && categoryAmount !== undefined)
+        baseAmount = categoryAmount
+      else if (d.itemIds && d.itemIds.length && itemAmount !== undefined)
+        baseAmount = itemAmount
+    }
+    let amount: number
+    let desc: string
+    if (d.ruleType === 'percentage') {
+      // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%），受最大减免上限约束
+      amount = Math.min(
+        baseAmount - Math.floor((baseAmount * d.value) / 100),
+        d.maxDiscount ?? Infinity,
+      )
+      desc = `满${cents(d.minAmount)}打${(d.value / 10).toString()}折`
+    } else if (d.ruleType === 'stepDown') {
+      // 每满减：每满 minAmount 减 value，封顶为 floor(baseAmount/minAmount) 档
+      const steps = d.minAmount > 0 ? Math.floor(baseAmount / d.minAmount) : 0
+      amount = Math.min(steps * d.value, d.maxDiscount ?? Infinity)
+      desc = `每满${cents(d.minAmount)}减${cents(d.value)}（共${steps}档）`
+    } else {
+      // 满减：直接减固定金额（分）。满减的优惠上限无意义，故不约束
+      amount = Math.min(d.value, baseAmount)
+      desc = `满${cents(d.minAmount)}减${cents(d.value)}`
+    }
     if (d.discountType === 'category' && d.categoryIds && d.categoryIds.length) {
       desc += `（限${d.categoryIds.join('/')}）`
+    }
+    if (d.discountType === 'item' && d.itemIds && d.itemIds.length) {
+      desc += `（限单品）`
     }
     return { desc, amount }
   }
@@ -227,9 +280,53 @@ export const useDiscountStore = defineStore('discount', () => {
 function inRange(d: Discount): boolean {
   const now = Date.now()
   // 空字符串视为不限制（永久有效）
-  if (d.validFrom && now < Date.parse(d.validFrom)) return false
+  // validFrom 仅用于表示「未开始」(upcoming)，不在此处拦截
   if (d.validUntil && now > Date.parse(d.validUntil)) return false
   return true
+}
+// 周期优惠：按周期维度判断是否当天生效
+function matchesPeriod(d: Discount): boolean {
+  const t = d.periodType
+  if (!t || t === 'daily') return true
+  // cron 表达式（魔改，5 字段：分 时 日 月 周），支持 * / 列表 / 区间
+  if (t === 'cron') return d.cronExpr ? matchCron(d.cronExpr, new Date()) : false
+  const now = new Date()
+  if (t === 'weekly') {
+    const day = now.getDay() // 0=周日 .. 6=周六
+    return (d.periodValues ?? []).includes(day)
+  }
+  if (t === 'monthly') {
+    const date = now.getDate() // 1..31
+    return (d.periodValues ?? []).includes(date)
+  }
+  return true
+}
+// 魔改 cron：5 字段 [分 时 日 月 周]，支持 *、数字、逗号列表(1,2,5)、区间(9-18)
+function matchCron(expr: string, date: Date): boolean {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const vals = [
+    date.getMinutes(),
+    date.getHours(),
+    date.getDate(),
+    date.getMonth() + 1,
+    date.getDay(),
+  ]
+  return parts.every((p, i) => matchField(p, vals[i]!))
+}
+function matchField(field: string, val: number): boolean {
+  if (field === '*') return true
+  return field.split(',').every((seg) => {
+    if (seg.includes('-')) {
+      const parts = seg.split('-').map((x) => Number(x))
+      const a = parts[0]
+      const b = parts[1]
+      if (a === undefined || b === undefined || Number.isNaN(a) || Number.isNaN(b)) return false
+      return val >= a && val <= b
+    }
+    const n = Number(seg)
+    return !Number.isNaN(n) && val === n
+  })
 }
 function cents(c: number): string {
   return (c / 100).toFixed(2)

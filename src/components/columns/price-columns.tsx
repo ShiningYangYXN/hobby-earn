@@ -1,5 +1,6 @@
 import { NTag, NFlex, NButton, NEllipsis } from 'naive-ui'
 import { fmt, type PriceEntry } from '@/stores/types'
+import { useCategoryStore } from '@/stores/useCategoryStore'
 
 export interface PriceColumn {
   title: string
@@ -14,9 +15,19 @@ export function buildPriceColumns(opts: {
   toggle: (row: PriceEntry) => Promise<void>
   remove: (row: PriceEntry) => void
 }): PriceColumn[] {
+  const categoryStore = useCategoryStore()
+  const catName = (id: string) => categoryStore.categories.find((c) => c.id === id)?.name ?? id
   return [
     { title: '名称', key: 'name' },
-    { title: '分类', key: 'category', width: 110 },
+    {
+      title: '分类',
+      key: 'categoryIds',
+      width: 160,
+      render: (row: PriceEntry) =>
+        row.categoryIds && row.categoryIds.length
+          ? row.categoryIds.map(catName).join('、')
+          : '-',
+    },
     {
       title: '计价',
       key: 'pricingMode',

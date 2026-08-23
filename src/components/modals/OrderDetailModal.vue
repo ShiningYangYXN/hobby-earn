@@ -34,6 +34,7 @@ import {
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { usePriceStore } from '@/stores/usePriceStore'
+import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useUiStore } from '@/stores/useUiStore'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
@@ -45,6 +46,7 @@ const msg = useMessage()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
 const priceStore = usePriceStore()
+const categoryStore = useCategoryStore()
 const memberTypeStore = useMemberTypeStore()
 const ui = useUiStore()
 const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
@@ -197,7 +199,7 @@ function loadMemberTypes(ids: string[]): string {
 function loadCategories(ids: string[]): string {
   const names = new Set<string>()
   for (const id of ids) {
-    const hit = priceStore.prices.find((p) => p.id === id)?.category
+    const hit = categoryStore.categories.find((c) => c.id === id)?.name
     if (hit) names.add(hit)
   }
   return [...names].join('、') || ids.join('、')
@@ -504,13 +506,26 @@ async function forceReopenOrder() {
       <NDescriptionsItem label="实扣金额">减 {{ fmt(selectedRecord.discountAmount) }}</NDescriptionsItem>
       <template v-if="selectedDiscount">
         <NDescriptionsItem label="优惠规则">
-          {{ selectedDiscount.ruleType === 'percentage' ? '打折（按比例）' : '固定金额减免' }}
+          {{
+            selectedDiscount.ruleType === 'percentage'
+              ? '打折（按比例）'
+              : selectedDiscount.ruleType === 'stepDown'
+                ? '每满减（阶梯减免）'
+                : '满减（固定金额）'
+          }}
         </NDescriptionsItem>
         <NDescriptionsItem label="优惠力度">
           <template v-if="selectedDiscount.ruleType === 'percentage'">
             {{ selectedDiscount.value }}（打 {{ (selectedDiscount.value / 10).toFixed(1) }} 折）
           </template>
-          <template v-else>减 {{ (selectedDiscount.value / 100).toFixed(2) }} 元</template>
+          <template v-else-if="selectedDiscount.ruleType === 'stepDown'">
+            每满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元减
+            {{ (selectedDiscount.value / 100).toFixed(2) }} 元
+          </template>
+          <template v-else>
+            满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元减
+            {{ (selectedDiscount.value / 100).toFixed(2) }} 元
+          </template>
         </NDescriptionsItem>
         <NDescriptionsItem label="券码" v-if="selectedDiscount.code">
           {{ selectedDiscount.code }}
@@ -522,7 +537,7 @@ async function forceReopenOrder() {
               : '不限'
           }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="最大减免">
+        <NDescriptionsItem label="最大减免" v-if="selectedDiscount.ruleType !== 'fixed'">
           {{
             selectedDiscount.maxDiscount
               ? `¥${(selectedDiscount.maxDiscount / 100).toFixed(2)}`
