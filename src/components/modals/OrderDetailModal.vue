@@ -25,6 +25,7 @@ import {
   fmt,
   fmtElapsed,
   itemAmount,
+  discountTypeLabel,
   type Order,
   type OrderItem,
   type OrderStatus,
@@ -173,14 +174,7 @@ const selectedDiscount = computed(() =>
     ? (discountStore.discounts.find((d) => d.id === selectedDiscountId.value) ?? null)
     : null,
 )
-const discountTypeLabel: Record<string, string> = {
-  coupon: '优惠券',
-  timeLimited: '限时优惠',
-  member: '会员折扣',
-  firstOrder: '首单优惠',
-  repeatOrder: '复购优惠',
-  category: '品类优惠',
-}
+
 const selectedRecord = computed<DiscountRecord | null>(() => {
   const id = selectedDiscountId.value
   if (!id || !order.value) return null
@@ -246,14 +240,11 @@ function doCancel() {
   if (!o) return
   dialog.warning({
     title: '关闭订单',
-    content: '关闭后订单将变为「已关闭」，可退还已用优惠；确认关闭？',
+    content: '关闭后订单将变为「已关闭」，并退还已用优惠用量；确认关闭？',
     positiveText: '关闭',
     negativeText: '取消',
     onPositiveClick: async () => {
-      for (const rec of o.discountRecords) {
-        await discountStore.rollbackUsage(rec.discountId, o.memberId)
-      }
-      await orderStore.cancel(o.id)
+      await orderStore.cancel(o.id, { rollbackDiscounts: true })
       msg.success('订单已关闭')
       close()
     },

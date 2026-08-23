@@ -120,9 +120,14 @@ export const useOrderStore = defineStore('order', () => {
     return o
   }
 
-  async function cancel(id: string): Promise<void> {
+  async function cancel(id: string, opts: { rollbackDiscounts?: boolean } = {}): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o || o.status === 'completed' || o.status === 'closed') return
+    if (opts.rollbackDiscounts) {
+      for (const rec of o.discountRecords) {
+        await discountStore.rollbackUsage(rec.discountId, o.memberId)
+      }
+    }
     o.status = 'closed'
     await put('orders', o)
   }

@@ -19,12 +19,13 @@ export const useMemberStore = defineStore('member', () => {
   async function update(id: string, patch: Partial<Member>): Promise<void> {
     const idx = members.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
-    members.value[idx] = { ...members.value[idx]!, ...patch }
-    await put('members', members.value[idx]!)
+    const next = { ...members.value[idx]!, ...patch }
+    await put('members', next)
+    members.value[idx] = next
   }
   async function remove(id: string): Promise<void> {
-    members.value = members.value.filter((x) => x.id !== id)
     await del('members', id)
+    members.value = members.value.filter((x) => x.id !== id)
   }
 
   return { members, load, create, update, remove }

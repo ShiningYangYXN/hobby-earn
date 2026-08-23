@@ -60,15 +60,15 @@ export const useDiscountStore = defineStore('discount', () => {
         next = { ...next, code: undefined }
       }
     }
+    await put('discounts', next)
     discounts.value[idx] = next
-    await put('discounts', discounts.value[idx]!)
   }
 
   async function recordUsage(id: string, memberId: string): Promise<void> {
     const idx = discounts.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
     const cur = discounts.value[idx]!
-    discounts.value[idx] = {
+    const next = {
       ...cur,
       usedCount: cur.usedCount + 1,
       memberUsedCount: {
@@ -76,12 +76,13 @@ export const useDiscountStore = defineStore('discount', () => {
         [memberId]: (cur.memberUsedCount[memberId] ?? 0) + 1,
       },
     }
-    await put('discounts', discounts.value[idx]!)
+    await put('discounts', next)
+    discounts.value[idx] = next
   }
 
   async function remove(id: string): Promise<void> {
-    discounts.value = discounts.value.filter((x) => x.id !== id)
     await del('discounts', id)
+    discounts.value = discounts.value.filter((x) => x.id !== id)
   }
 
   // 删除互斥组时，从所有优惠里移除该组归属（级联清理）
@@ -108,12 +109,13 @@ export const useDiscountStore = defineStore('discount', () => {
     if (idx < 0) return
     const cur = discounts.value[idx]!
     const m = (cur.memberUsedCount[memberId] ?? 0) - 1
-    discounts.value[idx] = {
+    const next = {
       ...cur,
       usedCount: Math.max(0, cur.usedCount - 1),
       memberUsedCount: { ...cur.memberUsedCount, [memberId]: Math.max(0, m) },
     }
-    await put('discounts', discounts.value[idx]!)
+    await put('discounts', next)
+    discounts.value[idx] = next
   }
 
   // 优惠当前状态：停用 / 过期 / 已达上限 / 可用

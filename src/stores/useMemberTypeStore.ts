@@ -3,9 +3,13 @@ import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
 import type { MemberType } from './types'
 import { uid } from './types'
+import { useMemberStore } from './useMemberStore'
+import { useDiscountStore } from './useDiscountStore'
 
 export const useMemberTypeStore = defineStore('memberType', () => {
   const types = ref<MemberType[]>([])
+  const memberStore = useMemberStore()
+  const discountStore = useDiscountStore()
 
   async function load() {
     const list = await getAll<MemberType>('memberTypes')
@@ -34,8 +38,24 @@ export const useMemberTypeStore = defineStore('memberType', () => {
   }
 
   async function remove(id: string): Promise<void> {
-    types.value = types.value.filter((t) => t.id !== id)
+    // 先清理 DB：从所有会员和优惠中移除对该类型的引用
+    for (const m of memberStore.members) {
+      if (m.typeId === id) {
+        const next = { ...m, typeId: undefined }
+        await put('members', next)
+        memberStore.members[memberStore.members.indexOf(m)] = next
+      }
+    }
+    for (const d of discountStore.discounts) {
+      if (d.memberTypeIds?.includes(id)) {
+        const next = { ...d, memberTypeIds: d.memberTypeIds.filter((t) => t !== id) }
+        await put('discounts', next)
+        const idx = discountStore.discounts.findIndex((x) => x.id === d.id)
+        if (idx >= 0) discountStore.discounts[idx] = next
+      }
+    }
     await del('memberTypes', id)
+    types.value = types.value.filter((t) => t.id !== id)
   }
 
   return { types, load, create, update, remove }

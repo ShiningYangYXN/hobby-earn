@@ -19,7 +19,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
 
   const applied = ref<Discount[]>([])
   const countedIds = ref<Set<string>>(new Set())
-  const couponInput = ref<string[]>([])
+  const couponInput = ref<string>('')
   const couponError = ref('')
 
   const subtotal = computed(() => subtotalOf(getItems()))
@@ -101,7 +101,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
       return
     }
     applied.value.push(d)
-    couponInput.value = []
+    couponInput.value = ''
   }
 
   function dropApplied(id: string) {
@@ -235,7 +235,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
   function reset() {
     applied.value = []
     countedIds.value = new Set()
-    couponInput.value = []
+    couponInput.value = ''
     couponError.value = ''
   }
 

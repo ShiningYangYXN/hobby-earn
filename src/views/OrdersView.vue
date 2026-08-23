@@ -92,10 +92,7 @@ function doCancel(o: Order) {
     positiveText: '关闭',
     negativeText: '取消',
     onPositiveClick: async () => {
-      for (const rec of o.discountRecords) {
-        await discountStore.rollbackUsage(rec.discountId, o.memberId)
-      }
-      await orderStore.cancel(o.id)
+      await orderStore.cancel(o.id, { rollbackDiscounts: true })
       msg.success('订单已关闭')
     },
   })

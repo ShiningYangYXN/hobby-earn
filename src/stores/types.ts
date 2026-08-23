@@ -110,6 +110,14 @@ export interface ExclusiveGroup {
 }
 
 /* ── 优惠 ── */
+export const discountTypeLabel: Record<string, string> = {
+  coupon: '优惠券',
+  timeLimited: '限时优惠',
+  member: '会员折扣',
+  firstOrder: '首单优惠',
+  repeatOrder: '复购优惠',
+  category: '品类优惠',
+}
 export type DiscountType =
   | 'coupon'
   | 'timeLimited'

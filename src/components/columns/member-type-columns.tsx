@@ -32,7 +32,7 @@ export function buildMemberTypeColumns(opts: MemberTypeColumnsOpts): MemberTypeC
                   删除
                 </NButton>
               ),
-              default: () => '删除该种类？会员记录不受影响。',
+              default: () => '删除该种类？关联的会员将清空种类，优惠中的种类限制也将移除。',
             }}
           </NPopconfirm>
         </NFlex>

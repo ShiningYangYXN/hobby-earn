@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import { NCard, NFlex, NText, NButton, NInputOtp, NTag } from 'naive-ui'
+import { NCard, NFlex, NText, NInputOtp, NTag } from 'naive-ui'
 import { useDiscountApply } from '@/composables/useDiscountApply'
 import {
   fmt,
   CODE_LENGTH,
+  discountTypeLabel,
   type Discount,
-  type DiscountType,
   type OrderItem,
   type DiscountRecord,
 } from '@/stores/types'
@@ -54,27 +54,16 @@ watch(
   { deep: true },
 )
 
-const discountTypeLabel = (t: DiscountType | string): string =>
-  ({
-    coupon: '优惠券',
-    timeLimited: '限时优惠',
-    member: '会员折扣',
-    firstOrder: '首单优惠',
-    repeatOrder: '复购优惠',
-    category: '品类优惠',
-  })[t as DiscountType] ?? t
+
 
 // 券码实时大写：已选优惠券码用 NInputOtp 直接转大写
 function onOtp(v: string[]) {
   const code = v.join('').toUpperCase()
-  couponInput.value = [code]
+  couponInput.value = code
   // 输满自动兑换
   if (code.length >= CODE_LENGTH) {
     redeemCoupon(code)
   }
-}
-function applyCoupon() {
-  redeemCoupon(couponInput.value[0] ?? '')
 }
 function onToggle(d: Discount) {
   toggleAuto(d)
@@ -119,7 +108,7 @@ defineExpose({
       <NFlex justify="center" style="width: 100%">
         <NInputOtp
           :length="CODE_LENGTH"
-          :value="(couponInput[0] || '').split('')"
+          :value="(couponInput || '').split('')"
           @update:value="onOtp"
           placeholder="#"
         />
@@ -137,7 +126,7 @@ defineExpose({
             size="small"
             @close="onDrop(d.id)"
           >
-            {{ discountTypeLabel(d.discountType) }}：{{ d.name }}
+            {{ discountTypeLabel[d.discountType] ?? d.discountType }}：{{ d.name }}
           </NTag>
         </NFlex>
       </template>
