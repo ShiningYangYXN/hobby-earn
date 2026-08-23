@@ -78,6 +78,7 @@ export const useOrderStore = defineStore('order', () => {
     id: string,
     items: OrderItem[],
     discountRecords?: DiscountRecord[],
+    paymentMethod?: PaymentMethod,
   ): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o) return
@@ -86,6 +87,7 @@ export const useOrderStore = defineStore('order', () => {
       o.discountRecords = discountRecords
       o.discountAmount = discountRecords.reduce((s, r) => s + r.discountAmount, 0)
     }
+    if (paymentMethod) o.paymentMethod = paymentMethod
     o.subtotal = subtotalOf(items)
     o.finalAmount = Math.max(0, o.subtotal - (o.discountAmount ?? 0))
     await put('orders', o)
@@ -125,7 +127,8 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  // 重新打开已关闭的订单：重新使用优惠（重新占用用量而非退还），状态回到待处理
+  // 重新打开已关闭的订单：恢复状态为待处理，不重新占用优惠用量
+  // （用量在创建订单时已记录，关闭时已退还；此处仅还原订单状态）
   // 若订单关联的任一优惠已过期 / 停用 / 超兑，则禁止重新打开
   async function reopen(id: string): Promise<{ ok: boolean; reason?: string }> {
     const o = orders.value.find((x) => x.id === id)
@@ -145,10 +148,6 @@ export const useOrderStore = defineStore('order', () => {
         return { ok: false, reason: `无法重新打开：${why}` }
       }
     }
-    // 重新占用优惠用量（重新使用优惠）
-    for (const rec of o.discountRecords) {
-      await discountStore.recordUsage(rec.discountId, o.memberId)
-    }
     o.status = 'pending'
     await put('orders', o)
     return { ok: true }
@@ -166,7 +165,21 @@ export const useOrderStore = defineStore('order', () => {
       o.items = patch.items
       o.subtotal = subtotalOf(patch.items)
     }
-    if (patch.discountRecords) {
+    if (patch.discountRecords !== undefined) {
+      const oldIds = new Set(o.discountRecords.map((r) => r.discountId))
+      const newIds = new Set(patch.discountRecords.map((r) => r.discountId))
+      // 被移除的优惠：回退用量
+      for (const rec of o.discountRecords) {
+        if (!newIds.has(rec.discountId)) {
+          await discountStore.rollbackUsage(rec.discountId, o.memberId)
+        }
+      }
+      // 新增的优惠：补计用量
+      for (const rec of patch.discountRecords) {
+        if (!oldIds.has(rec.discountId)) {
+          await discountStore.recordUsage(rec.discountId, o.memberId)
+        }
+      }
       o.discountRecords = patch.discountRecords
       o.discountAmount = patch.discountRecords.reduce((s, r) => s + r.discountAmount, 0)
     }
@@ -193,13 +206,10 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  // 调试：强制重新打开已关闭订单，绕过优惠过期 / 停用 / 超兑校验
+  // 调试：强制重新打开已关闭订单，绕过优惠过期 / 停用 / 超兑校验（仅恢复状态，不修改优惠用量）
   async function forceReopen(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o || o.status !== 'closed') return
-    for (const rec of o.discountRecords) {
-      await discountStore.recordUsage(rec.discountId, o.memberId)
-    }
     o.status = 'pending'
     await put('orders', o)
   }

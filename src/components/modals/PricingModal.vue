@@ -72,10 +72,10 @@ const statusLabel = (s: OrderStatus) =>
   ({ pending: '待处理', in_progress: '执行中', completed: '已完成', closed: '已关闭' })[s]
 const statusType = (s: OrderStatus) =>
   ({ pending: 'warning', in_progress: 'info', completed: 'success', closed: 'default' })[s] as
-    | 'warning'
-    | 'info'
-    | 'success'
-    | 'default'
+  | 'warning'
+  | 'info'
+  | 'success'
+  | 'default'
 
 const order = ref<Order | null>(null)
 const items = ref<OrderItem[]>([])
@@ -182,6 +182,8 @@ async function saveProgress() {
   await orderStore.saveExecution(
     order.value.id,
     items.value.map((it) => ({ ...it })),
+    undefined,
+    payMethod.value,
   )
   msg.success('进度已保存')
   emit('saved')
@@ -190,13 +192,13 @@ async function finish(m: PaymentMethod) {
   if (!order.value) return
   stopTimer()
   try {
+    await discountPanel.value?.commitUsage()
     await orderStore.finalize(
       order.value.id,
       items.value.map((it) => ({ ...it })),
       discountPanel.value?.records ?? [],
       m,
     )
-    await discountPanel.value?.commitUsage().catch(() => {})
   } catch (e) {
     msg.error('完成失败：' + (e as Error).message)
     return
@@ -212,14 +214,8 @@ function closePricing() {
 </script>
 
 <template>
-  <NModal
-    :show="show"
-    title="计价"
-    preset="card"
-    class="modal-xl"
-    :maskClosable="false"
-    @update:show="(v: boolean) => emit('update:show', v)"
-  >
+  <NModal :show="show" title="计价" preset="card" class="modal-xl" :maskClosable="false"
+    @update:show="(v: boolean) => emit('update:show', v)">
     <NScrollbar class="modal-scroll">
       <template v-if="order">
         <NFlex vertical :size="10">
@@ -228,7 +224,7 @@ function closePricing() {
             <NTag size="small">单号 {{ order.id.slice(-8) }}</NTag>
             <NTag size="small" :type="statusType(order.status)">{{
               statusLabel(order.status)
-            }}</NTag>
+              }}</NTag>
           </NFlex>
 
           <NEmpty v-if="!items.length" description="该订单无计价项目" />
@@ -241,14 +237,9 @@ function closePricing() {
                 <NFlex align="center" :size="10">
                   <NText v-if="it.pricingMode === 'hourly'" class="meter-num">{{
                     fmtElapsed(it.elapsed ?? 0)
-                  }}</NText>
+                    }}</NText>
                   <template v-if="it.pricingMode === 'hourly'">
-                    <NButton
-                      size="small"
-                      circle
-                      :type="running[idx] ? 'warning' : 'primary'"
-                      @click="toggle(idx)"
-                    >
+                    <NButton size="small" circle :type="running[idx] ? 'warning' : 'primary'" @click="toggle(idx)">
                       <NIcon v-if="!running[idx]">
                         <IconPlayerPlay />
                       </NIcon>
@@ -263,22 +254,10 @@ function closePricing() {
                     </NButton>
                   </template>
                   <template v-else>
-                    <NText
-                      v-if="!editing[idx]"
-                      class="meter-num qty-display"
-                      @click="startEdit(idx)"
-                      >{{ it.quantity }}
+                    <NText v-if="!editing[idx]" class="meter-num qty-display" @click="startEdit(idx)">{{ it.quantity }}
                     </NText>
-                    <NInputNumber
-                      v-else
-                      v-model:value="it.quantity"
-                      :min="1"
-                      size="small"
-                      style="width: 90px"
-                      v-focus
-                      @blur="stopEdit(idx)"
-                      @keyup.enter="stopEdit(idx)"
-                    />
+                    <NInputNumber v-else v-model:value="it.quantity" :min="1" size="small" style="width: 90px" v-focus
+                      @blur="stopEdit(idx)" @keyup.enter="stopEdit(idx)" />
                   </template>
                 </NFlex>
               </NFlex>
@@ -289,28 +268,15 @@ function closePricing() {
             <NFlex justify="space-between" align="center">
               <NText depth="3">补充服务项目</NText>
               <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
-                <NSelect
-                  v-model:value="newServiceId"
-                  :options="priceOptions"
-                  placeholder="选择要追加的服务"
-                  clearable
-                  filterable
-                  style="flex: 1; min-width: 0"
-                />
-                <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService"
-                  >添加</NButton
-                >
+                <NSelect v-model:value="newServiceId" :options="priceOptions" placeholder="选择要追加的服务" clearable
+                  filterable style="flex: 1; min-width: 0" />
+                <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService">添加</NButton>
               </NFlex>
             </NFlex>
           </NCard>
 
-          <DiscountApplyPanel
-            ref="discountPanel"
-            :member-id="order?.memberId ?? null"
-            :member-name="order?.memberName"
-            :items="items"
-            @change="onDiscountChange"
-          />
+          <DiscountApplyPanel ref="discountPanel" :member-id="order?.memberId ?? null" :member-name="order?.memberName"
+            :items="items" @change="onDiscountChange" />
 
           <NCard size="small">
             <NFlex vertical :size="6">
@@ -318,19 +284,15 @@ function closePricing() {
                 <NText depth="3">小计</NText>
                 <NText>¥{{ fmt(liveSubtotal) }}</NText>
               </NFlex>
-              <NFlex
-                v-if="(discountPanel?.discountAmount ?? 0) > 0"
-                justify="space-between"
-                align="center"
-              >
+              <NFlex v-if="(discountPanel?.discountAmount ?? 0) > 0" justify="space-between" align="center">
                 <NText depth="3">优惠</NText>
                 <NText type="error">-¥{{ fmt(discountPanel?.discountAmount ?? 0) }}</NText>
               </NFlex>
               <NFlex justify="space-between" align="center">
                 <NText strong>金额</NText>
-                <NText type="warning" class="meter-num qty-display" style="font-size: 20px"
-                  >¥{{ fmt(discountPanel?.finalAmount ?? liveSubtotal) }}</NText
-                >
+                <NText type="warning" class="meter-num qty-display" style="font-size: 20px">¥{{
+                  fmt(discountPanel?.finalAmount ??
+                  liveSubtotal) }}</NText>
               </NFlex>
             </NFlex>
           </NCard>
@@ -339,7 +301,7 @@ function closePricing() {
             <NRadioGroup v-model:value="payMethod">
               <NRadioButton v-for="p in payOpts" :key="p.value" :value="p.value">{{
                 p.label
-              }}</NRadioButton>
+                }}</NRadioButton>
             </NRadioGroup>
           </NFormItem>
 
@@ -362,7 +324,9 @@ function closePricing() {
           保存进度
         </NButton>
         <NButton type="primary" @click="finish(payMethod)">
-          <NIcon> <IconCoinYen /> </NIcon>完成并收款
+          <NIcon>
+            <IconCoinYen />
+          </NIcon>完成并收款
         </NButton>
       </NFlex>
     </template>

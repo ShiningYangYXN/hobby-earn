@@ -3,7 +3,7 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { usePriceStore } from '@/stores/usePriceStore'
-import { subtotalOf, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
+import { subtotalOf, itemAmount, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
 
 /**
  * 订单/计价场景下的优惠应用逻辑：
@@ -33,6 +33,16 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
     }
     return [...set]
   }
+  // 品类优惠：仅对命中指定品类的订单项计算金额
+  function categorySubtotal(categoryIds: string[]): number {
+    const matched = new Set(categoryIds)
+    let s = 0
+    for (const it of getItems()) {
+      const p = priceStore.prices.find((x) => x.id === it.priceEntryId)
+      if (p?.category && matched.has(p.category)) s += itemAmount(it)
+    }
+    return s
+  }
 
   function memberTypeId(): string | undefined {
     const mid = getMemberId()
@@ -55,6 +65,7 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
       completedCount(),
       memberTypeId(),
       categories(),
+      d.discountType === 'category' ? categorySubtotal(d.categoryIds ?? []) : undefined,
     )
   }
 
@@ -115,19 +126,28 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
     countedIds.value = new Set()
     for (const r of records ?? []) {
       const d = discountStore.discounts.find((x) => x.id === r.discountId)
-      if (d) {
+      if (d && calc(d)) {
         applied.value.push(d)
         countedIds.value.add(d.id)
       }
     }
   }
 
-  const records = computed<DiscountRecord[]>(() => {
-    const chosen = applied.value.filter((d) => !!calc(d))
-    // 互斥分组内只保留减免最大者（单优惠可归属多个组）
+  // 评估折扣对当前运行价格的实际贡献（用于互斥组内择优）
+  function effectiveContribution(d: Discount, currentPrice: number): number {
+    const r = calc(d)
+    if (!r) return 0
+    if (d.ruleType === 'percentage') {
+      const newPrice = Math.floor((currentPrice * d.value) / 100)
+      return currentPrice - newPrice
+    }
+    return Math.min(d.value, currentPrice)
+  }
+
+  function pickDiscounts(discounts: Discount[], currentPrice: number): Discount[] {
     const groups = new Map<string, Discount[]>()
     const noGroup: Discount[] = []
-    for (const d of chosen) {
+    for (const d of discounts) {
       const gs = d.exclusiveGroups ?? []
       if (gs.length) {
         for (const g of gs) {
@@ -138,10 +158,14 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
     }
     const picked: Discount[] = [...noGroup]
     for (const [, arr] of groups) {
-      arr.sort((a, b) => discOf(b) - discOf(a))
+      arr.sort((a, b) => effectiveContribution(b, currentPrice) - effectiveContribution(a, currentPrice))
       picked.push(arr[0]!)
     }
+    return picked
+  }
 
+  const records = computed<DiscountRecord[]>(() => {
+    const picked = pickDiscounts(applied.value.filter((d) => !!calc(d)), subtotal.value)
     // 应用顺序：先乘（percentage）后减（fixed），保底不低于 0
     const result: DiscountRecord[] = []
     let price = subtotal.value
@@ -176,11 +200,26 @@ export function useDiscountApply(getMemberId: () => string | null, getItems: () 
     }
     return result
   })
-  function discOf(d: Discount): number {
-    return calc(d)?.amount ?? 0
-  }
-  const discountAmount = computed(() => records.value.reduce((s, r) => s + r.discountAmount, 0))
-  const finalAmount = computed(() => Math.max(0, subtotal.value - discountAmount.value))
+  // 直接按运行价格计算最终金额，保证 discountAmount + finalAmount = subtotal 始终成立
+  const { discountAmount, finalAmount } = (() => {
+    const _discountAmount = computed(() => {
+      const picked = pickDiscounts(applied.value.filter((d) => !!calc(d)), subtotal.value)
+      let price = subtotal.value
+      for (const d of picked.filter((x) => x.ruleType === 'percentage')) {
+        const r = calc(d)
+        if (!r) continue
+        price = Math.floor((price * d.value) / 100)
+      }
+      for (const d of picked.filter((x) => x.ruleType === 'fixed')) {
+        const r = calc(d)
+        if (!r) continue
+        price = Math.max(0, price - d.value)
+      }
+      return Math.max(0, subtotal.value - price)
+    })
+    const _finalAmount = computed(() => Math.max(0, subtotal.value - _discountAmount.value))
+    return { discountAmount: _discountAmount, finalAmount: _finalAmount }
+  })()
 
   async function commitUsage() {
     const mid = getMemberId()

@@ -46,6 +46,7 @@ const discountStore = useDiscountStore()
 const priceStore = usePriceStore()
 const memberTypeStore = useMemberTypeStore()
 const ui = useUiStore()
+const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
 const order = computed<Order | null>(() => orderStore.orders.find((o) => o.id === props.id) ?? null)
 
@@ -75,14 +76,36 @@ function loadDraft() {
   editDiscountRecords.value = o.discountRecords.map((r) => ({ ...r }))
   editDiscountAmount.value = o.discountAmount
   editFinalAmount.value = o.finalAmount
+  discountPanel.value?.hydrate(o.discountRecords)
+}
+function itemsEqual(a: OrderItem[], b: OrderItem[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!, y = b[i]!
+    if (x.priceEntryId !== y.priceEntryId || x.pricingMode !== y.pricingMode
+      || x.quantity !== y.quantity || x.unitPrice !== y.unitPrice
+      || x.elapsed !== y.elapsed || x.hourlyRate !== y.hourlyRate
+      || x.serviceName !== y.serviceName) return false
+  }
+  return true
+}
+function recordsEqual(a: DiscountRecord[], b: DiscountRecord[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!, y = b[i]!
+    if (x.discountId !== y.discountId || x.discountType !== y.discountType
+      || x.ruleType !== y.ruleType || x.discountAmount !== y.discountAmount
+      || x.description !== y.description) return false
+  }
+  return true
 }
 const draftDirty = computed(() => {
   const o = order.value
   if (!o) return false
   return (
     editNotes.value !== (o.notes ?? '') ||
-    editItems.value.length !== o.items.length ||
-    editDiscountRecords.value.length !== o.discountRecords.length
+    !itemsEqual(editItems.value, o.items) ||
+    !recordsEqual(editDiscountRecords.value, o.discountRecords)
   )
 })
 const priceOptions = computed(() =>
@@ -136,9 +159,10 @@ const readColumns = [
 
 const payOptions = [
   { label: '现金', value: 'cash' },
+  { label: '数字人民币', value: 'ecny' },
+  { label: '云闪付', value: 'unionpay' },
   { label: '微信', value: 'wechat' },
   { label: '支付宝', value: 'alipay' },
-  { label: '其他', value: 'ecny' },
 ]
 
 // 优惠记录详情弹窗
@@ -320,14 +344,7 @@ async function forceReopenOrder() {
 </script>
 
 <template>
-  <NModal
-    :show="!!order"
-    title="订单详情"
-    preset="card"
-    class="modal-lg"
-    :autoFocus="false"
-    @update:show="close"
-  >
+  <NModal :show="!!order" title="订单详情" preset="card" class="modal-lg" :autoFocus="false" @update:show="close">
     <NScrollbar v-if="order" class="modal-scroll">
       <NDescriptions :column="2" bordered size="small">
         <NDescriptionsItem label="订单号">{{ order.id }}</NDescriptionsItem>
@@ -339,63 +356,43 @@ async function forceReopenOrder() {
         <NDescriptionsItem label="会员">{{ order.memberName }}</NDescriptionsItem>
         <NDescriptionsItem label="创建时间">{{
           new Date(order.createdAt).toLocaleString()
-        }}</NDescriptionsItem>
+          }}</NDescriptionsItem>
       </NDescriptions>
 
       <!-- 未执行订单：可编辑 -->
       <template v-if="editable">
         <NCard size="small" title="服务项" style="margin-top: 12px">
           <NFlex vertical :size="8">
-            <NFlex
-              v-for="(it, i) in editItems"
-              :key="i"
-              align="center"
-              :size="8"
-              style="width: 100%"
-            >
-              <NSelect
-                v-model:value="it.priceEntryId"
-                :options="priceOptions"
-                placeholder="选择服务"
-                filterable
-                style="min-width: 220px"
-                @update:value="() => onItemPriceChange(i)"
-              />
-              <NInputNumber
-                v-if="it.pricingMode === 'perPiece'"
-                v-model:value="it.quantity"
-                :min="1"
-                style="width: 90px"
-              />
+            <NFlex v-for="(it, i) in editItems" :key="i" align="center" :size="8" style="width: 100%">
+              <NSelect v-model:value="it.priceEntryId" :options="priceOptions" placeholder="选择服务" filterable
+                style="min-width: 220px" @update:value="() => onItemPriceChange(i)" />
+              <NInputNumber v-if="it.pricingMode === 'perPiece'" v-model:value="it.quantity" :min="1"
+                style="width: 90px" />
               <NText v-else depth="3">待计费</NText>
               <NButton text type="error" @click="editItems.splice(i, 1)">
-                <NIcon><IconTrash /></NIcon>删除
+                <NIcon>
+                  <IconTrash />
+                </NIcon>删除
               </NButton>
             </NFlex>
             <NButton dashed block @click="addItemRow">
-              <NIcon :size="16"><IconPlus /></NIcon> 添加服务项
+              <NIcon :size="16">
+                <IconPlus />
+              </NIcon> 添加服务项
             </NButton>
           </NFlex>
         </NCard>
 
         <NFormItem label="备注" style="margin-top: 12px">
-          <NInput
-            v-model:value="editNotes"
-            type="textarea"
-            placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
+          <NInput v-model:value="editNotes" type="textarea" placeholder="备注（可选）"
+            :autosize="{ minRows: 2, maxRows: 4 }" />
         </NFormItem>
 
         <NCard size="small" title="优惠" style="margin-top: 4px">
-          <DiscountApplyPanel
-            :member-id="memberId"
-            :member-name="memberName"
-            :items="editItems"
+          <DiscountApplyPanel ref="discountPanel" :member-id="memberId" :member-name="memberName" :items="editItems"
             @update:records="(r: DiscountRecord[]) => (editDiscountRecords = r)"
             @update:discountAmount="(v: number) => (editDiscountAmount = v)"
-            @update:finalAmount="(v: number) => (editFinalAmount = v)"
-          />
+            @update:finalAmount="(v: number) => (editFinalAmount = v)" />
         </NCard>
 
         <NFlex justify="space-between" style="margin-top: 12px">
@@ -403,25 +400,15 @@ async function forceReopenOrder() {
           <NText type="error" v-if="editDiscountAmount">优惠：-{{ fmt(editDiscountAmount) }}</NText>
           <NText strong>应收：{{ fmt(editFinalAmount) }}</NText>
         </NFlex>
-        <NCard
-          v-if="editDiscountRecords.length"
-          size="small"
-          title="优惠明细"
-          style="margin-top: 12px"
-        >
+        <NCard v-if="editDiscountRecords.length" size="small" title="优惠明细" style="margin-top: 12px">
           <NFlex vertical :size="8">
-            <NFlex
-              v-for="(rec, i) in editDiscountRecords"
-              :key="i"
-              align="center"
-              justify="space-between"
-              style="width: 100%"
-            >
+            <NFlex v-for="(rec, i) in editDiscountRecords" :key="i" align="center" justify="space-between"
+              style="width: 100%">
               <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
                 <NFlex align="center" :size="6">
                   <NTag size="tiny">{{
                     discountTypeLabel[rec.discountType] ?? rec.discountType
-                  }}</NTag>
+                    }}</NTag>
                   {{ discountNameOf(rec) }}
                 </NFlex>
               </NButton>
@@ -433,40 +420,23 @@ async function forceReopenOrder() {
 
       <!-- 其他状态：只读 -->
       <template v-else>
-        <NDataTable
-          :columns="readColumns"
-          :data="order.items"
-          :pagination="false"
-          size="small"
-          style="margin-top: 12px"
-        />
+        <NDataTable :columns="readColumns" :data="order.items" :pagination="false" size="small"
+          style="margin-top: 12px" />
 
         <NFlex justify="space-between" style="margin-top: 12px">
           <NText>小计：{{ fmt(order.subtotal) }}</NText>
-          <NText type="error" v-if="order.discountAmount"
-            >优惠：-{{ fmt(order.discountAmount) }}</NText
-          >
+          <NText type="error" v-if="order.discountAmount">优惠：-{{ fmt(order.discountAmount) }}</NText>
           <NText strong type="warning">应收：{{ fmt(order.finalAmount) }}</NText>
         </NFlex>
-        <NCard
-          v-if="order.discountRecords.length"
-          size="small"
-          title="优惠明细"
-          style="margin-top: 12px"
-        >
+        <NCard v-if="order.discountRecords.length" size="small" title="优惠明细" style="margin-top: 12px">
           <NFlex vertical :size="8">
-            <NFlex
-              v-for="(rec, i) in order.discountRecords"
-              :key="i"
-              align="center"
-              justify="space-between"
-              style="width: 100%"
-            >
+            <NFlex v-for="(rec, i) in order.discountRecords" :key="i" align="center" justify="space-between"
+              style="width: 100%">
               <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
                 <NFlex align="center" :size="6">
                   <NTag size="tiny">{{
                     discountTypeLabel[rec.discountType] ?? rec.discountType
-                  }}</NTag>
+                    }}</NTag>
                   {{ discountNameOf(rec) }}
                 </NFlex>
               </NButton>
@@ -477,7 +447,7 @@ async function forceReopenOrder() {
         <NText depth="3" v-if="order.paymentMethod" style="display: block; margin-top: 6px">
           收款方式：
           <NTag v-if="order.paymentMethod" size="small">
-            {{ payOptions.find((p) => p.value === order?.paymentMethod)?.label }}
+            {{payOptions.find((p) => p.value === order?.paymentMethod)?.label}}
           </NTag>
         </NText>
         <NText depth="3" v-if="order.notes" style="display: block; margin-top: 6px">
@@ -492,37 +462,32 @@ async function forceReopenOrder() {
           <NButton :disabled="!draftDirty" @click="saveDraft">保存修改</NButton>
         </template>
         <template v-else>
-          <NButton
-            v-if="order && (order.status === 'pending' || order.status === 'in_progress')"
-            @click="doCancel"
-          >
-            <NIcon :size="16"><IconX /></NIcon> 关闭订单
+          <NButton v-if="order && (order.status === 'pending' || order.status === 'in_progress')" @click="doCancel">
+            <NIcon :size="16">
+              <IconX />
+            </NIcon> 关闭订单
           </NButton>
-          <NButton
-            v-if="order && (order.status === 'pending' || order.status === 'in_progress')"
-            type="primary"
-            @click="goMeter"
-          >
-            <NIcon :size="16"><IconStopwatch /></NIcon> 去计价
+          <NButton v-if="order && (order.status === 'pending' || order.status === 'in_progress')" type="primary"
+            @click="goMeter">
+            <NIcon :size="16">
+              <IconStopwatch />
+            </NIcon> 去计价
           </NButton>
-          <NButton
-            v-if="order && order.status === 'closed'"
-            type="primary"
-            :disabled="!!reopenBlockedReason"
-            :title="reopenBlockedReason || ''"
-            @click="doReopen"
-          >
-            <NIcon :size="16"><IconPlus /></NIcon> 重新打开
+          <NButton v-if="order && order.status === 'closed'" type="primary" :disabled="!!reopenBlockedReason"
+            :title="reopenBlockedReason || ''" @click="doReopen">
+            <NIcon :size="16">
+              <IconPlus />
+            </NIcon> 重新打开
           </NButton>
           <NButton v-if="order && order.status === 'closed'" type="error" @click="doDelete">
-            <NIcon :size="16"><IconTrash /></NIcon> 删除
+            <NIcon :size="16">
+              <IconTrash />
+            </NIcon> 删除
           </NButton>
-          <NButton
-            v-if="order && order.status === 'completed' && ui.advancedMode"
-            type="error"
-            @click="doDelete"
-          >
-            <NIcon :size="16"><IconTrash /></NIcon> 删除
+          <NButton v-if="order && order.status === 'completed' && ui.advancedMode" type="error" @click="doDelete">
+            <NIcon :size="16">
+              <IconTrash />
+            </NIcon> 删除
           </NButton>
           <template v-if="ui.advancedMode">
             <NButton type="warning" @click="forceReopenOrder">调试：强制重开</NButton>
@@ -539,21 +504,13 @@ async function forceReopenOrder() {
   </NModal>
 
   <!-- 优惠（券）详情弹窗 -->
-  <NModal
-    v-model:show="showDiscountDetail"
-    preset="card"
-    title="优惠详情"
-    class="modal-md"
-    :bordered="false"
-  >
+  <NModal v-model:show="showDiscountDetail" preset="card" title="优惠详情" class="modal-md" :bordered="false">
     <NDescriptions v-if="selectedRecord" labelPlacement="left" bordered :column="1" size="small">
       <NDescriptionsItem label="优惠名称">{{ discountNameOf(selectedRecord) }}</NDescriptionsItem>
       <NDescriptionsItem label="优惠类型">
         {{ discountTypeLabel[selectedRecord.discountType] ?? selectedRecord.discountType }}
       </NDescriptionsItem>
-      <NDescriptionsItem label="实扣金额"
-        >减 {{ fmt(selectedRecord.discountAmount) }}</NDescriptionsItem
-      >
+      <NDescriptionsItem label="实扣金额">减 {{ fmt(selectedRecord.discountAmount) }}</NDescriptionsItem>
       <template v-if="selectedDiscount">
         <NDescriptionsItem label="优惠规则">
           {{ selectedDiscount.ruleType === 'percentage' ? '打折（按比例）' : '固定金额减免' }}

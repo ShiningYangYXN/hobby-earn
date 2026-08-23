@@ -48,14 +48,17 @@ export const useDiscountStore = defineStore('discount', () => {
   async function update(id: string, patch: Partial<Discount>): Promise<void> {
     const idx = discounts.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
-    const next = { ...discounts.value[idx]!, ...patch }
-    // 编辑时若改为券码类型且手动填写了券码，需校验位数
-    if (
-      next.discountType === 'coupon' &&
-      next.code &&
-      !isValidCodeFormat(next.code.toUpperCase())
-    ) {
-      throw new Error(`券码必须为 ${CODE_LENGTH} 位字母或数字`)
+    let next = { ...discounts.value[idx]!, ...patch }
+    // 编辑时若改为券码类型且手动填写了券码，需校验位数并统一大写
+    if (next.discountType === 'coupon') {
+      if (next.code && next.code.trim()) {
+        if (!isValidCodeFormat(next.code.toUpperCase())) {
+          throw new Error(`券码必须为 ${CODE_LENGTH} 位字母或数字`)
+        }
+        next = { ...next, code: next.code.toUpperCase() }
+      } else {
+        next = { ...next, code: undefined }
+      }
     }
     discounts.value[idx] = next
     await put('discounts', discounts.value[idx]!)
@@ -159,6 +162,7 @@ export const useDiscountStore = defineStore('discount', () => {
     completedCount: number,
     memberTypeId?: string,
     categories?: string[],
+    categoryAmount?: number,
   ): { desc: string; amount: number } | null {
     if (!d.isActive || !inRange(d) || subtotal < d.minAmount) return null
     if (d.usageLimit !== null && d.usedCount >= d.usageLimit) return null
@@ -174,13 +178,21 @@ export const useDiscountStore = defineStore('discount', () => {
       if (!categories || !categories.some((c) => cats.includes(c))) return null
     }
     if (d.discountType === 'firstOrder' && completedCount > 0) return null
-    if (d.discountType === 'repeatOrder' && completedCount < (d.repeatThreshold ?? 1)) return null
+    // 累次优惠：仅在第 N、2N、3N...单时生效（如 threshold=5：第5单、第10单、第15单…）
+    if (d.discountType === 'repeatOrder') {
+      const threshold = d.repeatThreshold ?? 1
+      if (threshold < 1 || completedCount % threshold !== threshold - 1) return null
+    }
+    // 品类优惠：只对命中品类的订单项金额计算折扣
+    const baseAmount = d.discountType === 'category' && categoryAmount !== undefined
+      ? categoryAmount
+      : subtotal
     const amount =
       d.ruleType === 'percentage'
         ? // 乘法打折：value 为「折率百分比」（如 90 = 打 9 折，实付 90%）
-          Math.min(subtotal - Math.floor((subtotal * d.value) / 100), d.maxDiscount ?? Infinity)
-        : // 减法：直接减固定金额（分）
-          Math.min(d.value, subtotal)
+          Math.min(baseAmount - Math.floor((baseAmount * d.value) / 100), d.maxDiscount ?? Infinity)
+        : // 减法：直接减固定金额（分），同时受 maxDiscount 约束
+          Math.min(d.value, baseAmount, d.maxDiscount ?? Infinity)
     let desc =
       d.ruleType === 'percentage'
         ? `满${cents(d.minAmount)}打${(d.value / 10).toString()}折`
@@ -218,5 +230,5 @@ function inRange(d: Discount): boolean {
   return true
 }
 function cents(c: number): string {
-  return (c / 100).toFixed(0)
+  return (c / 100).toFixed(2)
 }
