@@ -38,9 +38,10 @@ export const useCategoryStore = defineStore('category', () => {
         })
       }
     }
-    for (const d of discountStore.discounts.filter((x) => x.categoryIds?.includes(id))) {
+    for (const d of discountStore.discounts.filter((x) => x.scope?.categories?.includes(id))) {
+      const sc = d.scope!
       await discountStore.update(d.id, {
-        categoryIds: d.categoryIds!.filter((c) => c !== id),
+        scope: { ...sc, categories: (sc.categories ?? []).filter((c) => c !== id) },
       })
     }
     for (const g of limitGroupStore.groups.filter((x) => x.categoryIds?.includes(id))) {

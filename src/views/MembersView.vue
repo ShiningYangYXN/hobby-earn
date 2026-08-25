@@ -104,34 +104,32 @@ watch(
     <NH2 prefix="bar">会员管理</NH2>
 
     <NCard>
-      <NFlex align="center" justify="space-between">
-        <NText>会员种类用于给会员分类，新建会员时可选择所属种类。</NText>
-        <NButton type="primary" @click="openTypeManagement">
-          <NIcon :size="16">
-            <IconVip />
-          </NIcon>
-          管理会员种类
-        </NButton>
-      </NFlex>
-    </NCard>
-
-    <NCard title="会员列表">
       <NFlex vertical :size="12">
-        <NFlex align="center" :size="12" wrap>
-          <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 160px" />
-          <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 140px" />
-          <NInput
-            v-model:value="keyword"
-            placeholder="搜索姓名 / 手机"
-            clearable
-            style="width: 200px"
-          />
-          <NButton type="primary" @click="openNew">
-            <NIcon :size="16">
-              <IconPlus />
-            </NIcon>
-            新建会员
-          </NButton>
+        <NFlex align="center" justify="space-between" :size="12" wrap>
+          <NFlex align="center" :size="12" wrap>
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索姓名 / 手机"
+              clearable
+              style="width: 200px"
+            />
+            <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 160px" />
+            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 140px" />
+          </NFlex>
+          <NFlex align="center" :size="12" wrap>
+            <NButton @click="openTypeManagement">
+              <NIcon :size="16">
+                <IconVip />
+              </NIcon>
+              管理会员种类
+            </NButton>
+            <NButton type="primary" @click="openNew">
+              <NIcon :size="16">
+                <IconPlus />
+              </NIcon>
+              新建会员
+            </NButton>
+          </NFlex>
         </NFlex>
         <NDataTable
           v-if="list.length"

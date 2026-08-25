@@ -31,7 +31,7 @@ import { usePriceStore } from '@/stores/usePriceStore'
 import CategorySelect from '@/components/CategorySelect.vue'
 import ManageModal from '@/components/CategoryManageModal.vue'
 import { genCouponCode } from '@/stores/types'
-import type { Discount, DiscountScope, RandomConfig, RuleType, TimeWindow } from '@/stores/types'
+import type { Discount, DiscountLimitGroup, DiscountScope, RandomConfig, RuleType, TimeWindow } from '@/stores/types'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
@@ -49,7 +49,7 @@ const editing = computed(() => !!props.id)
 const ruleOptions = [
   { label: '满减（固定金额）', value: 'fixed' as RuleType },
   { label: '打折（百分比）', value: 'percentage' as RuleType },
-  { label: '每满减', value: 'stepDown' as RuleType },
+  { label: '每满减（阶梯立减）', value: 'stepDown' as RuleType },
   { label: '件件减（每件立减）', value: 'perItem' as RuleType },
 ]
 const randomKindOptions = [
@@ -264,7 +264,9 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
 function validate(f: DiscountForm): string | null {
   if (!f.name.trim()) return '请输入优惠名称'
   const r = f.ruleType
-  if (r === 'percentage' || r === 'stepDown') {
+  if (r === 'percentage') {
+    if (f.value < 0 || f.value > 100) return '折扣力度需为 0-100（0 = 免单）'
+  } else if (r === 'stepDown') {
     if (f.value <= 0 || f.value > 100) return '折扣力度需为 1-100'
   } else if (f.value <= 0) {
     return '优惠金额需大于 0'
@@ -276,8 +278,7 @@ function validate(f: DiscountForm): string | null {
   if (f.maxUnits != null && f.maxUnits <= 0) return '最大执行件数/阶梯数需大于 0'
   if (f.scope.enabledTime && (!f.scope.validFrom || !f.scope.validUntil))
     return '请设置有效的起止时间'
-  if (f.scope.enabledMemberTypes && f.scope.memberTypeIds.length === 0)
-    return '请选择限定会员种类'
+  if (f.scope.enabledMemberTypes && f.scope.memberTypeIds.length === 0) return '请选择限定会员种类'
   if (f.scope.enabledMembers && f.scope.memberIds.length === 0) return '请选择限定会员'
   if (f.scope.enabledCategories && f.scope.categoryIds.length === 0) return '请选择参与优惠的分类'
   if (f.scope.enabledItems && f.scope.itemIds.length === 0) return '请选择参与优惠的单品'
@@ -285,7 +286,11 @@ function validate(f: DiscountForm): string | null {
     if (f.randomMin < 0 || f.randomMax < 0) return '随机范围不能为负'
     if (f.randomMax < f.randomMin) return '随机上限不能小于下限'
   }
-  if (f.couponEnabled && f.couponCode.trim() && !/^[A-Z0-9]{4,}$/.test(f.couponCode.trim().toUpperCase()))
+  if (
+    f.couponEnabled &&
+    f.couponCode.trim() &&
+    !/^[A-Z0-9]{4,}$/.test(f.couponCode.trim().toUpperCase())
+  )
     return '券码需为 4 位以上字母或数字'
   return null
 }
@@ -323,7 +328,9 @@ function genCode() {
 const showLimitManager = ref(false)
 const showExclusiveManager = ref(false)
 
-const limitItemOptions = computed(() => priceStore.prices.map((p) => ({ label: p.name, value: p.id })))
+const limitItemOptions = computed(() =>
+  priceStore.prices.map((p) => ({ label: p.name, value: p.id })),
+)
 const limitScopeOptions = [
   { label: '全部订单金额', value: 'all' },
   { label: '仅指定单品', value: 'items' },
@@ -346,7 +353,8 @@ function limitRowText(g: Record<string, unknown>): string {
 function limitValidate(f: Record<string, unknown>): string | null {
   if (Number(f.limit) <= 0) return '请填写组上限（大于 0）'
   if (f.scope === 'items' && !(f.itemIds as string[])?.length) return '请选择参与计算的具体单品'
-  if (f.scope === 'categories' && !(f.categoryIds as string[])?.length) return '请选择参与计算的分类'
+  if (f.scope === 'categories' && !(f.categoryIds as string[])?.length)
+    return '请选择参与计算的分类'
   return null
 }
 function limitToForm(g: Record<string, unknown>) {
@@ -359,14 +367,15 @@ function limitToForm(g: Record<string, unknown>) {
     categoryIds: (g.categoryIds as string[]) ?? [],
   }
 }
-function limitBuildPayload(f: Record<string, unknown>) {
+function limitBuildPayload(f: Record<string, unknown>): Omit<DiscountLimitGroup, 'id'> {
   return {
     name: String(f.name).trim(),
-    limitType: f.limitType,
-    limit: Math.round(Number(f.limit) * (f.limitType === 'amount' ? 100 : 1)),
-    scope: f.scope,
+    limitType: f.limitType as 'amount' | 'ratio',
+    limitValue: Math.round(Number(f.limit) * (f.limitType === 'amount' ? 100 : 1)),
+    scope: f.scope as 'all' | 'items' | 'categories',
     itemIds: f.scope === 'items' ? (f.itemIds as string[]) : undefined,
     categoryIds: f.scope === 'categories' ? (f.categoryIds as string[]) : undefined,
+    discountIds: [],
   }
 }
 async function limitCreate(f: Record<string, unknown>) {
@@ -389,7 +398,6 @@ function exclusiveUpdate(id: string, f: Record<string, unknown>) {
 async function exclusiveRemove(id: string) {
   await exclusiveStore.remove(id)
   if (form.value.exclusiveGroupId === id) form.value.exclusiveGroupId = null
-  await store.removeExclusiveGroupRef(id)
 }
 </script>
 
@@ -426,8 +434,13 @@ async function exclusiveRemove(id: string) {
             :precision="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 0 : 2"
             style="width: 100%"
           />
-          <NText v-if="form.ruleType === 'perItem'" depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-            对优惠范围内的每个计价单元立减固定金额。按件计费项目：单件 = 一件；按工时计费项目：单件 = 一个工时（按时价计算）。
+          <NText
+            v-if="form.ruleType === 'perItem'"
+            depth="3"
+            style="font-size: 12px; display: block; margin-top: 4px"
+          >
+            对优惠范围内的每个计价单元立减固定金额。按件计费项目：单件 = 一件；按工时计费项目：单件
+            = 一个工时（按时价计算）。
           </NText>
         </NFormItem>
 
@@ -535,7 +548,8 @@ async function exclusiveRemove(id: string) {
                 placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5；留空仅按起止时间"
               />
               <NText depth="3" style="font-size: 12px">
-                周期 cron 与起止时间为「且」关系；支持 * / 逗号列表 / 区间(9-18)。留空表示仅受起止时间限制。
+                周期 cron 与起止时间为「且」关系；支持 * / 逗号列表 /
+                区间(9-18)。留空表示仅受起止时间限制。
               </NText>
             </template>
           </NFlex>
@@ -544,10 +558,7 @@ async function exclusiveRemove(id: string) {
         <NFormItem label="指定品类可用" label-placement="left">
           <NFlex vertical :size="4" style="width: 100%">
             <NSwitch v-model:value="form.scope.enabledCategories" />
-            <CategorySelect
-              v-if="form.scope.enabledCategories"
-              v-model="form.scope.categoryIds"
-            />
+            <CategorySelect v-if="form.scope.enabledCategories" v-model="form.scope.categoryIds" />
           </NFlex>
         </NFormItem>
 
@@ -610,7 +621,8 @@ async function exclusiveRemove(id: string) {
             style="width: 100%"
           />
           <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-            留空或 100 表示每次都尝试触发；小于 100 时按概率触发（仅自动优惠生效，附券码优惠不受影响）。
+            留空或 100 表示每次都尝试触发；小于 100
+            时按概率触发（仅自动优惠生效，附券码优惠不受影响）。
           </NText>
         </NFormItem>
 
@@ -694,7 +706,16 @@ async function exclusiveRemove(id: string) {
       title="上限组管理"
       :items="limitGroupStore.groups"
       :load="() => limitGroupStore.load()"
-      :empty-form="() => ({ name: '', limitType: 'amount', limit: 0, scope: 'all', itemIds: [], categoryIds: [] })"
+      :empty-form="
+        () => ({
+          name: '',
+          limitType: 'amount',
+          limit: 0,
+          scope: 'all',
+          itemIds: [],
+          categoryIds: [],
+        })
+      "
       :to-form="limitToForm"
       :row-text="limitRowText"
       :validate="limitValidate"

@@ -39,7 +39,7 @@ const priceStore = usePriceStore()
 const discountStore = useDiscountStore()
 
 function onAdvancedChange(val: boolean) {
-  msg.info(val ? '高级模式已开启' : '高级模式已关闭')
+  msg.info(val ? '作弊模式已开启' : '作弊模式已关闭')
 }
 
 // 连续点击产品图标 5 下解锁高级设置（相邻两次间隔不超过 0.5s）

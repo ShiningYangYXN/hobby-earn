@@ -149,19 +149,45 @@ onMounted(() => {
     <NH2 prefix="bar">订单管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
-        <NFlex align="center" :size="12" wrap>
-          <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
-          <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 160px" />
-          <NSelect v-model:value="discountFilter" :options="discountOptions" style="width: 140px" />
-          <NDatePicker v-model:value="dateRange" type="daterange" clearable placeholder="下单日期" style="width: 240px" />
-          <NInput v-model:value="keyword" placeholder="搜索会员 / 订单号" clearable style="width: 200px" />
-          <NButton type="primary" @click="openCreate">
-            <NIcon :size="16">
-              <IconPlus />
-            </NIcon> 新建订单
-          </NButton>
+        <NFlex align="center" justify="space-between" :size="12" wrap>
+          <NFlex align="center" :size="12" wrap>
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索会员 / 订单号"
+              clearable
+              style="width: 200px"
+            />
+            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
+            <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 160px" />
+            <NSelect
+              v-model:value="discountFilter"
+              :options="discountOptions"
+              style="width: 140px"
+            />
+            <NDatePicker
+              v-model:value="dateRange"
+              type="daterange"
+              clearable
+              placeholder="下单日期"
+              style="width: 240px"
+            />
+          </NFlex>
+          <NFlex align="center" :size="12" wrap>
+            <NButton type="primary" @click="openCreate">
+              <NIcon :size="16">
+                <IconPlus />
+              </NIcon>
+              新建订单
+            </NButton>
+          </NFlex>
         </NFlex>
-        <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" :scroll-x="tableScrollX(columns)" size="small" />
+        <NDataTable
+          :columns="columns"
+          :data="list"
+          :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
+          size="small"
+        />
         <NText v-if="!list.length" depth="3">暂无订单。</NText>
       </NFlex>
       <RouterView />

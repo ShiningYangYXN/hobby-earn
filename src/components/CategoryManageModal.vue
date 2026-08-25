@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable @typescript-eslint/no-explicit-any -- 通用动态表单壳，form 值类型为动态 */
 import { ref, reactive, onMounted } from 'vue'
 import {
   NModal,
@@ -9,6 +10,8 @@ import {
   NButton,
   NIcon,
   NText,
+  NScrollbar,
+  NDivider,
   useMessage,
   NPopconfirm,
 } from 'naive-ui'
@@ -19,7 +22,8 @@ interface RowItem {
   name: string
   [k: string]: unknown
 }
-type FormShape = Record<string, unknown>
+// 通用动态表单壳：表单值类型为 any，由调用方自行保证字段正确
+type FormShape = Record<string, any>
 
 const props = defineProps<{
   title: string
@@ -110,53 +114,59 @@ async function removeRow(id: string) {
     :bordered="false"
     @update:show="close"
   >
-    <NFlex vertical :size="12">
-      <NGrid cols="2" xGap="12" itemResponsive>
-        <NGi>
-          <NText depth="3" class="small-label">名称</NText>
-          <NInput v-model:value="form.name" placeholder="名称" @keyup.enter="save" />
-        </NGi>
-        <slot name="form-extra" :form="form" />
-      </NGrid>
-      <NFlex :size="8">
-        <NButton type="primary" @click="save">
-          <NIcon>
-            <IconPlus v-if="!editingId" />
-            <IconDeviceFloppy v-else />
-          </NIcon>
-          {{ editingId ? '保存' : '添加' }}
-        </NButton>
-        <NButton v-if="editingId" @click="reset">
-          <NIcon><IconX /></NIcon> 取消
-        </NButton>
-      </NFlex>
-
-      <NText v-if="!items.length" depth="3">暂无数据，请在上方添加。</NText>
-      <NFlex v-else vertical :size="6">
-        <NFlex
-          v-for="item in items"
-          :key="item.id"
-          align="center"
-          justify="space-between"
-          class="eg-row"
-        >
-          <NText>{{ rowLabel(item) }}</NText>
-          <NFlex :size="4">
-            <NButton size="tiny" @click="editRow(item)">
-              <NIcon><IconPencil /></NIcon> 编辑
+    <NScrollbar class="modal-scroll">
+      <NFlex vertical :size="16">
+        <NFlex vertical :size="12">
+          <NGrid cols="2" xGap="12" itemResponsive>
+            <NGi>
+              <NText depth="3" class="small-label">名称</NText>
+              <NInput v-model:value="form.name" placeholder="名称" @keyup.enter="save" />
+            </NGi>
+            <slot name="form-extra" :form="form" />
+          </NGrid>
+          <NFlex :size="8">
+            <NButton type="primary" @click="save">
+              <NIcon>
+                <IconPlus v-if="!editingId" />
+                <IconDeviceFloppy v-else />
+              </NIcon>
+              {{ editingId ? '保存' : '添加' }}
             </NButton>
-            <NPopconfirm @positive-click="removeRow(item.id)">
-              <template #trigger>
-                <NButton size="tiny" type="error">
-                  <NIcon><IconTrash /></NIcon> 删除
-                </NButton>
-              </template>
-              {{ confirmText ?? '确认删除？' }}
-            </NPopconfirm>
+            <NButton v-if="editingId" @click="reset">
+              <NIcon><IconX /></NIcon> 取消
+            </NButton>
+          </NFlex>
+        </NFlex>
+
+        <NDivider />
+
+        <NText v-if="!items.length" depth="3">暂无数据，请在上方添加。</NText>
+        <NFlex v-else vertical :size="6">
+          <NFlex
+            v-for="item in items"
+            :key="item.id"
+            align="center"
+            justify="space-between"
+            class="eg-row"
+          >
+            <NText>{{ rowLabel(item) }}</NText>
+            <NFlex :size="4">
+              <NButton size="tiny" @click="editRow(item)">
+                <NIcon><IconPencil /></NIcon> 编辑
+              </NButton>
+              <NPopconfirm @positive-click="removeRow(item.id)">
+                <template #trigger>
+                  <NButton size="tiny" type="error">
+                    <NIcon><IconTrash /></NIcon> 删除
+                  </NButton>
+                </template>
+                {{ confirmText ?? '确认删除？' }}
+              </NPopconfirm>
+            </NFlex>
           </NFlex>
         </NFlex>
       </NFlex>
-    </NFlex>
+    </NScrollbar>
 
     <template #footer>
       <NFlex justify="end">

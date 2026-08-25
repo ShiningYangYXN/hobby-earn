@@ -1,5 +1,3 @@
-import type { Component } from 'vue'
-
 // ============================================================
 // 金额单位：分（避免浮点精度问题）
 // ============================================================
@@ -12,6 +10,9 @@ export interface Member {
   name: string
   phone?: string
   remark?: string
+  isActive?: boolean // 是否启用（false=停用）；缺省视为启用
+  joinDate?: string // 入会时间（ISO 字符串，由 now() 生成）
+  notes?: string // 备注
   typeIds?: string[] // 所属会员类型 id 集合
 }
 
@@ -37,6 +38,7 @@ export interface PriceEntry {
   name: string
   isActive: boolean
   remark?: string
+  description?: string // 价格项描述 / 备注说明
   pricingMode: PricingMode
   basePrice: number
   categoryIds: string[]
@@ -184,6 +186,7 @@ export interface DiscountLimitGroup {
   limitType: 'amount' | 'ratio' // 金额封顶 / 比例封顶
   limitValue: number // amount: 分；ratio: 0-100
   scope: 'all' | 'items' | 'categories' // 封顶作用范围
+  itemIds?: string[] // scope=items 时的单品集合
   categoryIds?: string[] // scope=categories 时的品类集合
   discountIds: string[]
   remark?: string
@@ -229,12 +232,18 @@ export interface DiscountRecord {
   // 用于互斥/上限组反查
   exclusiveGroupId?: string | null
   limitGroups?: string[]
+
+  // 随机数额类：停表/下单抽取后固化的实际捕获值（amount=分；ratio=0-100 百分比）
+  capturedRandom?: number
+  // 随机触发类：下单时固化的「优惠资格」是否命中（true=生效，false=未触发，undefined=非随机）
+  triggered?: boolean
 }
 
 export interface Order {
   id: string
-  createdAt: number
-  updatedAt: number
+  createdAt: string // 创建时间（ISO 字符串，由 now() 生成）
+  updatedAt: string // 最近更新时间（ISO 字符串）
+  completedAt?: string // 完成时间（ISO 字符串，由 now() 生成）；缺省=未完成
   status: OrderStatus
   memberId: string | null
   memberName: string
@@ -274,6 +283,11 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
 // 工具函数
 // ============================================================
 export function itemAmount(it: OrderItem): number {
+  // 工时计费：按已计时长（秒）* 时薪（分/小时）换算，无视 quantity
+  if (it.pricingMode === 'hourly') {
+    const rate = it.hourlyRate ?? it.unitPrice ?? 0
+    return Math.round(((it.elapsed ?? 0) / 3600) * rate)
+  }
   return Math.round((it.quantity || 0) * (it.unitPrice || 0))
 }
 
@@ -302,6 +316,11 @@ export function genId(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 export const uid = genId
+
+// 订单号格式：order-{{timestamp}}-{{randomString}}
+export function genOrderId(): string {
+  return `order-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 export function now(): string {
   return new Date().toISOString()
 }

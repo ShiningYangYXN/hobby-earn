@@ -17,7 +17,11 @@ function close() {
     :items="store.categories"
     :load="() => store.load()"
     :empty-form="() => ({ name: '' })"
-    :create="(f) => { void store.create(f.name) }"
+    :create="
+      (f) => {
+        void store.create(f.name)
+      }
+    "
     :update="(id, f) => store.update(id, f.name)"
     :remove="(id) => store.remove(id)"
     :close="close"

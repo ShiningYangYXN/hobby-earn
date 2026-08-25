@@ -29,6 +29,7 @@ const msg = useMessage()
 const orderStore = useOrderStore()
 const priceStore = usePriceStore()
 const memberStore = useMemberStore()
+const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
 const newMember = ref<string | null>(null)
 const newItems = ref<{ priceId: string; quantity: number }[]>([])
@@ -105,9 +106,13 @@ async function doCreate() {
     msg.warning('请至少添加一个服务项')
     return
   }
+  // 下单时固化随机触发资格与数额（无计价器，此处一次性抽取）
+  discountPanel.value?.finalizeRandom?.()
+  const records = discountPanel.value?.getRecords?.() ?? discountRecords.value
+  const dAmount = discountPanel.value?.getDiscountAmount?.() ?? discountAmount.value
   await orderStore.create(member.id, member.name, items, {
-    discountRecords: discountRecords.value,
-    discountAmount: discountAmount.value,
+    discountRecords: records,
+    discountAmount: dAmount,
     notes: newNotes.value,
   })
   msg.success('订单已创建')
@@ -192,9 +197,15 @@ function close() {
           <NText v-if="!newMember" depth="3">请先选择会员以使用优惠</NText>
           <DiscountApplyPanel
             v-else
+            ref="discountPanel"
             :member-id="newMember"
             :items="currentItems"
-            @change="(r: DiscountRecord[], t: number) => { discountRecords = r; discountAmount = t }"
+            @change="
+              (r: DiscountRecord[], t: number) => {
+                discountRecords = r
+                discountAmount = t
+              }
+            "
           />
         </NCard>
       </NForm>

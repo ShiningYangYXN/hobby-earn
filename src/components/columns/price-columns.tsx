@@ -26,9 +26,7 @@ export function buildPriceColumns(opts: {
       key: 'categoryIds',
       width: 160,
       render: (row: PriceEntry) =>
-        row.categoryIds && row.categoryIds.length
-          ? row.categoryIds.map(catName).join('、')
-          : '-',
+        row.categoryIds && row.categoryIds.length ? row.categoryIds.map(catName).join('、') : '-',
     },
     {
       title: '计价',
@@ -41,7 +39,7 @@ export function buildPriceColumns(opts: {
       key: 'basePrice',
       width: 120,
       render: (row: PriceEntry) =>
-        `¥${fmt(row.basePrice)}${row.pricingMode === 'hourly' ? '/h' : '/件'}`,
+        `${fmt(row.basePrice)}${row.pricingMode === 'hourly' ? '/h' : '/件'}`,
     },
     {
       title: '备注',

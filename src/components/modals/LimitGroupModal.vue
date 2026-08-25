@@ -7,6 +7,8 @@ import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import CategorySelect from '@/components/CategorySelect.vue'
+import type { DiscountLimitGroup } from '@/stores/types'
+type FormShape = Record<string, unknown>
 
 const router = useRouter()
 const store = useLimitGroupStore()
@@ -21,9 +23,7 @@ async function load() {
   await Promise.all([store.load(), priceStore.load(), categoryStore.load()])
 }
 
-const itemOptions = computed(() =>
-  priceStore.prices.map((p) => ({ label: p.name, value: p.id })),
-)
+const itemOptions = computed(() => priceStore.prices.map((p) => ({ label: p.name, value: p.id })))
 const limitTypeOptions = [
   { label: '固定金额（元）', value: 'amount' },
   { label: '比例（%）', value: 'ratio' },
@@ -48,22 +48,23 @@ interface LimitGroupForm {
   categoryIds: string[]
 }
 
-function rowText(g: LimitGroupForm): string {
-  const limit =
-    g.limitType === 'amount' ? `¥${(g.limit / 100).toFixed(2)}` : `${g.limit}%`
+function rowText(f: FormShape): string {
+  const g = f as unknown as LimitGroupForm
+  const limit = g.limitType === 'amount' ? `¥${(g.limit / 100).toFixed(2)}` : `${g.limit}%`
   return `${g.name}（${scopeText[g.scope] ?? g.scope}，${limit}）`
 }
 
-function validate(f: LimitGroupForm): string | null {
-  if (f.limit <= 0) return '请填写组上限（大于 0）'
-  if (f.scope === 'items' && (!f.itemIds || !f.itemIds.length))
-    return '请选择参与计算的具体单品'
-  if (f.scope === 'categories' && (!f.categoryIds || !f.categoryIds.length))
+function validate(f: FormShape): string | null {
+  const g = f as unknown as LimitGroupForm
+  if (g.limit <= 0) return '请填写组上限（大于 0）'
+  if (g.scope === 'items' && (!g.itemIds || !g.itemIds.length)) return '请选择参与计算的具体单品'
+  if (g.scope === 'categories' && (!g.categoryIds || !g.categoryIds.length))
     return '请选择参与计算的分类'
   return null
 }
 
-function toForm(g: LimitGroupForm) {
+function toForm(item: FormShape) {
+  const g = item as unknown as LimitGroupForm
   return {
     name: g.name,
     limitType: g.limitType,
@@ -74,21 +75,23 @@ function toForm(g: LimitGroupForm) {
   }
 }
 
-function buildPayload(f: LimitGroupForm) {
+function buildPayload(f: FormShape): Omit<DiscountLimitGroup, 'id'> {
+  const g = f as unknown as LimitGroupForm
   return {
-    name: f.name.trim(),
-    limitType: f.limitType,
-    limit: Math.round(f.limit * (f.limitType === 'amount' ? 100 : 1)),
-    scope: f.scope,
-    itemIds: f.scope === 'items' ? f.itemIds : undefined,
-    categoryIds: f.scope === 'categories' ? f.categoryIds : undefined,
+    name: g.name.trim(),
+    limitType: g.limitType,
+    limitValue: Math.round(g.limit * (g.limitType === 'amount' ? 100 : 1)),
+    scope: g.scope,
+    itemIds: g.scope === 'items' ? g.itemIds : undefined,
+    categoryIds: g.scope === 'categories' ? g.categoryIds : undefined,
+    discountIds: [],
   }
 }
 
-async function createGroup(f: LimitGroupForm) {
+async function createGroup(f: FormShape) {
   await store.create(buildPayload(f))
 }
-function updateGroup(id: string, f: LimitGroupForm) {
+function updateGroup(id: string, f: FormShape) {
   return store.update(id, buildPayload(f))
 }
 </script>
@@ -98,7 +101,16 @@ function updateGroup(id: string, f: LimitGroupForm) {
     title="上限组管理"
     :items="store.groups"
     :load="load"
-    :empty-form="() => ({ name: '', limitType: 'amount', limit: 0, scope: 'all', itemIds: [], categoryIds: [] })"
+    :empty-form="
+      () => ({
+        name: '',
+        limitType: 'amount',
+        limit: 0,
+        scope: 'all',
+        itemIds: [],
+        categoryIds: [],
+      })
+    "
     :to-form="toForm"
     :row-text="rowText"
     :validate="validate"

@@ -11,9 +11,7 @@ export const useLimitGroupStore = defineStore('limitGroup', () => {
   async function load() {
     groups.value = await getAll<DiscountLimitGroup>('limitGroups')
   }
-  async function create(
-    g: Omit<DiscountLimitGroup, 'id'>,
-  ): Promise<DiscountLimitGroup> {
+  async function create(g: Omit<DiscountLimitGroup, 'id'>): Promise<DiscountLimitGroup> {
     const item: DiscountLimitGroup = { ...g, id: uid() }
     await add('limitGroups', item)
     groups.value.push(item)

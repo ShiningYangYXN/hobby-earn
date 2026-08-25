@@ -25,7 +25,7 @@ const statusType = (s: OrderStatus) =>
 
 export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
   return [
-    { title: '订单号', key: 'id', width: 100, render: (o: Order) => o.id.slice(-8) },
+    { title: '订单号', key: 'id', width: 200, render: (o: Order) => <span class="mono">{o.id}</span> },
     { title: '会员', key: 'memberName', width: 100 },
     {
       title: '项目',
@@ -45,7 +45,7 @@ export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
       title: '金额',
       key: 'finalAmount',
       width: 100,
-      render: (o: Order) => `¥${fmt(o.finalAmount)}`,
+      render: (o: Order) => fmt(o.finalAmount),
     },
     {
       title: '状态',

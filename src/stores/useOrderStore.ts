@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
 import type { Order, PaymentMethod, DiscountRecord, OrderItem } from './types'
-import { uid, now, subtotalOf } from './types'
+import { genOrderId, now, subtotalOf } from './types'
 import { useDiscountStore } from './useDiscountStore'
 
 export const useOrderStore = defineStore('order', () => {
@@ -48,7 +48,7 @@ export const useOrderStore = defineStore('order', () => {
     const subtotal = subtotalOf(items)
     const discountAmount = Math.min(opts.discountAmount ?? 0, subtotal)
     const order: Order = {
-      id: uid(),
+      id: genOrderId(),
       memberId,
       memberName,
       items,
@@ -58,6 +58,7 @@ export const useOrderStore = defineStore('order', () => {
       finalAmount: Math.max(0, subtotal - discountAmount),
       status: 'pending',
       createdAt: now(),
+      updatedAt: now(),
       notes: opts.notes,
     }
     await add('orders', order)
@@ -125,7 +126,8 @@ export const useOrderStore = defineStore('order', () => {
     if (!o || o.status === 'completed' || o.status === 'closed') return
     if (opts.rollbackDiscounts) {
       for (const rec of o.discountRecords) {
-        await discountStore.rollbackUsage(rec.discountId, o.memberId)
+        const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+        if (d) await discountStore.rollbackUsage(d, o.memberId)
       }
     }
     o.status = 'closed'
@@ -176,13 +178,15 @@ export const useOrderStore = defineStore('order', () => {
       // 被移除的优惠：回退用量
       for (const rec of o.discountRecords) {
         if (!newIds.has(rec.discountId)) {
-          await discountStore.rollbackUsage(rec.discountId, o.memberId)
+          const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+          if (d) await discountStore.rollbackUsage(d, o.memberId)
         }
       }
       // 新增的优惠：补计用量
       for (const rec of patch.discountRecords) {
         if (!oldIds.has(rec.discountId)) {
-          await discountStore.recordUsage(rec.discountId, o.memberId)
+          const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+          if (d) await discountStore.recordUsage(d, o.memberId)
         }
       }
       o.discountRecords = patch.discountRecords

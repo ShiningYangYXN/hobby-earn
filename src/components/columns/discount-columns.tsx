@@ -1,11 +1,5 @@
 import { NTag, NFlex, NButton, NText } from 'naive-ui'
-import {
-  fmt,
-  formatZhe,
-  ruleTypeLabelOf,
-  isCouponRequired,
-  type Discount,
-} from '@/stores/types'
+import { fmt, formatZhe, ruleTypeLabelOf, isCouponRequired, type Discount } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { usePriceStore } from '@/stores/usePriceStore'
@@ -33,8 +27,7 @@ function timeWindowLabel(d: Discount): string {
   const tw = d.scope?.timeWindow
   if (!tw) return '不限'
   const f = (s?: string) => (s ? s.slice(0, 10) : '')
-  const range =
-    tw.validFrom || tw.validUntil ? `${f(tw.validFrom)} ~ ${f(tw.validUntil)}` : '永久'
+  const range = tw.validFrom || tw.validUntil ? `${f(tw.validFrom)} ~ ${f(tw.validUntil)}` : '永久'
   return tw.cron ? `${tw.cron}（${range}）` : range
 }
 
@@ -79,13 +72,12 @@ export function buildDiscountColumns(opts: {
       key: 'value',
       width: 200,
       render: (row: Discount) => {
-        if (row.ruleType === 'percentage')
-          return `${row.value}% (${formatZhe(row.value)})`
+        if (row.ruleType === 'percentage') return `${row.value}% (${formatZhe(row.value)})`
         if (row.ruleType === 'perItem')
-          return `每件立减 ¥${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}件）` : ''}`
+          return `每件立减 ${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}件）` : ''}`
         if (row.ruleType === 'stepDown')
-          return `每满¥${fmt(row.minAmount)}减¥${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}阶）` : ''}`
-        return `满¥${fmt(row.minAmount)}减¥${fmt(row.value)}`
+          return `每满${fmt(row.minAmount)}减${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}阶）` : ''}`
+        return `满${fmt(row.minAmount)}减${fmt(row.value)}`
       },
     },
     {
@@ -126,7 +118,11 @@ export function buildDiscountColumns(opts: {
             </NTag>,
           )
         if (!tags.length) return <NText depth="3">全部</NText>
-        return <NFlex size={4} wrap={true}>{tags}</NFlex>
+        return (
+          <NFlex size={4} wrap={true}>
+            {tags}
+          </NFlex>
+        )
       },
     },
     {
@@ -170,8 +166,8 @@ export function buildDiscountColumns(opts: {
       width: 120,
       render: (row: Discount) =>
         row.exclusiveGroupId
-          ? exclusiveGroupStore.groups.find((x) => x.id === row.exclusiveGroupId)?.name ??
-            row.exclusiveGroupId
+          ? (exclusiveGroupStore.groups.find((x) => x.id === row.exclusiveGroupId)?.name ??
+            row.exclusiveGroupId)
           : '-',
     },
     {

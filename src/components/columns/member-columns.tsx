@@ -56,7 +56,8 @@ export function buildMemberColumns(opts: {
       title: '加入时间',
       key: 'joinDate',
       width: 180,
-      render: (row: Member) => new Date(row.joinDate).toLocaleString(),
+      render: (row: Member) =>
+        row.joinDate ? new Date(row.joinDate).toLocaleString() : '-',
     },
     {
       title: '备注',

@@ -21,6 +21,7 @@ import {
   IconPlayerPlay,
   IconPlayerPause,
   IconReload,
+  IconTrash,
   IconX,
   IconDeviceFloppy,
   IconCoinYen,
@@ -72,10 +73,10 @@ const statusLabel = (s: OrderStatus) =>
   ({ pending: '待处理', in_progress: '执行中', completed: '已完成', closed: '已关闭' })[s]
 const statusType = (s: OrderStatus) =>
   ({ pending: 'warning', in_progress: 'info', completed: 'success', closed: 'default' })[s] as
-  | 'warning'
-  | 'info'
-  | 'success'
-  | 'default'
+    | 'warning'
+    | 'info'
+    | 'success'
+    | 'default'
 
 const order = ref<Order | null>(null)
 const items = ref<OrderItem[]>([])
@@ -133,11 +134,50 @@ onUnmounted(stopTimer)
 
 function toggle(idx: number) {
   running[idx] = !(running[idx] ?? false)
-  if (running[idx]) ensureTimer()
-  else if (!Object.values(running).some(Boolean)) stopTimer()
+  if (running[idx]) {
+    ensureTimer()
+    discountPanel.value?.resetDraw?.() // 走时：恢复到范围展示
+  } else if (!Object.values(running).some(Boolean)) {
+    stopTimer()
+    discountPanel.value?.drawRandom?.() // 全部停表：抽取
+  }
 }
 function resetItem(idx: number) {
-  if (items.value[idx]) items.value[idx]!.elapsed = 0
+  const it = items.value[idx]
+  if (!it) return
+  it.elapsed = 0
+  if (running[idx]) {
+    delete running[idx]
+    if (!Object.values(running).some(Boolean)) {
+      stopTimer()
+      discountPanel.value?.drawRandom?.()
+    }
+  }
+}
+// 删除已有计费项目，并同步重排 running/editing 的下标（删除点之后的项前移一位）
+function removeItem(idx: number) {
+  if (idx < 0 || idx >= items.value.length) return
+  items.value.splice(idx, 1)
+  const r: Record<number, boolean> = {}
+  const e: Record<number, boolean> = {}
+  Object.keys(running).forEach((k) => {
+    const j = Number(k)
+    if (j < idx) r[j] = running[j] ?? false
+    else if (j > idx) r[j - 1] = running[j] ?? false
+  })
+  Object.keys(editing).forEach((k) => {
+    const j = Number(k)
+    if (j < idx) e[j] = editing[j] ?? false
+    else if (j > idx) e[j - 1] = editing[j] ?? false
+  })
+  Object.keys(running).forEach((k) => delete running[Number(k)])
+  Object.keys(editing).forEach((k) => delete editing[Number(k)])
+  Object.assign(running, r)
+  Object.assign(editing, e)
+  if (!Object.values(running).some(Boolean)) {
+    stopTimer()
+    discountPanel.value?.drawRandom?.() // 删除后若全部停表则抽取
+  }
 }
 function startEdit(idx: number) {
   editing[idx] = true
@@ -145,13 +185,8 @@ function startEdit(idx: number) {
 function stopEdit(idx: number) {
   editing[idx] = false
 }
-function onDiscountChange() {
-  // 优惠变化后小计/实收由面板驱动，此处无需额外操作
-}
 const priceOptions = computed(() =>
-  priceStore.prices
-    .filter((p) => p.isActive)
-    .map((p) => ({
+  priceStore.prices.map((p) => ({
       label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
         p.basePrice / 100
       ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
@@ -191,12 +226,14 @@ async function saveProgress() {
 async function finish(m: PaymentMethod) {
   if (!order.value) return
   stopTimer()
+  discountPanel.value?.finalizeRandom?.() // 固化随机触发资格
+  const recs = discountPanel.value?.getRecords?.() ?? []
   try {
-    await discountPanel.value?.commitUsage()
+    await discountPanel.value?.commitUsage(recs)
     await orderStore.finalize(
       order.value.id,
       items.value.map((it) => ({ ...it })),
-      discountPanel.value?.records ?? [],
+      recs,
       m,
     )
   } catch (e) {
@@ -214,32 +251,43 @@ function closePricing() {
 </script>
 
 <template>
-  <NModal :show="show" title="计价" preset="card" class="modal-xl" :maskClosable="false"
-    @update:show="(v: boolean) => emit('update:show', v)">
+  <NModal
+    :show="show"
+    title="计价"
+    preset="card"
+    class="modal-xl"
+    :maskClosable="false"
+    @update:show="(v: boolean) => emit('update:show', v)"
+  >
     <NScrollbar class="modal-scroll">
       <template v-if="order">
         <NFlex vertical :size="10">
           <NFlex align="center" :size="8">
             <NTag type="info" size="small">{{ order.memberName }}</NTag>
-            <NTag size="small">单号 {{ order.id.slice(-8) }}</NTag>
+            <NTag size="small" class="mono">单号 {{ order.id }}</NTag>
             <NTag size="small" :type="statusType(order.status)">{{
               statusLabel(order.status)
-              }}</NTag>
+            }}</NTag>
           </NFlex>
 
           <NEmpty v-if="!items.length" description="该订单无计价项目" />
           <NCard v-for="(it, idx) in items" :key="idx" size="small">
             <NFlex vertical :size="6">
               <NText strong>{{ it.serviceName }}</NText>
-              <NText class="meter-num" style="font-size: 18px">¥{{ fmt(itemAmount(it)) }}</NText>
+              <NText class="meter-num" style="font-size: 18px">{{ fmt(itemAmount(it)) }}</NText>
               <NFlex align="center" justify="space-between">
                 <NText depth="3">{{ it.pricingMode === 'hourly' ? '已计时长' : '数量' }}</NText>
                 <NFlex align="center" :size="10">
                   <NText v-if="it.pricingMode === 'hourly'" class="meter-num">{{
                     fmtElapsed(it.elapsed ?? 0)
-                    }}</NText>
+                  }}</NText>
                   <template v-if="it.pricingMode === 'hourly'">
-                    <NButton size="small" circle :type="running[idx] ? 'warning' : 'primary'" @click="toggle(idx)">
+                    <NButton
+                      size="small"
+                      circle
+                      :type="running[idx] ? 'warning' : 'primary'"
+                      @click="toggle(idx)"
+                    >
                       <NIcon v-if="!running[idx]">
                         <IconPlayerPlay />
                       </NIcon>
@@ -254,11 +302,34 @@ function closePricing() {
                     </NButton>
                   </template>
                   <template v-else>
-                    <NText v-if="!editing[idx]" class="meter-num qty-display" @click="startEdit(idx)">{{ it.quantity }}
+                    <NText
+                      v-if="!editing[idx]"
+                      class="meter-num qty-display"
+                      @click="startEdit(idx)"
+                      >{{ it.quantity }}
                     </NText>
-                    <NInputNumber v-else v-model:value="it.quantity" :min="1" size="small" style="width: 90px" v-focus
-                      @blur="stopEdit(idx)" @keyup.enter="stopEdit(idx)" />
+                    <NInputNumber
+                      v-else
+                      v-model:value="it.quantity"
+                      :min="1"
+                      size="small"
+                      style="width: 90px"
+                      v-focus
+                      @blur="stopEdit(idx)"
+                      @keyup.enter="stopEdit(idx)"
+                    />
                   </template>
+                  <NButton
+                    size="small"
+                    circle
+                    quaternary
+                    type="error"
+                    @click="removeItem(idx)"
+                  >
+                    <NIcon>
+                      <IconTrash />
+                    </NIcon>
+                  </NButton>
                 </NFlex>
               </NFlex>
             </NFlex>
@@ -268,31 +339,54 @@ function closePricing() {
             <NFlex justify="space-between" align="center">
               <NText depth="3">补充服务项目</NText>
               <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
-                <NSelect v-model:value="newServiceId" :options="priceOptions" placeholder="选择要追加的服务" clearable
-                  filterable style="flex: 1; min-width: 0" />
-                <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService">添加</NButton>
+                <NSelect
+                  v-model:value="newServiceId"
+                  :options="priceOptions"
+                  placeholder="选择要追加的服务"
+                  clearable
+                  filterable
+                  style="flex: 1; min-width: 0"
+                />
+                <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService"
+                  >添加</NButton
+                >
               </NFlex>
             </NFlex>
           </NCard>
 
-          <DiscountApplyPanel ref="discountPanel" :member-id="order?.memberId ?? null" :member-name="order?.memberName"
-            :items="items" @change="onDiscountChange" />
+          <DiscountApplyPanel
+            ref="discountPanel"
+            :member-id="order?.memberId ?? null"
+            :items="items"
+          />
 
           <NCard size="small">
             <NFlex vertical :size="6">
               <NFlex justify="space-between" align="center">
                 <NText depth="3">小计</NText>
-                <NText>¥{{ fmt(liveSubtotal) }}</NText>
+                <NText>{{ fmt(liveSubtotal) }}</NText>
               </NFlex>
-              <NFlex v-if="(discountPanel?.discountAmount ?? 0) > 0" justify="space-between" align="center">
+              <NFlex
+                v-if="(discountPanel?.getDiscountAmount?.() ?? 0) > 0"
+                justify="space-between"
+                align="center"
+              >
                 <NText depth="3">优惠</NText>
-                <NText type="error">-¥{{ fmt(discountPanel?.discountAmount ?? 0) }}</NText>
+                <NText type="error">-{{ fmt(discountPanel?.getDiscountAmount?.() ?? 0) }}</NText>
               </NFlex>
               <NFlex justify="space-between" align="center">
-                <NText strong>金额</NText>
-                <NText type="warning" class="meter-num qty-display" style="font-size: 20px">¥{{
-                  fmt(discountPanel?.finalAmount ??
-                  liveSubtotal) }}</NText>
+                <NFlex align="center" :size="6">
+                  <NText strong>金额</NText>
+                  <NTag
+                    v-if="discountPanel?.hasRandomPending?.()"
+                    size="tiny"
+                    type="warning"
+                    >随机优惠待定</NTag
+                  >
+                </NFlex>
+                <NText type="warning" class="meter-num qty-display" style="font-size: 20px">{{
+                  fmt(discountPanel?.getFinalAmount?.() ?? liveSubtotal)
+                }}</NText>
               </NFlex>
             </NFlex>
           </NCard>
@@ -301,7 +395,7 @@ function closePricing() {
             <NRadioGroup v-model:value="payMethod">
               <NRadioButton v-for="p in payOpts" :key="p.value" :value="p.value">{{
                 p.label
-                }}</NRadioButton>
+              }}</NRadioButton>
             </NRadioGroup>
           </NFormItem>
 
@@ -325,8 +419,8 @@ function closePricing() {
         </NButton>
         <NButton type="primary" @click="finish(payMethod)">
           <NIcon>
-            <IconCoinYen />
-          </NIcon>完成并收款
+            <IconCoinYen /> </NIcon
+          >完成并收款
         </NButton>
       </NFlex>
     </template>

@@ -33,7 +33,12 @@ export interface OrderColumnsOpts {
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
   return [
-    { title: '订单号', key: 'id', width: 100, render: (row: Order) => row.id.slice(-8) },
+    {
+      title: '订单号',
+      key: 'id',
+      width: 220,
+      render: (row: Order) => <NText class="mono">{row.id}</NText>,
+    },
     { title: '会员', key: 'memberName', width: 100 },
     {
       title: '项目',
@@ -49,12 +54,12 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
           })
           .join(', '),
     },
-    { title: '小计', key: 'subtotal', width: 90, render: (row: Order) => `¥${fmt(row.subtotal)}` },
+    { title: '小计', key: 'subtotal', width: 90, render: (row: Order) => fmt(row.subtotal) },
     {
       title: '优惠',
       key: 'discountAmount',
       width: 90,
-      render: (row: Order) => (row.discountAmount > 0 ? `-¥${fmt(row.discountAmount)}` : '—'),
+      render: (row: Order) => (row.discountAmount > 0 ? `-${fmt(row.discountAmount)}` : '—'),
     },
     {
       title: '金额',
@@ -62,7 +67,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       width: 100,
       render: (row: Order) => (
         <NText type="success" strong>
-          ¥{fmt(row.finalAmount)}
+          {fmt(row.finalAmount)}
         </NText>
       ),
     },

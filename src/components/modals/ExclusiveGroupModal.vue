@@ -2,11 +2,9 @@
 import { useRouter } from 'vue-router'
 import ManageModal from '@/components/CategoryManageModal.vue'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
-import { useDiscountStore } from '@/stores/useDiscountStore'
 
 const router = useRouter()
 const store = useExclusiveGroupStore()
-const discountStore = useDiscountStore()
 
 function close() {
   router.push('/discounts')
@@ -14,8 +12,6 @@ function close() {
 
 async function removeGroup(id: string) {
   await store.remove(id)
-  // 级联清理：解除优惠对该互斥组的归属
-  await discountStore.removeExclusiveGroupRef(id)
 }
 </script>
 
@@ -25,7 +21,11 @@ async function removeGroup(id: string) {
     :items="store.groups"
     :load="() => store.load()"
     :empty-form="() => ({ name: '' })"
-    :create="(f) => { void store.create(f.name) }"
+    :create="
+      (f) => {
+        void store.create(f.name)
+      }
+    "
     :update="(id, f) => store.update(id, { name: f.name })"
     :remove="removeGroup"
     :close="close"

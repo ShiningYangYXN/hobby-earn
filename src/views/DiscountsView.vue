@@ -108,33 +108,28 @@ onMounted(() => {
     <NH2 prefix="bar">优惠管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
-        <NFlex align="center" :size="12" wrap>
-          <NInput
-            v-model:value="keyword"
-            placeholder="搜索名称 / 券码"
-            clearable
-            style="width: 200px"
-          />
-          <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
-          <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
-          <NButton type="primary" @click="openCreate">
-            <NIcon :size="16">
-              <IconPlus />
-            </NIcon>
-            新建优惠
-          </NButton>
-          <NButton @click="openExclusiveGroups">
-            <NIcon :size="16">
-              <IconLayersIntersect />
-            </NIcon>
-            互斥组管理
-          </NButton>
-          <NButton @click="openLimitGroups">
-            <NIcon :size="16">
-              <IconStack2 />
-            </NIcon>
-            上限组管理
-          </NButton>
+        <NFlex align="center" justify="space-between" :size="12" wrap>
+          <NFlex align="center" :size="12" wrap>
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索名称 / 券码"
+              clearable
+              style="width: 200px"
+            />
+            <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
+            <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
+          </NFlex>
+          <NFlex align="center" :size="12" wrap>
+            <NButton @click="openExclusiveGroups">
+              <NIcon :size="16"><IconLayersIntersect /></NIcon> 互斥组管理
+            </NButton>
+            <NButton @click="openLimitGroups">
+              <NIcon :size="16"><IconStack2 /></NIcon> 上限组管理
+            </NButton>
+            <NButton type="primary" @click="openCreate">
+              <NIcon :size="16"><IconPlus /></NIcon> 新建优惠
+            </NButton>
+          </NFlex>
         </NFlex>
 
         <NDataTable

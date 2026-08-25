@@ -31,7 +31,7 @@ export const homeViewColumns: HomeViewColumn[] = [
     title: '金额',
     key: 'finalAmount',
     width: 100,
-    render: (row: Order) => <NText type="success">¥{fmt(row.finalAmount)}</NText>,
+    render: (row: Order) => <NText type="success">{fmt(row.finalAmount)}</NText>,
   },
   {
     title: '状态',

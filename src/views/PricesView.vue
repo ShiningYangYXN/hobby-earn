@@ -51,13 +51,11 @@ const activeOptions = [
 const filtered = computed<PriceEntry[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
   return priceStore.prices.filter((p) => {
-    if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value))
-      return false
+    if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value)) return false
     if (filterMode.value && p.pricingMode !== filterMode.value) return false
     if (filterActive.value === 'active' && !p.isActive) return false
     if (filterActive.value === 'inactive' && p.isActive) return false
-    if (kw && !`${p.name}${(p.categoryIds ?? []).join('')}`.toLowerCase().includes(kw))
-      return false
+    if (kw && !`${p.name}${(p.categoryIds ?? []).join('')}`.toLowerCase().includes(kw)) return false
     return true
   })
 })
@@ -97,22 +95,30 @@ onMounted(() => {
     <NH2 prefix="bar">价格管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
-        <NFlex align="center" :size="12" wrap>
-          <NInput
-            v-model:value="keyword"
-            placeholder="搜索名称 / 分类"
-            clearable
-            style="width: 200px"
-          />
-          <NSelect v-model:value="filterCategory" :options="categoryOptions" style="width: 150px" />
-          <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
-          <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
-          <NButton type="primary" @click="openCreate">
-            <NIcon :size="16"><IconPlus /></NIcon> 新建价格项
-          </NButton>
-          <NButton @click="router.push({ name: 'categories' })">
-            <NIcon :size="16"><IconTag /></NIcon> 管理分类
-          </NButton>
+        <NFlex align="center" justify="space-between" :size="12" wrap>
+          <NFlex align="center" :size="12" wrap>
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索名称 / 分类"
+              clearable
+              style="width: 200px"
+            />
+            <NSelect
+              v-model:value="filterCategory"
+              :options="categoryOptions"
+              style="width: 150px"
+            />
+            <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
+            <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
+          </NFlex>
+          <NFlex align="center" :size="12" wrap>
+            <NButton @click="router.push({ name: 'categories' })">
+              <NIcon :size="16"><IconTag /></NIcon> 管理分类
+            </NButton>
+            <NButton type="primary" @click="openCreate">
+              <NIcon :size="16"><IconPlus /></NIcon> 新建价格项
+            </NButton>
+          </NFlex>
         </NFlex>
 
         <NDataTable

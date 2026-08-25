@@ -1,230 +1,197 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NFlex, NScrollbar, NCheckbox, NText, NInputGroup, NInput, NButton, NEmpty, NTag, useMessage } from 'naive-ui'
+import {
+  NCard,
+  NCheckbox,
+  NInput,
+  NFlex,
+  NButton,
+  NEmpty,
+  NText,
+  NIcon,
+  NTag,
+  NScrollbar,
+  useMessage,
+} from 'naive-ui'
 import { IconTicket } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { useMemberStore } from '@/stores/useMemberStore'
-import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
-import { usePriceStore } from '@/stores/usePriceStore'
-import { fmt, ruleTypeLabelOf, itemAmount, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
 import { useDiscountApply, type DiscountDraft } from '@/composables/useDiscountApply'
+import { subtotalOf, type OrderItem, type DiscountRecord } from '@/stores/types'
 
 const props = defineProps<{
   memberId: string | null
   items: OrderItem[]
 }>()
+
 const emit = defineEmits<{
-  (e: 'change', records: DiscountRecord[], total: number): void
+  change: [records: DiscountRecord[], discountAmount: number]
 }>()
 
-const msg = useMessage()
 const discountStore = useDiscountStore()
-const memberStore = useMemberStore()
-const memberTypeStore = useMemberTypeStore()
-const priceStore = usePriceStore()
+const message = useMessage()
 
-const memberName = computed(
-  () => memberStore.members.find((m) => m.id === props.memberId)?.name ?? '',
-)
-
+// 响应式 ctx：随 props.memberId / props.items 变化自动重算候选
 const ctx = computed(() => ({
   memberId: props.memberId,
-  memberName: memberName.value,
-  items: props.items,
+  memberName: '',
+  items: props.items ?? [],
 }))
 
-const apply = useDiscountApply(ctx.value)
+const apply = useDiscountApply(() => ctx.value)
 
-const categoryIdsOf = (priceEntryId: string) =>
-  priceStore.prices.find((p) => p.id === priceEntryId)?.categoryIds ?? []
+const checked = ref<Set<string>>(new Set())
+const redeemed = ref<DiscountDraft[]>([])
+const couponInput = ref('')
+const expanded = ref(false)
 
-const memberTypeId = computed(() => {
-  if (!props.memberId) return null
-  const m = memberStore.members.find((x) => x.id === props.memberId)
-  return memberTypeStore.types.find((t) => t.name === m?.name)?.id ?? null
+const autoDrafts = computed(() => apply.drafts.value)
+
+const allDrafts = computed<DiscountDraft[]>(() => [...autoDrafts.value, ...redeemed.value])
+
+// 是否存在「抽取前」的随机优惠（仅显示范围、未计入金额）
+const hasRandomPending = computed(() => allDrafts.value.some((d) => d.pending))
+
+const discountedRecords = computed<DiscountRecord[]>(() => {
+  const chosen = apply.pickDiscounts(
+    allDrafts.value.filter((d) => checked.value.has(d.discount.id)),
+  )
+  const totalBase = subtotalOf(props.items ?? [])
+  return apply.applyLimitGroups(chosen, totalBase, props.items ?? [])
 })
 
-// 自动候选（无券码，作用域命中，概率通过）
-const autoDrafts = computed<DiscountDraft[]>(() =>
-  discountStore
-    .autoCandidates({
-      memberId: props.memberId,
-      memberTypeId: memberTypeId.value,
-      items: props.items,
-      categoryIdsOf,
-    })
-    .map((d) => apply.buildDraft(d)),
+const discountAmount = computed(() =>
+  discountedRecords.value.reduce((s, r) => s + r.discountAmount, 0),
 )
 
-// 已兑换的券码优惠
-const redeemed = ref<{ d: Discount; draft: DiscountDraft } | null>(null)
-const couponInput = ref('')
+const finalAmount = computed(() => Math.max(0, subtotalOf(props.items ?? []) - discountAmount.value))
 
-function redeem() {
-  if (!couponInput.value.trim()) return
-  const d = discountStore.redeemByCode(couponInput.value, {
-    memberId: props.memberId,
-    memberTypeId: memberTypeId.value,
-    items: props.items,
-    categoryIdsOf,
-  })
-  if (!d) {
-    msg.warning('券码无效，或不符合使用条件')
-    return
-  }
-  redeemed.value = { d, draft: apply.buildDraft(d) }
-  couponInput.value = ''
-  msg.success(`已兑换：${d.name}`)
-}
+const records = computed<DiscountRecord[]>(() => discountedRecords.value)
 
-// 选中集合：auto 候选默认全部选，券码兑换后加入
-const checked = ref<Record<string, boolean>>({})
-
+// 把当前生效记录交给应用层，供 commitUsage 读取，并向上同步
 watch(
-  autoDrafts,
-  (list) => {
-    const next: Record<string, boolean> = {}
-    for (const dr of list) next[dr.discount.id] = checked.value[dr.discount.id] ?? true
-    if (redeemed.value) next[redeemed.value.d.id] = checked.value[redeemed.value.d.id] ?? true
-    checked.value = next
-    recompute()
+  records,
+  (v) => {
+    apply.setRecords(v)
+    emit('change', v, discountAmount.value)
   },
   { immediate: true },
 )
 
-watch(
-  () => redeemed.value,
-  (r) => {
-    if (r) {
-      checked.value = { ...checked.value, [r.d.id]: true }
-      recompute()
-    }
-  },
-)
-
-function allDrafts(): DiscountDraft[] {
-  const list = [...autoDrafts.value]
-  if (redeemed.value) list.push(redeemed.value.draft)
-  return list
-}
-
-function recompute() {
-  const drafts = allDrafts().filter((dr) => checked.value[dr.discount.id])
-  const picked = apply.pickDiscounts(drafts)
-  const totalBase = props.items.reduce((s, it) => s + itemAmount(it), 0)
-  const recs = apply.applyLimitGroups(picked, totalBase, props.items)
-  records.value = recs
-  emit('change', recs, recs.reduce((s, r) => s + r.discountAmount, 0))
-}
-
 function toggle(id: string, val: boolean) {
-  checked.value = { ...checked.value, [id]: val }
-  recompute()
+  if (val) checked.value.add(id)
+  else checked.value.delete(id)
+  if (val && checked.value.size) expanded.value = true
 }
 
-function labelOf(dr: DiscountDraft): string {
-  const d = dr.discount
-  const base = []
-  base.push(ruleTypeLabelOf(d.ruleType))
-  if (d.random) base.push(d.random.kind === 'amount' ? '随机立减' : '随机打折')
-  if (d.couponCode) base.push(`券码${d.couponCode}`)
-  return base.join(' · ')
+function redeem() {
+  const code = couponInput.value.trim().toUpperCase()
+  if (!code) return
+  const d = apply.redeem(code)
+  if (!d) {
+    message.error('券码无效或不可用')
+    return
+  }
+  couponInput.value = ''
+  if (redeemed.value.some((r) => r.discount.id === d.id)) return
+  const draft = apply.buildDraft(d)
+  if (!draft) return
+  redeemed.value.push(draft)
+  checked.value.add(d.id)
 }
 
-const subtotal = computed(() => props.items.reduce((s, it) => s + itemAmount(it), 0))
+function reset() {
+  checked.value = new Set()
+  redeemed.value = []
+  couponInput.value = ''
+  expanded.value = false
+}
 
-// 暴露给父组件（PricingModal / OrderDetailModal 直接读取）
-const records = ref<DiscountRecord[]>([])
-const discountAmount = computed(() => records.value.reduce((s, r) => s + r.discountAmount, 0))
-const finalAmount = computed(() => Math.max(0, subtotal.value - discountAmount.value))
-
-watch(
-  () => props.items,
-  () => recompute(),
-  { deep: true },
-)
-watch(
-  () => props.memberId,
-  () => recompute(),
-)
-
-defineExpose({ discountAmount, finalAmount, records })
+defineExpose({
+  getDiscountAmount: () => discountAmount.value,
+  getFinalAmount: () => finalAmount.value,
+  getRecords: () => records.value,
+  hasRandomPending: () => hasRandomPending.value,
+  // 停表抽取：对所有适用随机优惠一次性抽取数额
+  drawRandom: () => apply.drawRandom(),
+  // 走时：清空抽取结果，回到范围展示
+  resetDraw: () => apply.resetDraw(),
+  // 下单固化：决定随机触发类资格并补全抽取结果
+  finalizeRandom: () => apply.finalizeRandom(),
+  hydrate: (rs: DiscountRecord[]) => {
+    const ids = apply.hydrate(rs)
+    // 能识别的优惠默认恢复勾选
+    for (const id of ids) {
+      if (discountStore.discounts.some((d) => d.id === id)) checked.value.add(id)
+    }
+    return ids
+  },
+  commitUsage: (recs?: DiscountRecord[]) => apply.commitUsage(recs),
+  reset,
+})
 </script>
 
 <template>
-  <div class="discount-apply-panel">
-    <!-- 券码兑换 -->
-    <NInputGroup style="margin-bottom: 10px">
-      <NInput
-        v-model:value="couponInput"
-        placeholder="输入券码兑换（留空可自动叠加）"
-        @keyup.enter="redeem"
-      />
-      <NButton @click="redeem">
-        <template #icon><IconTicket /></template>
-        兑换
-      </NButton>
-    </NInputGroup>
-
-    <NScrollbar style="max-height: 260px">
-      <NEmpty v-if="!autoDrafts.length && !redeemed" description="暂无可用优惠" />
-
-      <NFlex v-else vertical :size="8">
-        <div
-          v-for="dr in allDrafts()"
-          :key="dr.discount.id"
-          class="disc-row"
-          :class="{ on: checked[dr.discount.id] }"
-        >
-          <NCheckbox
-            :checked="!!checked[dr.discount.id]"
-            @update:checked="(v: boolean) => toggle(dr.discount.id, v)"
-          >
-            <div class="disc-info">
-              <div class="disc-name">
-                <NTag size="small" :bordered="false" type="info">{{ labelOf(dr) }}</NTag>
-                {{ dr.discount.name }}
-              </div>
-              <NText depth="3" style="font-size: 12px">
-                预计减免 {{ fmt(dr.record.discountAmount) }}
-              </NText>
-            </div>
-          </NCheckbox>
-        </div>
+  <NScrollbar class="modal-scroll">
+    <NFlex vertical :size="12">
+      <NFlex align="center" :size="8">
+        <NInput
+          v-model:value="couponInput"
+          placeholder="输入券码兑换优惠"
+          style="flex: 1"
+          @keyup.enter="redeem"
+        />
+        <NButton @click="redeem">
+          <NIcon><IconTicket /></NIcon>
+          兑换
+        </NButton>
       </NFlex>
-    </NScrollbar>
 
-    <div class="disc-total">
-      <NText>小计（优惠前）：{{ fmt(subtotal) }}</NText>
-    </div>
-  </div>
+      <NCard
+        v-if="allDrafts.length"
+        size="small"
+        :title="`可用优惠（${allDrafts.length}）`"
+        :segmented="{ content: true }"
+      >
+        <NFlex vertical :size="8">
+          <NCheckbox
+            v-for="d in allDrafts"
+            :key="d.discount.id"
+            :checked="checked.has(d.discount.id)"
+            @update:checked="(v: boolean) => toggle(d.discount.id, v)"
+          >
+            <NFlex align="center" :size="6">
+              <NText>{{ d.discount.name }}</NText>
+              <NTag v-if="d.pending" size="tiny" type="warning">{{ d.rangeLabel }}</NTag>
+              <NText v-else type="error" depth="3"
+                >-{{ (d.record.discountAmount / 100).toFixed(2) }}</NText
+              >
+              <NText v-if="d.discount.couponCode" depth="3" style="font-size: 12px">券</NText>
+            </NFlex>
+          </NCheckbox>
+
+          <NButton
+            v-if="allDrafts.length > 3"
+            text
+            size="tiny"
+            @click="expanded = !expanded"
+          >
+            {{ expanded ? '收起' : '展开全部' }}
+          </NButton>
+        </NFlex>
+      </NCard>
+
+      <NEmpty v-else description="暂无可用优惠" size="small" />
+
+      <NFlex align="center" justify="space-between">
+        <NText depth="3">
+          优惠 -{{ (discountAmount / 100).toFixed(2) }} ｜ 应付
+          <NText type="warning" strong>{{ (finalAmount / 100).toFixed(2) }}</NText>
+        </NText>
+        <NFlex align="center" :size="6">
+          <NTag v-if="hasRandomPending" size="tiny" type="warning">随机优惠待定</NTag>
+          <NButton text size="tiny" type="primary" @click="reset">清空</NButton>
+        </NFlex>
+      </NFlex>
+    </NFlex>
+  </NScrollbar>
 </template>
-
-<style scoped>
-.disc-row {
-  border: 1px solid var(--n-border-color);
-  border-radius: 8px;
-  padding: 8px 10px;
-  transition: all 0.15s;
-}
-.disc-row.on {
-  border-color: var(--n-color-target);
-  background: var(--n-color-target-hover);
-}
-.disc-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.disc-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-}
-.disc-total {
-  margin-top: 10px;
-  text-align: right;
-  font-weight: 600;
-}
-</style>

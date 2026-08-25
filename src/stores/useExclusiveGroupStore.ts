@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getAll, put, del } from './db'
 import { uid, type ExclusiveGroup } from './types'
+import { useDiscountStore } from './useDiscountStore'
 
 export const useExclusiveGroupStore = defineStore('exclusiveGroup', () => {
   const groups = ref<ExclusiveGroup[]>([])
@@ -14,7 +15,7 @@ export const useExclusiveGroupStore = defineStore('exclusiveGroup', () => {
     return groups.value
   }
   async function create(name: string): Promise<ExclusiveGroup> {
-    const item: ExclusiveGroup = { id: uid(), name }
+    const item: ExclusiveGroup = { id: uid(), name, discountIds: [] }
     await put('exclusiveGroups', item)
     groups.value.push(item)
     return item
@@ -28,6 +29,11 @@ export const useExclusiveGroupStore = defineStore('exclusiveGroup', () => {
   async function remove(id: string): Promise<void> {
     const idx = groups.value.findIndex((x) => x.id === id)
     if (idx < 0) return
+    // 级联清理：解除引用该互斥组的优惠归属
+    const discountStore = useDiscountStore()
+    for (const d of discountStore.discounts.filter((x) => x.exclusiveGroupId === id)) {
+      await discountStore.update(d.id, { exclusiveGroupId: undefined })
+    }
     groups.value.splice(idx, 1)
     await del('exclusiveGroups', id)
   }

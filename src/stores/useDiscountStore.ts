@@ -8,8 +8,6 @@ import {
   type OrderItem,
   type TimeWindow,
   genId,
-  categorySubtotal,
-  itemAmount,
 } from './types'
 import { getAll, put, del } from './db'
 
@@ -26,14 +24,14 @@ function parseCronField(field: string, min: number, max: number): ((v: number) =
     const p = part.trim()
     if (!p) continue
     if (p.includes('/')) {
-      const [range, stepStr] = p.split('/')
+      const [range, stepStr = ''] = p.split('/')
       const step = parseInt(stepStr, 10)
       if (Number.isNaN(step) || step <= 0) continue
       let lo = min
       let hi = max
       if (range && range !== '*') {
         if (range.includes('-')) {
-          const [a, b] = range.split('-').map((x) => parseInt(x, 10))
+          const [a = NaN, b = NaN] = range.split('-').map((x) => parseInt(x, 10))
           lo = a
           hi = b
         } else {
@@ -42,7 +40,7 @@ function parseCronField(field: string, min: number, max: number): ((v: number) =
       }
       tests.push((v) => v >= lo && v <= hi && (v - lo) % step === 0)
     } else if (p.includes('-')) {
-      const [a, b] = p.split('-').map((x) => parseInt(x, 10))
+      const [a = NaN, b = NaN] = p.split('-').map((x) => parseInt(x, 10))
       tests.push((v) => v >= a && v <= b)
     } else {
       const n = parseInt(p, 10)
@@ -90,7 +88,13 @@ export function inTimeWindow(win: TimeWindow | undefined, now: Date = new Date()
 /** 作用域资格判定：全部指定维度均命中才返回 true */
 export function scopeEligible(
   scope: DiscountScope | undefined,
-  ctx: { memberId: string | null; memberTypeId: string | null; items: OrderItem[]; categoryIdsOf: (priceEntryId: string) => string[]; now?: Date },
+  ctx: {
+    memberId: string | null
+    memberTypeId: string | null
+    items: OrderItem[]
+    categoryIdsOf: (priceEntryId: string) => string[]
+    now?: Date
+  },
 ): boolean {
   if (!scope) return true
   if (scope.memberTypeIds?.length) {
@@ -152,7 +156,9 @@ export const useDiscountStore = defineStore('discount', () => {
     return discountStatus(d, memberId) === 'active'
   }
 
-  // —— 自动触发候选（auto + 作用域命中 + 券码未附加 + 概率通过） ——
+  // —— 自动触发候选（auto + 作用域命中 + 券码未附加） ——
+  // 注意：随机触发(triggerChance)的「资格」不在候选阶段判定，留待下单时固化，
+  // 否则每次重算候选都会重新掷骰，导致计价器计时期间反复重新投掷。
   function autoCandidates(ctx: {
     memberId: string | null
     memberTypeId: string | null
@@ -164,9 +170,6 @@ export const useDiscountStore = defineStore('discount', () => {
       if (d.couponCode) return false // 带券码=需手动兑换，不得自动触发
       if (!isUsable(d, ctx.memberId)) return false
       if (!scopeEligible(d.scope, ctx)) return false
-      if (d.triggerChance != null && d.triggerChance < 100) {
-        if (Math.random() * 100 > d.triggerChance) return false // 概率未过
-      }
       return true
     })
   }
@@ -174,7 +177,12 @@ export const useDiscountStore = defineStore('discount', () => {
   // —— 券码兑换：仅 coupon 触发或带券码的优惠，且准入 ——
   function redeemByCode(
     code: string,
-    ctx: { memberId: string | null; memberTypeId: string | null; items: OrderItem[]; categoryIdsOf: (priceEntryId: string) => string[] },
+    ctx: {
+      memberId: string | null
+      memberTypeId: string | null
+      items: OrderItem[]
+      categoryIdsOf: (priceEntryId: string) => string[]
+    },
   ): Discount | null {
     const c = code.trim().toUpperCase()
     const d = discounts.value.find((x) => x.couponCode && x.couponCode.toUpperCase() === c)
@@ -195,10 +203,18 @@ export const useDiscountStore = defineStore('discount', () => {
     let amount = 0
     const base = Math.max(0, baseAmount)
     if (d.ruleType === 'fixed') {
-      if (base >= d.minAmount) amount = d.value
+      if (d.random?.kind === 'amount' && capturedRandom != null) {
+        // 随机金额：以捕获到的随机值为立减额
+        if (base >= d.minAmount) amount = capturedRandom
+      } else if (base >= d.minAmount) {
+        amount = d.value
+      }
     } else if (d.ruleType === 'percentage') {
+      // value / capturedRandom 表示「支付比例」(0-100)：88 = 8.8折 = 支付 88%，减免 12%
+      // 先折后减：减免额 = base * (100 - 支付比例) / 100；0 = 免单（全免）
+      // 资格核验以原价（base）为准：未达门槛 minAmount 不享受该折扣
       const r = d.random?.kind === 'ratio' && capturedRandom != null ? capturedRandom : d.value
-      amount = Math.round((base * r) / 100)
+      if (base >= d.minAmount) amount = Math.round((base * (100 - r)) / 100)
     } else if (d.ruleType === 'stepDown') {
       if (d.minAmount > 0) {
         let steps = Math.floor(base / d.minAmount)
@@ -211,7 +227,8 @@ export const useDiscountStore = defineStore('discount', () => {
       amount = Math.round(u * d.value)
     }
     amount = Math.min(amount, base)
-    const cap = d.random?.kind === 'amount' && capturedRandom != null ? capturedRandom : d.maxDiscount
+    const cap =
+      d.random?.kind === 'amount' && capturedRandom != null ? capturedRandom : d.maxDiscount
     if (cap != null) amount = Math.min(amount, cap)
     return amount
   }
@@ -233,6 +250,7 @@ export const useDiscountStore = defineStore('discount', () => {
       couponCodeSnapshot: d.couponCode,
       exclusiveGroupId: d.exclusiveGroupId ?? null,
       limitGroups: d.limitGroups ? [...d.limitGroups] : [],
+      capturedRandom: capturedRandom,
     }
   }
 
@@ -240,7 +258,7 @@ export const useDiscountStore = defineStore('discount', () => {
   async function recordUsage(d: Discount, memberId?: string | null) {
     const next: Discount = { ...d, usedCount: d.usedCount + 1 }
     if (memberId) {
-      const mu = { ...(d.memberUsed ?? {}) }
+      const mu = { ...d.memberUsed }
       mu[memberId] = (mu[memberId] ?? 0) + 1
       next.memberUsed = mu
     }
@@ -270,7 +288,13 @@ export const useDiscountStore = defineStore('discount', () => {
     }
   }
   async function add(d: Omit<Discount, 'id' | 'createdAt' | 'usedCount'>): Promise<Discount> {
-    const full: Discount = { ...d, id: genId('disc'), createdAt: Date.now(), usedCount: 0, memberUsed: {} }
+    const full: Discount = {
+      ...d,
+      id: genId('disc'),
+      createdAt: Date.now(),
+      usedCount: 0,
+      memberUsed: {},
+    }
     await put('discounts', full)
     discounts.value.push(full)
     return full
