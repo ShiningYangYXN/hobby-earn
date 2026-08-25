@@ -7,6 +7,8 @@ export interface OrderColumn {
   title: string
   key: string
   width?: number
+  minWidth?: number
+  fixed?: 'left' | 'right'
   render?: OrderCellRenderer
 }
 
@@ -36,7 +38,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
     {
       title: '项目',
       key: 'items',
-      width: 220,
+      width: 240,
       render: (row: Order) =>
         row.items
           .map((i: OrderItem) => {
@@ -47,17 +49,17 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
           })
           .join(', '),
     },
-    { title: '小计', key: 'subtotal', width: 80, render: (row: Order) => `¥${fmt(row.subtotal)}` },
+    { title: '小计', key: 'subtotal', width: 90, render: (row: Order) => `¥${fmt(row.subtotal)}` },
     {
       title: '优惠',
       key: 'discountAmount',
-      width: 80,
+      width: 90,
       render: (row: Order) => (row.discountAmount > 0 ? `-¥${fmt(row.discountAmount)}` : '—'),
     },
     {
       title: '金额',
       key: 'finalAmount',
-      width: 80,
+      width: 100,
       render: (row: Order) => (
         <NText type="success" strong>
           ¥{fmt(row.finalAmount)}
@@ -77,13 +79,13 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
     {
       title: '时间',
       key: 'createdAt',
-      width: 140,
+      width: 170,
       render: (row: Order) => new Date(row.createdAt).toLocaleString(),
     },
     {
       title: '备注',
       key: 'notes',
-      width: 120,
+      width: 180,
       render: (row: Order) => (
         <NEllipsis line-clamp={1} tooltip>
           {row.notes || '-'}
@@ -93,7 +95,8 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
     {
       title: '操作',
       key: 'actions',
-      width: 190,
+      width: 200,
+      fixed: 'right',
       render: (row: Order) => (
         <NFlex size={4}>
           <NButton size="tiny" onClick={() => opts.openDetail(row)}>

@@ -5,6 +5,15 @@ export interface MeterColumnsOpts {
   openOrder: (o: Order) => void
 }
 
+export interface MeterColumn {
+  title: string
+  key: string
+  width?: number
+  minWidth?: number
+  fixed?: 'left' | 'right'
+  render?: (o: Order) => string | import('vue').VNode
+}
+
 const statusLabel = (s: OrderStatus) =>
   ({ pending: '待处理', in_progress: '执行中', completed: '已完成', closed: '已关闭' })[s]
 const statusType = (s: OrderStatus) =>
@@ -14,13 +23,14 @@ const statusType = (s: OrderStatus) =>
     | 'success'
     | 'default'
 
-export function buildMeterColumns(opts: MeterColumnsOpts) {
+export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
   return [
     { title: '订单号', key: 'id', width: 100, render: (o: Order) => o.id.slice(-8) },
     { title: '会员', key: 'memberName', width: 100 },
     {
       title: '项目',
       key: 'items',
+      width: 280,
       render: (o: Order) =>
         o.items
           .map((i) => {
@@ -34,7 +44,7 @@ export function buildMeterColumns(opts: MeterColumnsOpts) {
     {
       title: '金额',
       key: 'finalAmount',
-      width: 90,
+      width: 100,
       render: (o: Order) => `¥${fmt(o.finalAmount)}`,
     },
     {
@@ -51,6 +61,7 @@ export function buildMeterColumns(opts: MeterColumnsOpts) {
       title: '操作',
       key: 'op',
       width: 90,
+      fixed: 'right',
       render: (o: Order) => (
         <NButton size="tiny" type="primary" onClick={() => opts.openOrder(o)}>
           打开计价

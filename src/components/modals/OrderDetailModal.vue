@@ -25,7 +25,8 @@ import {
   fmt,
   fmtElapsed,
   itemAmount,
-  discountTypeLabel,
+  ruleTypeLabel,
+  formatZhe,
   type Order,
   type OrderItem,
   type OrderStatus,
@@ -96,9 +97,12 @@ function recordsEqual(a: DiscountRecord[], b: DiscountRecord[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
     const x = a[i]!, y = b[i]!
-    if (x.discountId !== y.discountId || x.discountType !== y.discountType
-      || x.ruleType !== y.ruleType || x.discountAmount !== y.discountAmount
-      || x.description !== y.description) return false
+    if (
+      x.discountId !== y.discountId ||
+      x.ruleType !== y.ruleType ||
+      x.discountAmount !== y.discountAmount
+    )
+      return false
   }
   return true
 }
@@ -145,7 +149,6 @@ function onItemPriceChange(i: number) {
   it.elapsed = p.pricingMode === 'hourly' ? 0 : undefined
   it.quantity = p.pricingMode === 'hourly' ? 1 : it.quantity
 }
-const memberName = computed(() => order.value?.memberName)
 const memberId = computed(() => order.value?.memberId ?? null)
 
 const readColumns = [
@@ -186,10 +189,9 @@ function openDiscountDetail(id: string) {
   selectedDiscountId.value = id
   showDiscountDetail.value = true
 }
-// 反查优惠名称（按记录中的 discountId），找不到则回退到记录描述
+// 反查优惠名称：优先用记录中固化的名称
 function discountNameOf(rec: DiscountRecord): string {
-  const d = discountStore.discounts.find((x) => x.id === rec.discountId)
-  return d?.name ?? rec.description ?? '优惠'
+  return rec.name || '优惠'
 }
 // 将会员类型 id 列表转换为名称串
 function loadMemberTypes(ids: string[]): string {
@@ -382,10 +384,8 @@ async function forceReopenOrder() {
         </NFormItem>
 
         <NCard size="small" title="优惠" style="margin-top: 4px">
-          <DiscountApplyPanel ref="discountPanel" :member-id="memberId" :member-name="memberName" :items="editItems"
-            @update:records="(r: DiscountRecord[]) => (editDiscountRecords = r)"
-            @update:discountAmount="(v: number) => (editDiscountAmount = v)"
-            @update:finalAmount="(v: number) => (editFinalAmount = v)" />
+          <DiscountApplyPanel ref="discountPanel" :member-id="memberId" :items="editItems"
+            @change="(r: DiscountRecord[], t: number) => { editDiscountRecords = r; editDiscountAmount = t }" />
         </NCard>
 
         <NFlex justify="space-between" style="margin-top: 12px">
@@ -400,7 +400,7 @@ async function forceReopenOrder() {
               <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
                 <NFlex align="center" :size="6">
                   <NTag size="tiny">{{
-                    discountTypeLabel[rec.discountType] ?? rec.discountType
+                    ruleTypeLabel[rec.ruleType] ?? rec.ruleType
                     }}</NTag>
                   {{ discountNameOf(rec) }}
                 </NFlex>
@@ -428,7 +428,7 @@ async function forceReopenOrder() {
               <NButton text type="primary" @click="openDiscountDetail(rec.discountId)">
                 <NFlex align="center" :size="6">
                   <NTag size="tiny">{{
-                    discountTypeLabel[rec.discountType] ?? rec.discountType
+                    ruleTypeLabel[rec.ruleType] ?? rec.ruleType
                     }}</NTag>
                   {{ discountNameOf(rec) }}
                 </NFlex>
@@ -501,7 +501,7 @@ async function forceReopenOrder() {
     <NDescriptions v-if="selectedRecord" labelPlacement="left" bordered :column="1" size="small">
       <NDescriptionsItem label="优惠名称">{{ discountNameOf(selectedRecord) }}</NDescriptionsItem>
       <NDescriptionsItem label="优惠类型">
-        {{ discountTypeLabel[selectedRecord.discountType] ?? selectedRecord.discountType }}
+        {{ ruleTypeLabel[selectedRecord.ruleType] ?? selectedRecord.ruleType }}
       </NDescriptionsItem>
       <NDescriptionsItem label="实扣金额">减 {{ fmt(selectedRecord.discountAmount) }}</NDescriptionsItem>
       <template v-if="selectedDiscount">
@@ -511,33 +511,49 @@ async function forceReopenOrder() {
               ? '打折（按比例）'
               : selectedDiscount.ruleType === 'stepDown'
                 ? '每满减（阶梯减免）'
-                : '满减（固定金额）'
+                : selectedDiscount.ruleType === 'perItem'
+                  ? '件件减（每件立减）'
+                  : '满减（固定金额）'
           }}
         </NDescriptionsItem>
         <NDescriptionsItem label="优惠力度">
           <template v-if="selectedDiscount.ruleType === 'percentage'">
-            {{ selectedDiscount.value }}（打 {{ (selectedDiscount.value / 10).toFixed(1) }} 折）
+            {{ selectedDiscount.value }}%（打 {{ formatZhe(selectedDiscount.value) }}）
           </template>
           <template v-else-if="selectedDiscount.ruleType === 'stepDown'">
             每满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元减
             {{ (selectedDiscount.value / 100).toFixed(2) }} 元
+            <span v-if="selectedDiscount.maxUnits">（最多 {{ selectedDiscount.maxUnits }} 阶）</span>
+          </template>
+          <template v-else-if="selectedDiscount.ruleType === 'perItem'">
+            每件立减 {{ (selectedDiscount.value / 100).toFixed(2) }} 元
+            <span v-if="selectedDiscount.maxUnits">（最多 {{ selectedDiscount.maxUnits }} 件）</span>
           </template>
           <template v-else>
             满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元减
             {{ (selectedDiscount.value / 100).toFixed(2) }} 元
           </template>
         </NDescriptionsItem>
-        <NDescriptionsItem label="券码" v-if="selectedDiscount.code">
-          {{ selectedDiscount.code }}
+        <NDescriptionsItem label="触发方式">
+          {{ selectedDiscount.couponCode ? `券码兑换（${selectedDiscount.couponCode}）` : '自动' }}
+          <span v-if="selectedDiscount.triggerChance != null && selectedDiscount.triggerChance < 100">
+            · {{ selectedDiscount.triggerChance }}% 概率
+          </span>
         </NDescriptionsItem>
-        <NDescriptionsItem label="保底消费">
+        <NDescriptionsItem label="随机" v-if="selectedDiscount.random">
+          {{ selectedDiscount.random.kind === 'amount' ? '随机立减' : '随机打折' }}
+          {{ (selectedDiscount.random.min / 100).toFixed(2) }} ~
+          {{ (selectedDiscount.random.max / 100).toFixed(2) }}
+          {{ selectedDiscount.random.kind === 'amount' ? '元' : '%' }}
+        </NDescriptionsItem>
+        <NDescriptionsItem label="保底消费" v-if="selectedDiscount.ruleType !== 'perItem'">
           {{
             selectedDiscount.minAmount
               ? `¥${(selectedDiscount.minAmount / 100).toFixed(2)}`
               : '不限'
           }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="最大减免" v-if="selectedDiscount.ruleType !== 'fixed'">
+        <NDescriptionsItem label="最大减免" v-if="selectedDiscount.ruleType !== 'fixed' && selectedDiscount.ruleType !== 'perItem'">
           {{
             selectedDiscount.maxDiscount
               ? `¥${(selectedDiscount.maxDiscount / 100).toFixed(2)}`
@@ -545,9 +561,15 @@ async function forceReopenOrder() {
           }}
         </NDescriptionsItem>
         <NDescriptionsItem label="有效期">
-          <template v-if="selectedDiscount.validFrom || selectedDiscount.validUntil">
-            {{ formatDate(selectedDiscount.validFrom) || '不限' }} ~
-            {{ formatDate(selectedDiscount.validUntil) || '不限' }}
+          <template v-if="selectedDiscount.scope?.timeWindow">
+            <template v-if="selectedDiscount.scope.timeWindow.validFrom || selectedDiscount.scope.timeWindow.validUntil">
+              {{ formatDate(selectedDiscount.scope.timeWindow.validFrom) || '不限' }} ~
+              {{ formatDate(selectedDiscount.scope.timeWindow.validUntil) || '不限' }}
+            </template>
+            <template v-else>永久有效</template>
+            <span v-if="selectedDiscount.scope.timeWindow.cron">
+              · 周期 {{ selectedDiscount.scope.timeWindow.cron }}
+            </span>
           </template>
           <template v-else>永久有效</template>
         </NDescriptionsItem>
@@ -557,11 +579,17 @@ async function forceReopenOrder() {
         <NDescriptionsItem label="每会员限用">
           {{ selectedDiscount.memberLimit ? `${selectedDiscount.memberLimit} 次` : '不限' }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="限定会员类型" v-if="selectedDiscount.memberTypeIds?.length">
-          {{ loadMemberTypes(selectedDiscount.memberTypeIds) }}
+        <NDescriptionsItem label="限定会员类型" v-if="selectedDiscount.scope?.memberTypeIds?.length">
+          {{ loadMemberTypes(selectedDiscount.scope.memberTypeIds) }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="限定商品分类" v-if="selectedDiscount.categoryIds?.length">
-          {{ loadCategories(selectedDiscount.categoryIds) }}
+        <NDescriptionsItem label="限定会员" v-if="selectedDiscount.scope?.memberIds?.length">
+          {{ selectedDiscount.scope.memberIds.map((id) => memberStore.members.find((m) => m.id === id)?.name ?? id).join('、') }}
+        </NDescriptionsItem>
+        <NDescriptionsItem label="限定商品分类" v-if="selectedDiscount.scope?.categories?.length">
+          {{ loadCategories(selectedDiscount.scope.categories) }}
+        </NDescriptionsItem>
+        <NDescriptionsItem label="限定单品" v-if="selectedDiscount.scope?.items?.length">
+          {{ selectedDiscount.scope.items.map((id) => priceStore.prices.find((p) => p.id === id)?.name ?? id).join('、') }}
         </NDescriptionsItem>
         <NDescriptionsItem label="状态">
           <NTag :type="selectedDiscount.isActive ? 'success' : 'default'" size="small">

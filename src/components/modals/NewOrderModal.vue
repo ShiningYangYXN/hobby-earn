@@ -72,7 +72,6 @@ const currentItems = computed<OrderItem[]>(() =>
       }
     }),
 )
-const memberName = computed(() => memberStore.members.find((m) => m.id === newMember.value)?.name)
 function addRow() {
   newItems.value.push({ priceId: '', quantity: 1 })
 }
@@ -194,11 +193,8 @@ function close() {
           <DiscountApplyPanel
             v-else
             :member-id="newMember"
-            :member-name="memberName"
             :items="currentItems"
-            @update:records="(r: DiscountRecord[]) => (discountRecords = r)"
-            @update:discountAmount="(v: number) => (discountAmount = v)"
-            @update:finalAmount="(v: number) => (finalAmount = v)"
+            @change="(r: DiscountRecord[], t: number) => { discountRecords = r; discountAmount = t }"
           />
         </NCard>
       </NForm>

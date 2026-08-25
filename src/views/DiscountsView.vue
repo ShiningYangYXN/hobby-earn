@@ -18,7 +18,8 @@ import {
 import { IconPlus, IconLayersIntersect, IconStack2 } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
-import { type Discount, discountTypeLabelOf } from '@/stores/types'
+import { tableScrollX } from '@/stores/types'
+import { type Discount, ruleTypeLabel, isCouponRequired } from '@/stores/types'
 
 const router = useRouter()
 const dialog = useDialog()
@@ -33,21 +34,13 @@ function openLimitGroups() {
 }
 
 const keyword = ref('')
-const filterType = ref('')
+const filterRule = ref('')
 const filterStatus = ref('')
 
-const typeOptions = [
-  { label: '全部类型', value: '' },
-  { label: discountTypeLabelOf('timeLimited'), value: 'timeLimited' },
-  { label: discountTypeLabelOf('member'), value: 'member' },
-  { label: discountTypeLabelOf('firstOrder'), value: 'firstOrder' },
-  { label: discountTypeLabelOf('repeatOrder'), value: 'repeatOrder' },
-  { label: discountTypeLabelOf('category'), value: 'category' },
-  { label: discountTypeLabelOf('item'), value: 'item' },
-  { label: discountTypeLabelOf('exclusive'), value: 'exclusive' },
-  { label: discountTypeLabelOf('periodic'), value: 'periodic' },
-  { label: discountTypeLabelOf('custom'), value: 'custom' },
-  { label: discountTypeLabelOf('coupon'), value: 'coupon' },
+const ruleOptions = [
+  { label: '全部执行方式', value: '' },
+  ...Object.entries(ruleTypeLabel).map(([value, label]) => ({ label, value })),
+  { label: '券码兑换', value: 'coupon' },
 ]
 const statusOptions = [
   { label: '全部状态', value: '' },
@@ -61,9 +54,11 @@ const statusOptions = [
 const filtered = computed<Discount[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
   return discountStore.discounts.filter((d) => {
-    if (filterType.value && d.discountType !== filterType.value) return false
+    if (filterRule.value === 'coupon' && !isCouponRequired(d)) return false
+    if (filterRule.value && filterRule.value !== 'coupon' && d.ruleType !== filterRule.value)
+      return false
     if (filterStatus.value && discountStore.discountStatus(d) !== filterStatus.value) return false
-    if (kw && !`${d.name}${d.code ?? ''}`.toLowerCase().includes(kw)) return false
+    if (kw && !`${d.name}${d.couponCode ?? ''}`.toLowerCase().includes(kw)) return false
     return true
   })
 })
@@ -120,7 +115,7 @@ onMounted(() => {
             clearable
             style="width: 200px"
           />
-          <NSelect v-model:value="filterType" :options="typeOptions" style="width: 140px" />
+          <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
           <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
           <NButton type="primary" @click="openCreate">
             <NIcon :size="16">
@@ -146,6 +141,7 @@ onMounted(() => {
           :columns="columns"
           :data="filtered"
           :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
           size="small"
         />
         <NText v-if="!filtered.length" depth="3">没有符合条件的优惠。</NText>

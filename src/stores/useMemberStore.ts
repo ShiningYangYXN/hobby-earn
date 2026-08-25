@@ -11,7 +11,13 @@ export const useMemberStore = defineStore('member', () => {
     members.value = await getAll<Member>('members')
   }
   async function create(m: Omit<Member, 'id' | 'joinDate'>): Promise<Member> {
-    const item: Member = { ...m, id: uid(), joinDate: now(), isActive: m.isActive !== false }
+    const item: Member = {
+      ...m,
+      id: uid(),
+      joinDate: now(),
+      isActive: m.isActive !== false,
+      typeIds: m.typeIds ?? [],
+    }
     await add('members', item)
     members.value.push(item)
     return item
@@ -20,6 +26,8 @@ export const useMemberStore = defineStore('member', () => {
     const idx = members.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
     const next = { ...members.value[idx]!, ...patch }
+    // 兼容旧数据：确保 typeIds 为数组
+    next.typeIds = next.typeIds ?? []
     await put('members', next)
     members.value[idx] = next
   }

@@ -21,6 +21,7 @@ import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildOrderColumns } from '@/components/columns/order-columns'
+import { tableScrollX } from '@/stores/types'
 import { type Order, type OrderStatus } from '@/stores/types'
 
 const router = useRouter()
@@ -160,7 +161,7 @@ onMounted(() => {
             </NIcon> 新建订单
           </NButton>
         </NFlex>
-        <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" size="small" />
+        <NDataTable :columns="columns" :data="list" :pagination="{ pageSize: 10 }" :scroll-x="tableScrollX(columns)" size="small" />
         <NText v-if="!list.length" depth="3">暂无订单。</NText>
       </NFlex>
       <RouterView />

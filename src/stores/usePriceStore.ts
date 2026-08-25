@@ -28,13 +28,16 @@ export const usePriceStore = defineStore('price', () => {
   }
   async function remove(id: string): Promise<void> {
     const p = prices.value.find((x) => x.id === id)
-    // 级联清理：从所有优惠的 categoryIds 中移除该价格项所属的分类
+    // 级联清理：从所有优惠的 scope.categories 中移除该价格项所属的分类
     if (p?.categoryIds?.length) {
       for (const d of discountStore.discounts) {
-        if (d.categoryIds?.some((c) => p.categoryIds.includes(c))) {
+        if (d.scope?.categories?.some((c) => p.categoryIds.includes(c))) {
           const next = {
             ...d,
-            categoryIds: d.categoryIds.filter((c) => !p.categoryIds.includes(c)),
+            scope: {
+              ...d.scope,
+              categories: (d.scope.categories ?? []).filter((c) => !p.categoryIds!.includes(c)),
+            },
           }
           await put('discounts', next)
           const idx = discountStore.discounts.findIndex((x) => x.id === d.id)

@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { IconSettings } from '@tabler/icons-vue'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 
-const props = defineProps<{
+defineProps<{
   modelValue: string[]
   placeholder?: string
 }>()

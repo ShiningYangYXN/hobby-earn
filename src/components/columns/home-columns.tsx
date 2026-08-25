@@ -1,11 +1,13 @@
 import { NTag, NText, NEllipsis } from 'naive-ui'
-import { fmt } from '@/stores/types'
+import { fmt, tableScrollX } from '@/stores/types'
 import type { Order } from '@/stores/types'
 
 export interface HomeViewColumn {
   title: string
   key: string
   width?: number
+  minWidth?: number
+  fixed?: 'left' | 'right'
   ellipsis?: boolean
   render?: (row: Order) => string | import('vue').VNode
 }
@@ -24,17 +26,17 @@ const statusType: Record<string, 'warning' | 'info' | 'success' | 'default'> = {
 }
 
 export const homeViewColumns: HomeViewColumn[] = [
-  { title: '会员', key: 'memberName' },
+  { title: '会员', key: 'memberName', minWidth: 120 },
   {
     title: '金额',
     key: 'finalAmount',
-    width: 90,
+    width: 100,
     render: (row: Order) => <NText type="success">¥{fmt(row.finalAmount)}</NText>,
   },
   {
     title: '状态',
     key: 'status',
-    width: 80,
+    width: 90,
     render: (row: Order) => (
       <NTag type={statusType[row.status]!} size="tiny">
         {statusLabel[row.status]}
@@ -44,12 +46,13 @@ export const homeViewColumns: HomeViewColumn[] = [
   {
     title: '时间',
     key: 'createdAt',
-    width: 140,
+    width: 180,
     render: (row: Order) => new Date(row.createdAt).toLocaleString(),
   },
   {
     title: '备注',
     key: 'notes',
+    width: 200,
     ellipsis: true,
     render: (row: Order) => (
       <NEllipsis lineClamp={1} tooltip>
@@ -58,3 +61,5 @@ export const homeViewColumns: HomeViewColumn[] = [
     ),
   },
 ]
+
+export const homeScrollX = tableScrollX(homeViewColumns)

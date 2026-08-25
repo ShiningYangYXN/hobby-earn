@@ -6,6 +6,8 @@ export interface MemberColumn {
   title: string
   key: string
   width?: number
+  minWidth?: number
+  fixed?: 'left' | 'right'
   render?: (row: Member) => string | import('vue').VNode
 }
 
@@ -16,21 +18,23 @@ export function buildMemberColumns(opts: {
 }): MemberColumn[] {
   const memberTypeStore = useMemberTypeStore()
   return [
-    { title: '姓名', key: 'name' },
+    { title: '姓名', key: 'name', minWidth: 130 },
     { title: '手机', key: 'phone', width: 140, render: (row: Member) => row.phone || '-' },
     {
       title: '种类',
-      key: 'typeId',
+      key: 'typeIds',
       width: 200,
       render: (row: Member) => {
-        const t = memberTypeStore.types.find((x: MemberType) => x.id === row.typeId)
-        return t ? (
-          <NTag size="tiny" type="info">
-            {t.name}
-          </NTag>
-        ) : (
-          <NText depth="3">未设置</NText>
-        )
+        const ids = row.typeIds ?? []
+        if (!ids.length) return <NText depth={3}>未设置</NText>
+        const tags = memberTypeStore.types
+          .filter((x: MemberType) => ids.includes(x.id))
+          .map((x: MemberType) => (
+            <NTag size="tiny" type="info" style={{ marginRight: '4px' }}>
+              {x.name}
+            </NTag>
+          ))
+        return tags.length ? <NFlex size={4}>{tags}</NFlex> : <NText depth={3}>未设置</NText>
       },
     },
     {
@@ -51,13 +55,13 @@ export function buildMemberColumns(opts: {
     {
       title: '加入时间',
       key: 'joinDate',
-      width: 160,
+      width: 180,
       render: (row: Member) => new Date(row.joinDate).toLocaleString(),
     },
     {
       title: '备注',
       key: 'notes',
-      width: 160,
+      width: 200,
       render: (row: Member) => (
         <NEllipsis line-clamp={1} tooltip>
           {row.notes || '-'}
@@ -68,6 +72,7 @@ export function buildMemberColumns(opts: {
       title: '操作',
       key: 'actions',
       width: 175,
+      fixed: 'right',
       render: (row: Member) => (
         <NFlex size={4}>
           <NButton size="tiny" onClick={() => opts.openEdit(row)}>

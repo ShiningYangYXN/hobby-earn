@@ -17,8 +17,8 @@ import {
   IconTag,
   IconCertificate,
   IconBrandGithub,
-  IconShieldBolt,
   IconTrash,
+  IconSkull,
 } from '@tabler/icons-vue'
 import { version, license } from '@/../package.json'
 import { useUiStore } from '@/stores/useUiStore'
@@ -50,7 +50,7 @@ let clickCount = 0
 function onLogoClick() {
   // 已解锁（刷新前）：重复点击提示已解锁
   if (ui.advancedUnlocked) {
-    msg.info('你已解锁高级设置')
+    msg.warning('调试菜单早就解锁了，你还点个锤子！')
     return
   }
   const now = Date.now()
@@ -63,9 +63,9 @@ function onLogoClick() {
   if (clickCount >= CLICK_TIMES) {
     ui.unlockAdvanced()
     clickCount = 0
-    msg.success('高级设置已解锁')
+    msg.success('调试菜单已解锁，操作不当后果自负！')
   } else {
-    msg.info(`还需点击 ${CLICK_TIMES - clickCount} 次解锁高级设置`)
+    msg.info(`还需点击 ${CLICK_TIMES - clickCount} 次解锁调试菜单，我劝你别点了！`)
   }
 }
 
@@ -122,14 +122,14 @@ function clearAllData() {
     </template>
   </NResult>
 
-  <NCard v-if="ui.advancedUnlocked" title="高级设置" class="about-settings">
+  <NCard v-if="ui.advancedUnlocked" title="调试菜单" class="debug-menu">
     <NFlex vertical :size="14">
       <NFlex align="center" justify="space-between">
         <NFlex align="center" :size="10">
           <NIcon size="22px">
-            <IconShieldBolt />
+            <IconSkull />
           </NIcon>
-          <NText>调试 · 作弊权限</NText>
+          <NText>作弊模式</NText>
           <NText depth="3">仅限调试使用，会绕过正常业务校验，请谨慎操作</NText>
         </NFlex>
         <NSwitch v-model:value="ui.advancedMode" @update:value="onAdvancedChange" />
@@ -145,7 +145,7 @@ function clearAllData() {
 </template>
 
 <style scoped>
-.about-settings {
+.debug-menu {
   max-width: 640px;
   margin: 24px auto 0;
 }

@@ -40,15 +40,21 @@ export const useMemberTypeStore = defineStore('memberType', () => {
   async function remove(id: string): Promise<void> {
     // 先清理 DB：从所有会员和优惠中移除对该类型的引用
     for (const m of memberStore.members) {
-      if (m.typeId === id) {
-        const next = { ...m, typeId: undefined }
+      if (m.typeIds?.includes(id)) {
+        const next = { ...m, typeIds: (m.typeIds ?? []).filter((t) => t !== id) }
         await put('members', next)
         memberStore.members[memberStore.members.indexOf(m)] = next
       }
     }
     for (const d of discountStore.discounts) {
-      if (d.memberTypeIds?.includes(id)) {
-        const next = { ...d, memberTypeIds: d.memberTypeIds.filter((t) => t !== id) }
+      if (d.scope?.memberTypeIds?.includes(id)) {
+        const next = {
+          ...d,
+          scope: {
+            ...d.scope,
+            memberTypeIds: (d.scope.memberTypeIds ?? []).filter((t) => t !== id),
+          },
+        }
         await put('discounts', next)
         const idx = discountStore.discounts.findIndex((x) => x.id === d.id)
         if (idx >= 0) discountStore.discounts[idx] = next

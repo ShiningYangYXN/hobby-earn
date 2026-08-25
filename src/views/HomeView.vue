@@ -4,7 +4,7 @@ import { NCard, NGrid, NGridItem, NStatistic, NH1, NH2, NFlex, NEmpty, NDataTabl
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { fmt } from '@/stores/types'
-import { homeViewColumns } from '@/components/columns/home-columns'
+import { homeViewColumns, homeScrollX } from '@/components/columns/home-columns'
 
 const orderStore = useOrderStore()
 const memberStore = useMemberStore()
@@ -37,6 +37,7 @@ const recent = computed(() => orderStore.orders.slice(0, 8))
         :columns="homeViewColumns"
         :data="recent"
         :pagination="false"
+        :scroll-x="homeScrollX"
         size="small"
       />
       <NEmpty v-else description="暂无订单" />

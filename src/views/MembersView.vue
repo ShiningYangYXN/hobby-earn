@@ -17,6 +17,7 @@ import { IconPlus, IconVip } from '@tabler/icons-vue'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { buildMemberColumns } from '@/components/columns/member-columns'
+import { tableScrollX } from '@/stores/types'
 import type { Member } from '@/stores/types'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
@@ -49,7 +50,7 @@ const keyword = ref('')
 
 const list = computed(() =>
   memberStore.members.filter((m) => {
-    if (typeFilter.value && m.typeId !== typeFilter.value) return false
+    if (typeFilter.value && !(m.typeIds ?? []).includes(typeFilter.value)) return false
     if (statusFilter.value === 'active' && m.isActive === false) return false
     if (statusFilter.value === 'inactive' && m.isActive !== false) return false
     if (keyword.value.trim()) {
@@ -137,6 +138,7 @@ watch(
           :columns="columns"
           :data="list"
           :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
           size="small"
         />
         <NEmpty v-else description="暂无会员" />

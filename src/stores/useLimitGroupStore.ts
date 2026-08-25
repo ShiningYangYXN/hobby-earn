@@ -29,8 +29,10 @@ export const useLimitGroupStore = defineStore('limitGroup', () => {
   async function remove(id: string): Promise<void> {
     // 级联清理：解除优惠对该组的归属
     const discountStore = useDiscountStore()
-    for (const d of discountStore.discounts.filter((x) => x.limitGroupId === id)) {
-      await discountStore.update(d.id, { limitGroupId: undefined })
+    for (const d of discountStore.discounts.filter((x) => x.limitGroups?.includes(id))) {
+      await discountStore.update(d.id, {
+        limitGroups: (d.limitGroups ?? []).filter((x) => x !== id),
+      })
     }
     await del('limitGroups', id)
     groups.value = groups.value.filter((x) => x.id !== id)

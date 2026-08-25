@@ -9,7 +9,7 @@
  */
 
 const DB_NAME = 'hobby-earn-db'
-const DB_VERSION = 2
+const DB_VERSION = 1
 const STORES = [
   'members',
   'orders',
@@ -22,6 +22,15 @@ const STORES = [
 ] as const
 
 let dbPromise: Promise<IDBDatabase> | null = null
+
+function deleteDB(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME)
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error ?? new Error('IndexedDB 删除失败'))
+    req.onblocked = () => resolve()
+  })
+}
 
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
@@ -36,7 +45,21 @@ function openDB(): Promise<IDBDatabase> {
       }
     }
     req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB 打开失败'))
+    req.onerror = () => {
+      // 若浏览器中已存在更高版本的旧库（如降级到初始版本时），
+      // 直接打开会抛「version too low」错误。删除旧库后重建即可自愈。
+      const err = req.error
+      const msg = err?.message ?? ''
+      if (/version/i.test(msg) && /low|down/i.test(msg)) {
+        dbPromise = null
+        deleteDB()
+          .then(() => openDB())
+          .then(resolve)
+          .catch(reject)
+      } else {
+        reject(err ?? new Error('IndexedDB 打开失败'))
+      }
+    }
   })
   return dbPromise
 }

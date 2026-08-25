@@ -19,6 +19,7 @@ import { IconPlus, IconTag } from '@tabler/icons-vue'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { buildPriceColumns } from '@/components/columns/price-columns'
+import { tableScrollX } from '@/stores/types'
 import { type PriceEntry } from '@/stores/types'
 
 const router = useRouter()
@@ -118,6 +119,7 @@ onMounted(() => {
           :columns="columns"
           :data="filtered"
           :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
           size="small"
         />
         <NText v-if="!filtered.length" depth="3">没有符合条件的价格项。</NText>

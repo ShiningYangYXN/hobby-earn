@@ -39,8 +39,18 @@ body {
   width: 780px;
   max-width: 92vw;
 }
+.modal-xxl {
+  width: 680px;
+  max-width: 92vw;
+}
 .modal-scroll {
   max-height: calc(80vh - 130px);
+}
+/* 表单内小标签（被子组件 slot 复用时需全局可命中） */
+.small-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
 }
 .type-card {
   display: flex;

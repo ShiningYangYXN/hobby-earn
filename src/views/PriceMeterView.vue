@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NCard, NEmpty, NFlex, NText, NH2, NDataTable } from 'naive-ui'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { buildMeterColumns } from '@/components/columns/meter-columns'
+import { tableScrollX } from '@/stores/types'
 import PricingModal from '@/components/modals/PricingModal.vue'
 import type { Order } from '@/stores/types'
 
@@ -54,6 +55,7 @@ const orderColumns = computed(() => buildMeterColumns({ openOrder }))
           :columns="orderColumns"
           :data="priceable"
           :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(orderColumns)"
           size="small"
         />
         <NEmpty v-else description="暂无可计价的订单，请先在「订单管理」新建" />

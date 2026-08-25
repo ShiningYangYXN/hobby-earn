@@ -12,11 +12,12 @@ import {
   NSwitch,
   NFlex,
   NIcon,
+  NText,
   useMessage,
 } from 'naive-ui'
+import { IconX, IconDeviceFloppy } from '@tabler/icons-vue'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
-import { IconX, IconDeviceFloppy } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
@@ -29,7 +30,14 @@ const typeOptions = computed(() =>
   memberTypeStore.types.map((t) => ({ label: t.name, value: t.id })),
 )
 
-const form = ref({ name: '', phone: '', typeId: null as string | null, notes: '', isActive: true })
+const empty = () => ({
+  name: '',
+  phone: '',
+  typeIds: [] as string[],
+  notes: '',
+  isActive: true,
+})
+const form = ref(empty())
 
 watch(
   () => props.id,
@@ -37,17 +45,17 @@ watch(
     if (!memberTypeStore.types.length) await memberTypeStore.load()
     if (id) {
       const m = memberStore.members.find((x) => x.id === id)
-      if (m)
-        form.value = {
-          name: m.name,
-          phone: m.phone ?? '',
-          typeId: m.typeId ?? null,
-          notes: m.notes ?? '',
-          isActive: m.isActive !== false,
-        }
-      else form.value = { name: '', phone: '', typeId: null, notes: '', isActive: true }
+      form.value = m
+        ? {
+            name: m.name,
+            phone: m.phone ?? '',
+            typeIds: [...(m.typeIds ?? [])],
+            notes: m.notes ?? '',
+            isActive: m.isActive !== false,
+          }
+        : empty()
     } else {
-      form.value = { name: '', phone: '', typeId: null, notes: '', isActive: true }
+      form.value = empty()
     }
   },
   { immediate: true },
@@ -62,7 +70,7 @@ async function save() {
     const payload = {
       name: form.value.name,
       phone: form.value.phone,
-      typeId: form.value.typeId ?? undefined,
+      typeIds: form.value.typeIds,
       notes: form.value.notes,
       isActive: form.value.isActive,
     }
@@ -101,13 +109,17 @@ function close() {
         <NFormItem label="电话">
           <NInput v-model:value="form.phone" placeholder="可选" />
         </NFormItem>
-        <NFormItem label="会员类型">
+        <NFormItem label="会员种类">
           <NSelect
-            v-model:value="form.typeId"
+            v-model:value="form.typeIds"
             :options="typeOptions"
-            placeholder="不限定"
-            clearable
+            multiple
+            placeholder="选择会员种类（可多选，留空表示不限）"
+            filterable
           />
+          <NText depth="3" class="mt-1" style="font-size: 12px; display: block">
+            会员可同时属于多个种类，优惠按种类限定时命中任一即可。
+          </NText>
         </NFormItem>
         <NFormItem label="备注">
           <NInput
