@@ -31,7 +31,14 @@ import { usePriceStore } from '@/stores/usePriceStore'
 import CategorySelect from '@/components/CategorySelect.vue'
 import ManageModal from '@/components/CategoryManageModal.vue'
 import { genCouponCode } from '@/stores/types'
-import type { Discount, DiscountLimitGroup, DiscountScope, RandomConfig, RuleType, TimeWindow } from '@/stores/types'
+import type {
+  Discount,
+  DiscountLimitGroup,
+  DiscountScope,
+  RandomConfig,
+  RuleType,
+  TimeWindow,
+} from '@/stores/types'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()

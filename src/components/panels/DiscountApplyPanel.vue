@@ -63,7 +63,9 @@ const discountAmount = computed(() =>
   discountedRecords.value.reduce((s, r) => s + r.discountAmount, 0),
 )
 
-const finalAmount = computed(() => Math.max(0, subtotalOf(props.items ?? []) - discountAmount.value))
+const finalAmount = computed(() =>
+  Math.max(0, subtotalOf(props.items ?? []) - discountAmount.value),
+)
 
 const records = computed<DiscountRecord[]>(() => discountedRecords.value)
 
@@ -169,12 +171,7 @@ defineExpose({
             </NFlex>
           </NCheckbox>
 
-          <NButton
-            v-if="allDrafts.length > 3"
-            text
-            size="tiny"
-            @click="expanded = !expanded"
-          >
+          <NButton v-if="allDrafts.length > 3" text size="tiny" @click="expanded = !expanded">
             {{ expanded ? '收起' : '展开全部' }}
           </NButton>
         </NFlex>

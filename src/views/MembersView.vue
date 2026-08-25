@@ -12,10 +12,14 @@ import {
   NH2,
   NIcon,
   useMessage,
+  useDialog,
 } from 'naive-ui'
 import { IconPlus, IconVip } from '@tabler/icons-vue'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useOrderStore } from '@/stores/useOrderStore'
+import { useDiscountStore } from '@/stores/useDiscountStore'
+import { useUiStore } from '@/stores/useUiStore'
 import { buildMemberColumns } from '@/components/columns/member-columns'
 import { tableScrollX } from '@/stores/types'
 import type { Member } from '@/stores/types'
@@ -24,8 +28,24 @@ import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
 
 const router = useRouter()
 const msg = useMessage()
+const dialog = useDialog()
 const memberStore = useMemberStore()
 const memberTypeStore = useMemberTypeStore()
+const orderStore = useOrderStore()
+const discountStore = useDiscountStore()
+const uiStore = useUiStore()
+
+function hasAssoc(m: Member): boolean {
+  const hasOrders = orderStore.orders.some((o) => o.memberId === m.id)
+  const hasDiscounts = discountStore.discounts.some((d) => d.scope?.memberIds?.includes(m.id))
+  return hasOrders || hasDiscounts
+}
+
+// 非作弊模式下有关联的会员：隐藏删除按钮（而非禁用）
+function canDeleteMember(m: Member): boolean {
+  if (hasAssoc(m) && !uiStore.advancedMode) return false
+  return true
+}
 
 // 路由控制弹窗：/members、/members/new、/members/:id、/members/types、/members/types/:id
 const route = useRoute()
@@ -69,8 +89,27 @@ function openEdit(m: Member) {
   router.push({ name: 'member-edit', params: { id: m.id } })
 }
 async function removeMember(m: Member) {
-  await memberStore.remove(m.id)
-  msg.success('会员已删除')
+  const assoc = hasAssoc(m)
+  const doRemove = async () => {
+    try {
+      await memberStore.remove(m.id)
+      msg.success('会员已删除')
+    } catch (e) {
+      msg.error('删除失败：' + (e as Error).message)
+    }
+  }
+  if (assoc) {
+    dialog.warning({
+      title: '删除会员',
+      content:
+        '该会员存在关联订单或优惠。删除将一并清理关联订单，并将「专属优惠」直接删除、非专属优惠移除其引用。确认删除？',
+      positiveText: '删除',
+      negativeText: '取消',
+      onPositiveClick: doRemove,
+    })
+    return
+  }
+  await doRemove()
 }
 async function toggleActive(m: Member) {
   const next = m.isActive === false
@@ -78,7 +117,9 @@ async function toggleActive(m: Member) {
   msg.success(next ? '会员已启用' : '会员已停用')
 }
 
-const columns = computed(() => buildMemberColumns({ openEdit, removeMember, toggleActive }))
+const columns = computed(() =>
+  buildMemberColumns({ openEdit, removeMember, toggleActive, canDelete: canDeleteMember }),
+)
 
 function openTypeManagement() {
   router.push({ name: 'member-types' })

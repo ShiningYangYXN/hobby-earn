@@ -34,9 +34,24 @@ export const useOrderStore = defineStore('order', () => {
   )
 
   async function load() {
-    orders.value = (await getAll<Order>('orders')).sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    )
+    orders.value = (await getAll<Order>('orders'))
+      .map(normalizeOrder)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
+  // 归一化历史订单：补齐缺失字段，避免 cancel/reopen/updateDraft 迭代
+  // discountRecords / items 时因 undefined 而抛 TypeError（订单无法关闭的根因）
+  function normalizeOrder(o: Order): Order {
+    return {
+      ...o,
+      items: Array.isArray(o.items) ? o.items : [],
+      discountRecords: Array.isArray(o.discountRecords) ? o.discountRecords : [],
+      subtotal: typeof o.subtotal === 'number' ? o.subtotal : 0,
+      discountAmount: typeof o.discountAmount === 'number' ? o.discountAmount : 0,
+      finalAmount: typeof o.finalAmount === 'number' ? o.finalAmount : 0,
+      createdAt: o.createdAt || now(),
+      updatedAt: o.updatedAt || o.createdAt || now(),
+    }
   }
 
   async function create(
@@ -196,11 +211,12 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  async function remove(id: string): Promise<void> {
+  async function remove(id: string, opts: { force?: boolean } = {}): Promise<void> {
     const idx = orders.value.findIndex((x) => x.id === id)
     const o = orders.value[idx]
-    // 删除订单不回滚优惠（优惠回滚仅发生在「关闭」时）
-    if (idx < 0 || !o || (o.status !== 'closed' && o.status !== 'completed')) return
+    // 删除订单不回滚优惠（优惠回滚仅发生在「关闭」时）；force 用于会员级联清理，绕过状态限制
+    if (idx < 0 || !o) return
+    if (!opts.force && o.status !== 'closed' && o.status !== 'completed') return
     orders.value.splice(idx, 1)
     await del('orders', id)
   }

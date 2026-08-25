@@ -187,11 +187,11 @@ function stopEdit(idx: number) {
 }
 const priceOptions = computed(() =>
   priceStore.prices.map((p) => ({
-      label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
-        p.basePrice / 100
-      ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
-      value: p.id,
-    })),
+    label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
+      p.basePrice / 100
+    ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
+    value: p.id,
+  })),
 )
 function addService() {
   if (!newServiceId.value) return
@@ -319,13 +319,7 @@ function closePricing() {
                       @keyup.enter="stopEdit(idx)"
                     />
                   </template>
-                  <NButton
-                    size="small"
-                    circle
-                    quaternary
-                    type="error"
-                    @click="removeItem(idx)"
-                  >
+                  <NButton size="small" circle quaternary type="error" @click="removeItem(idx)">
                     <NIcon>
                       <IconTrash />
                     </NIcon>
@@ -377,10 +371,7 @@ function closePricing() {
               <NFlex justify="space-between" align="center">
                 <NFlex align="center" :size="6">
                   <NText strong>金额</NText>
-                  <NTag
-                    v-if="discountPanel?.hasRandomPending?.()"
-                    size="tiny"
-                    type="warning"
+                  <NTag v-if="discountPanel?.hasRandomPending?.()" size="tiny" type="warning"
                     >随机优惠待定</NTag
                   >
                 </NFlex>
@@ -418,9 +409,7 @@ function closePricing() {
           保存进度
         </NButton>
         <NButton type="primary" @click="finish(payMethod)">
-          <NIcon>
-            <IconCoinYen /> </NIcon
-          >完成并收款
+          <NIcon> <IconCoinYen /> </NIcon>完成并收款
         </NButton>
       </NFlex>
     </template>

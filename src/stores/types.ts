@@ -321,6 +321,10 @@ export const uid = genId
 export function genOrderId(): string {
   return `order-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
+// 会员号格式（与订单号同构，仅前缀不同）：member-{{timestamp}}-{{randomString}}
+export function genMemberId(): string {
+  return `member-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 export function now(): string {
   return new Date().toISOString()
 }

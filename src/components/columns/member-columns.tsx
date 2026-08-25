@@ -15,10 +15,12 @@ export function buildMemberColumns(opts: {
   openEdit: (m: Member) => void
   removeMember: (m: Member) => void
   toggleActive: (m: Member) => void
+  canDelete: (m: Member) => boolean
 }): MemberColumn[] {
   const memberTypeStore = useMemberTypeStore()
   return [
     { title: '姓名', key: 'name', minWidth: 130 },
+    { title: '会员号', key: 'id', minWidth: 220, render: (row: Member) => row.id },
     { title: '手机', key: 'phone', width: 140, render: (row: Member) => row.phone || '-' },
     {
       title: '种类',
@@ -56,8 +58,7 @@ export function buildMemberColumns(opts: {
       title: '加入时间',
       key: 'joinDate',
       width: 180,
-      render: (row: Member) =>
-        row.joinDate ? new Date(row.joinDate).toLocaleString() : '-',
+      render: (row: Member) => (row.joinDate ? new Date(row.joinDate).toLocaleString() : '-'),
     },
     {
       title: '备注',
@@ -86,9 +87,11 @@ export function buildMemberColumns(opts: {
           >
             {row.isActive !== false ? '停用' : '启用'}
           </NButton>
-          <NButton size="tiny" type="error" onClick={() => opts.removeMember(row)}>
-            删除
-          </NButton>
+          {opts.canDelete(row) && (
+            <NButton size="tiny" type="error" onClick={() => opts.removeMember(row)}>
+              删除
+            </NButton>
+          )}
         </NFlex>
       ),
     },

@@ -26,6 +26,10 @@ const memberStore = useMemberStore()
 const memberTypeStore = useMemberTypeStore()
 
 const editing = computed(() => !!props.id)
+const memberIdDisplay = computed(() => {
+  if (!props.id) return ''
+  return memberStore.members.find((x) => x.id === props.id)?.id ?? ''
+})
 const typeOptions = computed(() =>
   memberTypeStore.types.map((t) => ({ label: t.name, value: t.id })),
 )
@@ -105,6 +109,9 @@ function close() {
       <NForm labelPlacement="top">
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="会员名称" />
+        </NFormItem>
+        <NFormItem label="会员号">
+          <NInput :value="editing ? memberIdDisplay : ''" readonly placeholder="保存后自动生成" />
         </NFormItem>
         <NFormItem label="电话">
           <NInput v-model:value="form.phone" placeholder="可选" />

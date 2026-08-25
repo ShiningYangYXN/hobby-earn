@@ -366,6 +366,7 @@ async function forceReopenOrder() {
           </NTag>
         </NDescriptionsItem>
         <NDescriptionsItem label="会员">{{ order.memberName }}</NDescriptionsItem>
+        <NDescriptionsItem label="会员号">{{ order.memberId ?? '-' }}</NDescriptionsItem>
         <NDescriptionsItem label="创建时间">{{
           new Date(order.createdAt).toLocaleString()
         }}</NDescriptionsItem>
@@ -398,9 +399,7 @@ async function forceReopenOrder() {
               />
               <NText v-else depth="3">待计费</NText>
               <NButton text type="error" @click="editItems.splice(i, 1)">
-                <NIcon>
-                  <IconTrash /> </NIcon
-                >删除
+                <NIcon> <IconTrash /> </NIcon>删除
               </NButton>
             </NFlex>
             <NButton dashed block @click="addItemRow">

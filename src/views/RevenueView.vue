@@ -12,8 +12,11 @@ const totalYuan = computed(() => orderStore.totalIncome / 100)
 const done = computed(() => orderStore.completedOrders.length)
 const pending = computed(() => orderStore.pendingOrders.length)
 
-let prevToday = todayYuan.value, prevMonth = monthYuan.value, prevTotal = totalYuan.value
-let prevDone = done.value, prevPending = pending.value
+let prevToday = todayYuan.value,
+  prevMonth = monthYuan.value,
+  prevTotal = totalYuan.value
+let prevDone = done.value,
+  prevPending = pending.value
 const todayKey = ref(1)
 const monthKey = ref(1)
 const totalKey = ref(1)
@@ -21,13 +24,31 @@ const doneKey = ref(1)
 const pendingKey = ref(1)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const watchInterval = setInterval(() => {
-  const t = todayYuan.value, m = monthYuan.value, tl = totalYuan.value
-  const d = done.value, p = pending.value
-  if (t !== prevToday)  { todayKey.value++;  prevToday = t }
-  if (m !== prevMonth)  { monthKey.value++;  prevMonth = m }
-  if (tl !== prevTotal) { totalKey.value++;  prevTotal = tl }
-  if (d !== prevDone)   { doneKey.value++;   prevDone = d }
-  if (p !== prevPending){ pendingKey.value++; prevPending = p }
+  const t = todayYuan.value,
+    m = monthYuan.value,
+    tl = totalYuan.value
+  const d = done.value,
+    p = pending.value
+  if (t !== prevToday) {
+    todayKey.value++
+    prevToday = t
+  }
+  if (m !== prevMonth) {
+    monthKey.value++
+    prevMonth = m
+  }
+  if (tl !== prevTotal) {
+    totalKey.value++
+    prevTotal = tl
+  }
+  if (d !== prevDone) {
+    doneKey.value++
+    prevDone = d
+  }
+  if (p !== prevPending) {
+    pendingKey.value++
+    prevPending = p
+  }
 }, 1000)
 </script>
 
@@ -39,7 +60,13 @@ const watchInterval = setInterval(() => {
         <NCard>
           <NStatistic label="今日收入">
             <template #prefix>¥</template>
-            <NNumberAnimation :key="todayKey" :from="prevToday" :to="todayYuan" :precision="2" :show-separator="true" />
+            <NNumberAnimation
+              :key="todayKey"
+              :from="prevToday"
+              :to="todayYuan"
+              :precision="2"
+              :show-separator="true"
+            />
           </NStatistic>
         </NCard>
       </NGridItem>
@@ -47,7 +74,13 @@ const watchInterval = setInterval(() => {
         <NCard>
           <NStatistic label="本月收入">
             <template #prefix>¥</template>
-            <NNumberAnimation :key="monthKey" :from="prevMonth" :to="monthYuan" :precision="2" :show-separator="true" />
+            <NNumberAnimation
+              :key="monthKey"
+              :from="prevMonth"
+              :to="monthYuan"
+              :precision="2"
+              :show-separator="true"
+            />
           </NStatistic>
         </NCard>
       </NGridItem>
@@ -55,7 +88,13 @@ const watchInterval = setInterval(() => {
         <NCard>
           <NStatistic label="累计收入">
             <template #prefix>¥</template>
-            <NNumberAnimation :key="totalKey" :from="prevTotal" :to="totalYuan" :precision="2" :show-separator="true" />
+            <NNumberAnimation
+              :key="totalKey"
+              :from="prevTotal"
+              :to="totalYuan"
+              :precision="2"
+              :show-separator="true"
+            />
           </NStatistic>
         </NCard>
       </NGridItem>
@@ -64,14 +103,26 @@ const watchInterval = setInterval(() => {
       <NGridItem>
         <NCard>
           <NStatistic label="已完成订单">
-            <NNumberAnimation :key="doneKey" :from="prevDone" :to="done" :precision="0" :show-separator="true" />
+            <NNumberAnimation
+              :key="doneKey"
+              :from="prevDone"
+              :to="done"
+              :precision="0"
+              :show-separator="true"
+            />
           </NStatistic>
         </NCard>
       </NGridItem>
       <NGridItem>
         <NCard>
           <NStatistic label="待处理订单">
-            <NNumberAnimation :key="pendingKey" :from="prevPending" :to="pending" :precision="0" :show-separator="true" />
+            <NNumberAnimation
+              :key="pendingKey"
+              :from="prevPending"
+              :to="pending"
+              :precision="0"
+              :show-separator="true"
+            />
           </NStatistic>
         </NCard>
       </NGridItem>

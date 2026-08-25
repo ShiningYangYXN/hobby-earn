@@ -4,12 +4,7 @@ import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { usePriceStore } from '@/stores/usePriceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
-import {
-  itemAmount,
-  type Discount,
-  type DiscountRecord,
-  type OrderItem,
-} from '@/stores/types'
+import { itemAmount, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
 
 export interface ApplyContext {
   memberId: string | null
@@ -97,9 +92,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
       items: c.items,
       categoryIdsOf: (id) => categoryIdsOf(id),
     })
-    return cands
-      .map((d) => buildDraft(d))
-      .filter((x): x is DiscountDraft => x != null)
+    return cands.map((d) => buildDraft(d)).filter((x): x is DiscountDraft => x != null)
   })
 
   function buildDraft(d: Discount): DiscountDraft | null {
