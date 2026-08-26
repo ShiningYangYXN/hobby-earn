@@ -14,8 +14,9 @@ import {
   useMessage,
   NFlex,
   NIcon,
+  NText,
 } from 'naive-ui'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { type PricingMode } from '@/stores/types'
 import CategorySelect from '@/components/CategorySelect.vue'
@@ -24,10 +25,14 @@ import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
 const msg = useMessage()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 
 const editing = computed(() => !!props.id)
+const serviceIdDisplay = computed(() => {
+  if (!props.id) return ''
+  return serviceStore.services.find((x) => x.id === props.id)?.id ?? ''
+})
 const modeOptions: { label: string; value: PricingMode }[] = [
   { label: '按工时', value: 'hourly' },
   { label: '按件', value: 'perPiece' },
@@ -47,7 +52,7 @@ watch(
   async (id) => {
     if (!categoryStore.categories.length) await categoryStore.load()
     if (id) {
-      const p = priceStore.prices.find((x) => x.id === id)
+      const p = serviceStore.services.find((x) => x.id === id)
       if (p)
         form.value = {
           name: p.name,
@@ -92,34 +97,38 @@ async function save() {
     }
     delete (payload as Record<string, unknown>).basePriceYuan
     if (editing.value && props.id) {
-      await priceStore.update(props.id, payload)
-      msg.success('价格项已更新')
+      await serviceStore.update(props.id, payload)
+      msg.success('服务已更新')
     } else {
-      await priceStore.create(payload)
-      msg.success('价格项已创建')
+      await serviceStore.create(payload)
+      msg.success('服务已创建')
     }
-    router.push('/prices')
+    router.push('/services')
   } catch (e) {
     msg.error('保存失败：' + (e as Error).message)
   }
 }
 
 function close() {
-  router.push('/prices')
+  router.push('/services')
 }
 </script>
 
 <template>
   <NModal
     :show="true"
-    :title="editing ? '编辑价格项' : '新建价格项'"
+    :title="editing ? '编辑服务' : '新建服务'"
     preset="card"
-    class="modal-md"
     :autoFocus="false"
     @update:show="close"
   >
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
+        <NFormItem label="服务号">
+          <NText class="mono" :depth="editing ? undefined : 3">{{
+            editing ? serviceIdDisplay : '保存后自动生成'
+          }}</NText>
+        </NFormItem>
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="如：修电脑" />
         </NFormItem>

@@ -28,7 +28,7 @@ export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
     {
       title: '订单号',
       key: 'id',
-      width: 200,
+      width: 220,
       render: (o: Order) => <span class="mono">{o.id}</span>,
     },
     { title: '会员', key: 'memberName', width: 100 },

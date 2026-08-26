@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { NText, NSelect, NGi, NInputNumber } from 'naive-ui'
 import ManageModal from '@/components/CategoryManageModal.vue'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import CategorySelect from '@/components/CategorySelect.vue'
 import type { DiscountLimitGroup } from '@/stores/types'
@@ -12,7 +12,7 @@ type FormShape = Record<string, unknown>
 
 const router = useRouter()
 const store = useLimitGroupStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 
 function close() {
@@ -20,10 +20,12 @@ function close() {
 }
 
 async function load() {
-  await Promise.all([store.load(), priceStore.load(), categoryStore.load()])
+  await Promise.all([store.load(), serviceStore.load(), categoryStore.load()])
 }
 
-const itemOptions = computed(() => priceStore.prices.map((p) => ({ label: p.name, value: p.id })))
+const itemOptions = computed(() =>
+  serviceStore.services.map((p) => ({ label: p.name, value: p.id })),
+)
 const limitTypeOptions = [
   { label: '固定金额（元）', value: 'amount' },
   { label: '比例（%）', value: 'ratio' },

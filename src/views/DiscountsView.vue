@@ -6,7 +6,7 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NText,
+  NEmpty,
   NCard,
   NInput,
   NSelect,
@@ -15,7 +15,7 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { IconPlus, IconLayersIntersect, IconStack2 } from '@tabler/icons-vue'
+import { IconPlus, IconLayersIntersect, IconTransitionTop } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
 import { tableScrollX } from '@/stores/types'
@@ -104,42 +104,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <NFlex vertical :size="16">
+  <NFlex vertical>
     <NH2 prefix="bar">优惠管理</NH2>
     <NCard>
-      <NFlex vertical :size="12">
-        <NFlex align="center" justify="space-between" :size="12" wrap>
-          <NFlex align="center" :size="12" wrap>
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索名称 / 券码"
-              clearable
-              style="width: 200px"
-            />
+      <NFlex vertical>
+        <NFlex align="center" justify="space-between" wrap>
+          <NFlex align="center" wrap>
+            <NInput v-model:value="keyword" placeholder="搜索名称 / 券码" clearable style="width: 200px" />
             <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
             <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
           </NFlex>
-          <NFlex align="center" :size="12" wrap>
+          <NFlex align="center" wrap>
             <NButton @click="openExclusiveGroups">
-              <NIcon :size="16"><IconLayersIntersect /></NIcon> 互斥组管理
+              <NIcon>
+                <IconLayersIntersect />
+              </NIcon>
+              互斥组管理
             </NButton>
             <NButton @click="openLimitGroups">
-              <NIcon :size="16"><IconStack2 /></NIcon> 上限组管理
+              <NIcon>
+                <IconTransitionTop />
+              </NIcon>
+              上限组管理
             </NButton>
             <NButton type="primary" @click="openCreate">
-              <NIcon :size="16"><IconPlus /></NIcon> 新建优惠
+              <NIcon>
+                <IconPlus />
+              </NIcon>
+              新建优惠
             </NButton>
           </NFlex>
         </NFlex>
 
-        <NDataTable
-          :columns="columns"
-          :data="filtered"
-          :pagination="{ pageSize: 10 }"
-          :scroll-x="tableScrollX(columns)"
-          size="small"
-        />
-        <NText v-if="!filtered.length" depth="3">没有符合条件的优惠。</NText>
+        <NDataTable v-if="filtered.length" :columns="columns" :data="filtered" :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)" size="small" />
+        <NEmpty v-else description="暂无优惠" />
       </NFlex>
     </NCard>
     <RouterView />

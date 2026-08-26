@@ -27,7 +27,7 @@ import {
   IconCoinYen,
 } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import {
   fmt,
@@ -58,7 +58,7 @@ const vFocus = {
   },
 }
 const orderStore = useOrderStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const discountStore = useDiscountStore()
 
 const payOpts: { label: string; value: PaymentMethod }[] = [
@@ -104,7 +104,7 @@ function stopTimer() {
 
 async function load() {
   if (!props.show || !props.orderId) return
-  if (!priceStore.prices.length) await priceStore.load()
+  if (!serviceStore.services.length) await serviceStore.load()
   if (!discountStore.discounts.length) await discountStore.load()
   let o = orderStore.orders.find((x) => x.id === props.orderId)
   if (!o) return
@@ -186,7 +186,7 @@ function stopEdit(idx: number) {
   editing[idx] = false
 }
 const priceOptions = computed(() =>
-  priceStore.prices.map((p) => ({
+  serviceStore.services.map((p) => ({
     label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
       p.basePrice / 100
     ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
@@ -195,7 +195,7 @@ const priceOptions = computed(() =>
 )
 function addService() {
   if (!newServiceId.value) return
-  const p = priceStore.prices.find((x) => x.id === newServiceId.value)
+  const p = serviceStore.services.find((x) => x.id === newServiceId.value)
   if (!p) return
   items.value.push({
     priceEntryId: p.id,
@@ -255,7 +255,6 @@ function closePricing() {
     :show="show"
     title="计价"
     preset="card"
-    class="modal-xl"
     :maskClosable="false"
     @update:show="(v: boolean) => emit('update:show', v)"
   >

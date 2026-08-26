@@ -6,7 +6,7 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NText,
+  NEmpty,
   NCard,
   NInput,
   NSelect,
@@ -15,17 +15,17 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { IconPlus, IconTag } from '@tabler/icons-vue'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { IconPlus, IconTags } from '@tabler/icons-vue'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
-import { buildPriceColumns } from '@/components/columns/price-columns'
+import { buildServiceColumns } from '@/components/columns/service-columns'
 import { tableScrollX } from '@/stores/types'
-import { type PriceEntry } from '@/stores/types'
+import { type ServiceEntry } from '@/stores/types'
 
 const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 
 const keyword = ref('')
@@ -48,9 +48,9 @@ const activeOptions = [
   { label: '停用', value: 'inactive' },
 ]
 
-const filtered = computed<PriceEntry[]>(() => {
+const filtered = computed<ServiceEntry[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return priceStore.prices.filter((p) => {
+  return serviceStore.services.filter((p) => {
     if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value)) return false
     if (filterMode.value && p.pricingMode !== filterMode.value) return false
     if (filterActive.value === 'active' && !p.isActive) return false
@@ -61,74 +61,66 @@ const filtered = computed<PriceEntry[]>(() => {
 })
 
 function openCreate() {
-  router.push({ name: 'price-new' })
+  router.push({ name: 'service-new' })
 }
-function openEdit(p: PriceEntry) {
-  router.push({ name: 'price-edit', params: { id: p.id } })
+function openEdit(p: ServiceEntry) {
+  router.push({ name: 'service-edit', params: { id: p.id } })
 }
-async function toggle(p: PriceEntry) {
-  await priceStore.update(p.id, { isActive: !p.isActive })
+async function toggle(p: ServiceEntry) {
+  await serviceStore.update(p.id, { isActive: !p.isActive })
 }
-const columns = buildPriceColumns({ openEdit, toggle, remove })
+const columns = buildServiceColumns({ openEdit, toggle, remove })
 
-function remove(p: PriceEntry) {
+function remove(p: ServiceEntry) {
   dialog.warning({
-    title: '删除价格项',
+    title: '删除服务',
     content: `确认删除「${p.name}」？`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      await priceStore.remove(p.id)
+      await serviceStore.remove(p.id)
       msg.success('已删除')
     },
   })
 }
 
 onMounted(() => {
-  if (!priceStore.prices.length) priceStore.load()
+  if (!serviceStore.services.length) serviceStore.load()
   if (!categoryStore.categories.length) categoryStore.load()
 })
 </script>
 
 <template>
   <NFlex vertical :size="16">
-    <NH2 prefix="bar">价格管理</NH2>
+    <NH2 prefix="bar">服务管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
         <NFlex align="center" justify="space-between" :size="12" wrap>
           <NFlex align="center" :size="12" wrap>
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索名称 / 分类"
-              clearable
-              style="width: 200px"
-            />
-            <NSelect
-              v-model:value="filterCategory"
-              :options="categoryOptions"
-              style="width: 150px"
-            />
+            <NInput v-model:value="keyword" placeholder="搜索名称 / 分类" clearable style="width: 200px" />
+            <NSelect v-model:value="filterCategory" :options="categoryOptions" style="width: 150px" />
             <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
             <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
           </NFlex>
           <NFlex align="center" :size="12" wrap>
             <NButton @click="router.push({ name: 'categories' })">
-              <NIcon :size="16"><IconTag /></NIcon> 管理分类
+              <NIcon :size="16">
+                <IconTags />
+              </NIcon>
+              管理分类
             </NButton>
             <NButton type="primary" @click="openCreate">
-              <NIcon :size="16"><IconPlus /></NIcon> 新建价格项
+              <NIcon :size="16">
+                <IconPlus />
+              </NIcon>
+              新建服务
             </NButton>
           </NFlex>
         </NFlex>
 
-        <NDataTable
-          :columns="columns"
-          :data="filtered"
-          :pagination="{ pageSize: 10 }"
-          :scroll-x="tableScrollX(columns)"
-          size="small"
-        />
-        <NText v-if="!filtered.length" depth="3">没有符合条件的价格项。</NText>
+        <NDataTable v-if="filtered.length" :columns="columns" :data="filtered" :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)" size="small" />
+        <NEmpty v-else description="暂无服务" />
       </NFlex>
       <RouterView />
     </NCard>

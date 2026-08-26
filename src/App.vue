@@ -27,11 +27,11 @@ import {
   IconSun,
   IconStopwatch,
   IconReceipt,
-  IconUsers,
+  IconVip,
   IconGift,
   IconPigMoney,
   IconInfoCircle,
-  IconTags,
+  IconTool,
   IconHome,
 } from '@tabler/icons-vue'
 
@@ -66,12 +66,12 @@ const menuOptions: MenuOption[] = [
   {
     label: renderRouterLink('会员管理', '/members'),
     key: 'members',
-    icon: renderIcon(IconUsers),
+    icon: renderIcon(IconVip),
   },
   {
-    label: renderRouterLink('价格管理', '/prices'),
-    key: 'prices',
-    icon: renderIcon(IconTags),
+    label: renderRouterLink('服务管理', '/services'),
+    key: 'services',
+    icon: renderIcon(IconTool),
   },
   {
     label: renderRouterLink('优惠管理', '/discounts'),

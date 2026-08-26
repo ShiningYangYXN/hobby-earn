@@ -19,7 +19,7 @@ import {
 } from 'naive-ui'
 import { IconCheck, IconPlus, IconTrash, IconX } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { type OrderItem, type DiscountRecord } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
@@ -27,7 +27,7 @@ import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 const router = useRouter()
 const msg = useMessage()
 const orderStore = useOrderStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const memberStore = useMemberStore()
 const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
@@ -44,7 +44,7 @@ const memberOptions = computed(() =>
   memberStore.members.map((m) => ({ label: m.name, value: m.id })),
 )
 const priceOptions = computed(() =>
-  priceStore.prices
+  serviceStore.services
     .filter((p) => p.isActive)
     .map((p) => ({
       label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
@@ -54,7 +54,7 @@ const priceOptions = computed(() =>
     })),
 )
 function rowPrice(priceId: string) {
-  return priceStore.prices.find((p) => p.id === priceId)
+  return serviceStore.services.find((p) => p.id === priceId)
 }
 // 实时映射为 OrderItem 数组，供优惠面板计算
 const currentItems = computed<OrderItem[]>(() =>
@@ -93,7 +93,7 @@ function resetForm() {
 onMounted(async () => {
   resetForm()
   if (!memberStore.members.length) await memberStore.load()
-  if (!priceStore.prices.length) await priceStore.load()
+  if (!serviceStore.services.length) await serviceStore.load()
   if (!orderStore.orders.length) await orderStore.load()
 })
 
@@ -129,7 +129,6 @@ function close() {
     :show="true"
     title="新建订单"
     preset="card"
-    class="modal-lg"
     :autoFocus="false"
     @update:show="close"
   >

@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { getAll, put, add, del } from './db'
 import type { Category } from './types'
 import { uid } from './types'
-import { usePriceStore } from './usePriceStore'
+import { useServiceStore } from './useServiceStore'
 import { useDiscountStore } from './useDiscountStore'
 import { useLimitGroupStore } from './useLimitGroupStore'
 
@@ -27,13 +27,16 @@ export const useCategoryStore = defineStore('category', () => {
     categories.value[idx] = next
   }
   async function remove(id: string): Promise<void> {
-    // 级联清理：从价格项、优惠、上限组中移除该分类引用
-    const priceStore = usePriceStore()
+    // 级联清理：从服务项、优惠、上限组中移除该分类引用
+    const serviceStore = useServiceStore()
     const discountStore = useDiscountStore()
     const limitGroupStore = useLimitGroupStore()
-    if (priceStore.prices.length && priceStore.prices.some((p) => p.categoryIds.includes(id))) {
-      for (const p of priceStore.prices.filter((x) => x.categoryIds.includes(id))) {
-        await priceStore.update(p.id, {
+    if (
+      serviceStore.services.length &&
+      serviceStore.services.some((p) => p.categoryIds.includes(id))
+    ) {
+      for (const p of serviceStore.services.filter((x) => x.categoryIds.includes(id))) {
+        await serviceStore.update(p.id, {
           categoryIds: p.categoryIds.filter((c) => c !== id),
         })
       }

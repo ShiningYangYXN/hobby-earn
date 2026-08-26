@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { itemAmount, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
@@ -24,7 +24,7 @@ export interface ApplyContext {
 export function useDiscountApply(ctx: () => ApplyContext) {
   const discountStore = useDiscountStore()
   const limitGroupStore = useLimitGroupStore()
-  const priceStore = usePriceStore()
+  const serviceStore = useServiceStore()
   const memberStore = useMemberStore()
   const memberTypeStore = useMemberTypeStore()
 
@@ -32,7 +32,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   const countedIds = ref<Set<string>>(new Set())
 
   function categoryIdsOf(priceEntryId: string): string[] {
-    return priceStore.prices.find((p) => p.id === priceEntryId)?.categoryIds ?? []
+    return serviceStore.services.find((p) => p.id === priceEntryId)?.categoryIds ?? []
   }
 
   const memberTypeId = computed(() => {

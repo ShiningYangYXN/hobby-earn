@@ -14,7 +14,7 @@ import {
   useMessage,
   useDialog,
 } from 'naive-ui'
-import { IconPlus, IconVip } from '@tabler/icons-vue'
+import { IconPlus, IconTags } from '@tabler/icons-vue'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useOrderStore } from '@/stores/useOrderStore'
@@ -145,9 +145,9 @@ watch(
     <NH2 prefix="bar">会员管理</NH2>
 
     <NCard>
-      <NFlex vertical :size="12">
-        <NFlex align="center" justify="space-between" :size="12" wrap>
-          <NFlex align="center" :size="12" wrap>
+      <NFlex vertical>
+        <NFlex align="center" justify="space-between" wrap>
+          <NFlex align="center" wrap>
             <NInput
               v-model:value="keyword"
               placeholder="搜索姓名 / 手机"
@@ -157,15 +157,15 @@ watch(
             <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 160px" />
             <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 140px" />
           </NFlex>
-          <NFlex align="center" :size="12" wrap>
+          <NFlex align="center" wrap>
             <NButton @click="openTypeManagement">
-              <NIcon :size="16">
-                <IconVip />
+              <NIcon>
+                <IconTags />
               </NIcon>
               管理会员种类
             </NButton>
             <NButton type="primary" @click="openNew">
-              <NIcon :size="16">
+              <NIcon>
                 <IconPlus />
               </NIcon>
               新建会员

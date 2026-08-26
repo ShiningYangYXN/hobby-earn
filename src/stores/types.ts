@@ -23,7 +23,7 @@ export interface MemberType {
 }
 
 // ============================================================
-// 分类 / 价格项
+// 分类 / 服务项
 // ============================================================
 export interface Category {
   id: string
@@ -33,12 +33,12 @@ export interface Category {
 
 export type PricingMode = 'hourly' | 'perPiece'
 
-export interface PriceEntry {
+export interface ServiceEntry {
   id: string
   name: string
   isActive: boolean
   remark?: string
-  description?: string // 价格项描述 / 备注说明
+  description?: string // 服务项描述 / 备注说明
   pricingMode: PricingMode
   basePrice: number
   categoryIds: string[]
@@ -317,13 +317,33 @@ export function genId(prefix = 'id'): string {
 }
 export const uid = genId
 
-// 订单号格式：order-{{timestamp}}-{{randomString}}
+// 订单号格式（保持不变）：order-{{timestamp}}-{{randomString}}
 export function genOrderId(): string {
   return `order-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
-// 会员号格式（与订单号同构，仅前缀不同）：member-{{timestamp}}-{{randomString}}
+// 号码格式统一为 `前缀-{{timestamp}}-######`：
+//   - 第二部分（中间段）与订单号规则一致，使用 Date.now().toString(36) 时间戳编码；
+//   - 第三部分（末尾 6 位）随机串，便于展示与人工核对，并降低同毫秒碰撞概率。
+const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
+function randomCode(len: number): string {
+  let s = ''
+  for (let i = 0; i < len; i++) s += ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)]
+  return s
+}
+function tsSeg(): string {
+  return Date.now().toString(36)
+}
+// 会员号格式：member-{{timestamp}}-######
 export function genMemberId(): string {
-  return `member-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return `member-${tsSeg()}-${randomCode(6)}`
+}
+// 服务号格式：service-{{timestamp}}-######
+export function genServiceId(): string {
+  return `service-${tsSeg()}-${randomCode(6)}`
+}
+// 优惠号格式：discount-{{timestamp}}-######
+export function genDiscountId(): string {
+  return `discount-${tsSeg()}-${randomCode(6)}`
 }
 export function now(): string {
   return new Date().toISOString()

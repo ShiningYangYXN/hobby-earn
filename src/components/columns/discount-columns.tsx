@@ -2,7 +2,7 @@ import { NTag, NFlex, NButton, NText } from 'naive-ui'
 import { fmt, formatZhe, ruleTypeLabelOf, isCouponRequired, type Discount } from '@/stores/types'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
@@ -54,12 +54,18 @@ export function buildDiscountColumns(opts: {
   const exclusiveGroupStore = useExclusiveGroupStore()
   const categoryStore = useCategoryStore()
   const limitGroupStore = useLimitGroupStore()
-  const priceStore = usePriceStore()
+  const serviceStore = useServiceStore()
   const catName = (id: string) => categoryStore.categories.find((c) => c.id === id)?.name ?? id
-  const itemName = (id: string) => priceStore.prices.find((p) => p.id === id)?.name ?? id
+  const itemName = (id: string) => serviceStore.services.find((p) => p.id === id)?.name ?? id
   const memberName = (id: string) => memberStore.members.find((m) => m.id === id)?.name ?? id
 
   return [
+    {
+      title: '优惠号',
+      key: 'id',
+      width: 220,
+      render: (row: Discount) => <NText class="mono">{row.id}</NText>,
+    },
     { title: '名称', key: 'name', minWidth: 160 },
     {
       title: '执行方式',

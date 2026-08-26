@@ -6,7 +6,7 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NText,
+  NEmpty,
   NCard,
   NSelect,
   NInput,
@@ -145,12 +145,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <NFlex vertical :size="16">
+  <NFlex vertical>
     <NH2 prefix="bar">订单管理</NH2>
     <NCard>
-      <NFlex vertical :size="12">
-        <NFlex align="center" justify="space-between" :size="12" wrap>
-          <NFlex align="center" :size="12" wrap>
+      <NFlex vertical>
+        <NFlex align="center" justify="space-between" wrap>
+          <NFlex align="center" wrap>
             <NInput
               v-model:value="keyword"
               placeholder="搜索会员 / 订单号"
@@ -174,7 +174,7 @@ onMounted(() => {
           </NFlex>
           <NFlex align="center" :size="12" wrap>
             <NButton type="primary" @click="openCreate">
-              <NIcon :size="16">
+              <NIcon>
                 <IconPlus />
               </NIcon>
               新建订单
@@ -182,13 +182,14 @@ onMounted(() => {
           </NFlex>
         </NFlex>
         <NDataTable
+          v-if="list.length"
           :columns="columns"
           :data="list"
           :pagination="{ pageSize: 10 }"
           :scroll-x="tableScrollX(columns)"
           size="small"
         />
-        <NText v-if="!list.length" depth="3">暂无订单。</NText>
+        <NEmpty v-else description="暂无订单" />
       </NFlex>
       <RouterView />
     </NCard>

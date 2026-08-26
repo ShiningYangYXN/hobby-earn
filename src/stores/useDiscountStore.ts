@@ -7,7 +7,7 @@ import {
   type RandomConfig,
   type OrderItem,
   type TimeWindow,
-  genId,
+  genDiscountId,
 } from './types'
 import { getAll, put, del } from './db'
 
@@ -290,7 +290,7 @@ export const useDiscountStore = defineStore('discount', () => {
   async function add(d: Omit<Discount, 'id' | 'createdAt' | 'usedCount'>): Promise<Discount> {
     const full: Discount = {
       ...d,
-      id: genId('disc'),
+      id: genDiscountId(),
       createdAt: Date.now(),
       usedCount: 0,
       memberUsed: {},

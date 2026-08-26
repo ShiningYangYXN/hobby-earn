@@ -34,7 +34,7 @@ import {
 } from '@/stores/types'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
@@ -47,7 +47,7 @@ const dialog = useDialog()
 const msg = useMessage()
 const orderStore = useOrderStore()
 const discountStore = useDiscountStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 const memberTypeStore = useMemberTypeStore()
 const memberStore = useMemberStore()
@@ -126,7 +126,7 @@ const draftDirty = computed(() => {
   )
 })
 const priceOptions = computed(() =>
-  priceStore.prices
+  serviceStore.services
     .filter((p) => p.isActive)
     .map((p) => ({
       label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
@@ -136,7 +136,7 @@ const priceOptions = computed(() =>
     })),
 )
 function rowPrice(priceId: string) {
-  return priceStore.prices.find((p) => p.id === priceId)
+  return serviceStore.services.find((p) => p.id === priceId)
 }
 function addItemRow() {
   editItems.value.push({
@@ -353,7 +353,6 @@ async function forceReopenOrder() {
     :show="!!order"
     title="订单详情"
     preset="card"
-    class="modal-lg"
     :autoFocus="false"
     @update:show="close"
   >
@@ -709,7 +708,7 @@ async function forceReopenOrder() {
         <NDescriptionsItem label="限定单品" v-if="selectedDiscount.scope?.items?.length">
           {{
             selectedDiscount.scope.items
-              .map((id) => priceStore.prices.find((p) => p.id === id)?.name ?? id)
+              .map((id) => serviceStore.services.find((p) => p.id === id)?.name ?? id)
               .join('、')
           }}
         </NDescriptionsItem>

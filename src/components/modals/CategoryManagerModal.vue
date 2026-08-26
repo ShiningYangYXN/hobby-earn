@@ -7,7 +7,7 @@ const router = useRouter()
 const store = useCategoryStore()
 
 function close() {
-  router.push('/prices')
+  router.push('/services')
 }
 </script>
 
@@ -25,6 +25,6 @@ function close() {
     :update="(id, f) => store.update(id, f.name)"
     :remove="(id) => store.remove(id)"
     :close="close"
-    confirm-text="删除后引用该分类的价格项、优惠、上限组将同步移除该分类，确认删除？"
+    confirm-text="删除后引用该分类的服务项、优惠、上限组将同步移除该分类，确认删除？"
   />
 </template>

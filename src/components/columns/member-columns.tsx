@@ -19,8 +19,13 @@ export function buildMemberColumns(opts: {
 }): MemberColumn[] {
   const memberTypeStore = useMemberTypeStore()
   return [
+    {
+      title: '会员号',
+      key: 'id',
+      width: 220,
+      render: (row: Member) => <NText class="mono">{row.id}</NText>,
+    },
     { title: '姓名', key: 'name', minWidth: 130 },
-    { title: '会员号', key: 'id', minWidth: 220, render: (row: Member) => row.id },
     { title: '手机', key: 'phone', width: 140, render: (row: Member) => row.phone || '-' },
     {
       title: '种类',

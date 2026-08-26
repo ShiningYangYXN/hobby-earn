@@ -26,7 +26,7 @@ import { clear } from '@/stores/db'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 
 const ui = useUiStore()
@@ -35,7 +35,7 @@ const dialog = useDialog()
 const orderStore = useOrderStore()
 const memberStore = useMemberStore()
 const memberTypeStore = useMemberTypeStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 const discountStore = useDiscountStore()
 
 function onAdvancedChange(val: boolean) {
@@ -73,7 +73,7 @@ function onLogoClick() {
 function clearAllData() {
   dialog.warning({
     title: '调试：清空全部数据',
-    content: '将删除所有订单、会员、会员种类、价格与优惠，且不可恢复。确认清空？',
+    content: '将删除所有订单、会员、会员种类、服务与优惠，且不可恢复。确认清空？',
     positiveText: '清空',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -81,7 +81,7 @@ function clearAllData() {
       orderStore.orders.splice(0)
       memberStore.members.splice(0)
       memberTypeStore.types.splice(0)
-      priceStore.prices.splice(0)
+      serviceStore.services.splice(0)
       discountStore.discounts.splice(0)
       msg.success('调试：全部数据已清空')
     },

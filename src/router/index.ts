@@ -4,7 +4,7 @@ import PriceMeterView from '@/views/PriceMeterView.vue'
 import MembersView from '@/views/MembersView.vue'
 import OrdersView from '@/views/OrdersView.vue'
 import DiscountsView from '@/views/DiscountsView.vue'
-import PricesView from '@/views/PricesView.vue'
+import ServicesView from '@/views/ServicesView.vue'
 import RevenueView from '@/views/RevenueView.vue'
 import AboutView from '@/views/AboutView.vue'
 import NewOrderModal from '@/components/modals/NewOrderModal.vue'
@@ -13,7 +13,7 @@ import DiscountModal from '@/components/modals/DiscountModal.vue'
 import ExclusiveGroupModal from '@/components/modals/ExclusiveGroupModal.vue'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
-import PriceModal from '@/components/modals/PriceModal.vue'
+import ServiceModal from '@/components/modals/ServiceModal.vue'
 import CategoryManagerModal from '@/components/modals/CategoryManagerModal.vue'
 import LimitGroupModal from '@/components/modals/LimitGroupModal.vue'
 
@@ -51,12 +51,12 @@ const router = createRouter({
       ],
     },
     {
-      path: '/prices',
-      name: 'prices',
-      component: PricesView,
+      path: '/services',
+      name: 'services',
+      component: ServicesView,
       children: [
-        { path: 'new', name: 'price-new', component: PriceModal },
-        { path: ':id', name: 'price-edit', component: PriceModal, props: true },
+        { path: 'new', name: 'service-new', component: ServiceModal },
+        { path: ':id', name: 'service-edit', component: ServiceModal, props: true },
         { path: 'categories', name: 'categories', component: CategoryManagerModal },
       ],
     },

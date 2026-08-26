@@ -27,7 +27,7 @@ import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
-import { usePriceStore } from '@/stores/usePriceStore'
+import { useServiceStore } from '@/stores/useServiceStore'
 import CategorySelect from '@/components/CategorySelect.vue'
 import ManageModal from '@/components/CategoryManageModal.vue'
 import { genCouponCode } from '@/stores/types'
@@ -49,9 +49,13 @@ const limitGroupStore = useLimitGroupStore()
 const categoryStore = useCategoryStore()
 const memberTypeStore = useMemberTypeStore()
 const memberStore = useMemberStore()
-const priceStore = usePriceStore()
+const serviceStore = useServiceStore()
 
 const editing = computed(() => !!props.id)
+const discountIdDisplay = computed(() => {
+  if (!props.id) return ''
+  return store.discounts.find((x) => x.id === props.id)?.id ?? ''
+})
 
 const ruleOptions = [
   { label: '满减（固定金额）', value: 'fixed' as RuleType },
@@ -70,7 +74,9 @@ const memberTypeOptions = computed(() =>
 const memberOptions = computed(() =>
   memberStore.members.map((m) => ({ label: m.name, value: m.id })),
 )
-const itemOptions = computed(() => priceStore.prices.map((p) => ({ label: p.name, value: p.id })))
+const itemOptions = computed(() =>
+  serviceStore.services.map((p) => ({ label: p.name, value: p.id })),
+)
 const exclusiveOptions = computed(() =>
   exclusiveStore.groups.map((g) => ({ label: g.name, value: g.id })),
 )
@@ -157,7 +163,7 @@ watch(
       categoryStore.load(),
       memberTypeStore.load(),
       memberStore.load(),
-      priceStore.load(),
+      serviceStore.load(),
     ])
     if (id) {
       const d = store.discounts.find((x) => x.id === id)
@@ -336,7 +342,7 @@ const showLimitManager = ref(false)
 const showExclusiveManager = ref(false)
 
 const limitItemOptions = computed(() =>
-  priceStore.prices.map((p) => ({ label: p.name, value: p.id })),
+  serviceStore.services.map((p) => ({ label: p.name, value: p.id })),
 )
 const limitScopeOptions = [
   { label: '全部订单金额', value: 'all' },
@@ -409,17 +415,15 @@ async function exclusiveRemove(id: string) {
 </script>
 
 <template>
-  <NModal
-    :show="true"
-    :title="editing ? '编辑优惠' : '新建优惠'"
-    preset="card"
-    class="modal-xxl"
-    :autoFocus="false"
-    @update:show="close"
-  >
+  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" :autoFocus="false" @update:show="close">
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
         <!-- 基础 -->
+        <NFormItem label="优惠号">
+          <NText class="mono" :depth="editing ? undefined : 3">{{
+            editing ? discountIdDisplay : '保存后自动生成'
+            }}</NText>
+        </NFormItem>
         <NFormItem label="优惠名称" required>
           <NInput v-model:value="form.name" placeholder="优惠名称" />
         </NFormItem>
@@ -434,63 +438,43 @@ async function exclusiveRemove(id: string) {
         </NFormItem>
 
         <NFormItem :label="valueLabel">
-          <NInputNumber
-            v-model:value="form.value"
-            :min="0"
-            :max="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 100 : undefined"
-            :precision="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 0 : 2"
-            style="width: 100%"
-          />
-          <NText
-            v-if="form.ruleType === 'perItem'"
-            depth="3"
-            style="font-size: 12px; display: block; margin-top: 4px"
-          >
-            对优惠范围内的每个计价单元立减固定金额。按件计费项目：单件 = 一件；按工时计费项目：单件
-            = 一个工时（按时价计算）。
-          </NText>
+          <NFlex vertical>
+            <NInputNumber v-model:value="form.value" :min="0"
+              :max="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 100 : undefined"
+              :precision="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 0 : 2" style="width: 100%" />
+            <NText v-if="form.ruleType === 'perItem'" depth="3"
+              style="font-size: 12px; display: block; margin-top: 4px">
+              对优惠范围内的每个计价单元立减固定金额。按件计费项目：单件 = 一件；按工时计费项目：单件
+              = 一个工时（按时价计算）。
+            </NText>
+          </NFlex>
         </NFormItem>
 
-        <NFormItem
-          v-if="form.ruleType === 'perItem' || form.ruleType === 'stepDown'"
-          :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'"
-        >
-          <NInputNumber
-            :value="form.maxUnits ?? null"
-            @update:value="(v: number | null) => (form.maxUnits = v ?? undefined)"
-            :min="1"
-            :precision="0"
-            placeholder="不限制"
-            style="width: 100%"
-          />
-          <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-            {{
-              form.ruleType === 'stepDown'
-                ? '超过该阶梯数的部分不再享受每满减。'
-                : '超过该件数的部分不再享受立减。'
-            }}
-          </NText>
+        <NFormItem v-if="form.ruleType === 'perItem' || form.ruleType === 'stepDown'"
+          :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'">
+          <NFlex vertical>
+            <NInputNumber :value="form.maxUnits ?? null"
+              @update:value="(v: number | null) => (form.maxUnits = v ?? undefined)" :min="1" :precision="0"
+              placeholder="不限制" style="width: 100%" />
+            <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
+              {{
+                form.ruleType === 'stepDown'
+                  ? '超过该阶梯数的部分不再享受每满减。'
+                  : '超过该件数的部分不再享受立减。'
+              }}
+            </NText>
+          </NFlex>
         </NFormItem>
 
         <NFormItem v-if="showMinAmount" :label="minAmountLabel">
-          <NInputNumber
-            v-model:value="form.minAmount"
-            :min="0"
-            :precision="2"
-            placeholder="0 表示不限制"
-            style="width: 100%"
-          />
+          <NInputNumber v-model:value="form.minAmount" :min="0" :precision="2" placeholder="0 表示不限制"
+            style="width: 100%" />
         </NFormItem>
 
         <NFormItem v-if="form.ruleType !== 'percentage'" label="优惠上限（元，可选）">
-          <NInputNumber
-            :value="form.maxDiscount ?? null"
-            @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)"
-            :min="0"
-            :precision="2"
-            placeholder="不限制"
-            style="width: 100%"
-          />
+          <NInputNumber :value="form.maxDiscount ?? null"
+            @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)" :min="0" :precision="2"
+            placeholder="不限制" style="width: 100%" />
           <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
             封顶优惠金额；留空表示不限制。
           </NText>
@@ -502,28 +486,16 @@ async function exclusiveRemove(id: string) {
         <NFormItem label="指定会员类型可用" label-placement="left">
           <NFlex vertical :size="4" style="width: 100%">
             <NSwitch v-model:value="form.scope.enabledMemberTypes" />
-            <NSelect
-              v-if="form.scope.enabledMemberTypes"
-              v-model:value="form.scope.memberTypeIds"
-              :options="memberTypeOptions"
-              multiple
-              filterable
-              placeholder="选择会员种类（命中任一即可）"
-            />
+            <NSelect v-if="form.scope.enabledMemberTypes" v-model:value="form.scope.memberTypeIds"
+              :options="memberTypeOptions" multiple filterable placeholder="选择会员种类（命中任一即可）" />
           </NFlex>
         </NFormItem>
 
         <NFormItem label="指定会员可用" label-placement="left">
           <NFlex vertical :size="4" style="width: 100%">
             <NSwitch v-model:value="form.scope.enabledMembers" />
-            <NSelect
-              v-if="form.scope.enabledMembers"
-              v-model:value="form.scope.memberIds"
-              :options="memberOptions"
-              multiple
-              filterable
-              placeholder="选择会员"
-            />
+            <NSelect v-if="form.scope.enabledMembers" v-model:value="form.scope.memberIds" :options="memberOptions"
+              multiple filterable placeholder="选择会员" />
           </NFlex>
         </NFormItem>
 
@@ -532,28 +504,15 @@ async function exclusiveRemove(id: string) {
             <NSwitch v-model:value="form.scope.enabledTime" />
             <template v-if="form.scope.enabledTime">
               <NFlex :size="8" align="center">
-                <NDatePicker
-                  :value="form.scope.validFrom ?? null"
-                  @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)"
-                  type="datetime"
-                  clearable
-                  placeholder="开始时间"
-                  style="width: 220px"
-                />
+                <NDatePicker :value="form.scope.validFrom ?? null"
+                  @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)" type="datetime"
+                  clearable placeholder="开始时间" style="width: 220px" />
                 <NText>~</NText>
-                <NDatePicker
-                  :value="form.scope.validUntil ?? null"
-                  @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)"
-                  type="datetime"
-                  clearable
-                  placeholder="结束时间"
-                  style="width: 220px"
-                />
+                <NDatePicker :value="form.scope.validUntil ?? null"
+                  @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)" type="datetime"
+                  clearable placeholder="结束时间" style="width: 220px" />
               </NFlex>
-              <NInput
-                v-model:value="form.scope.cron"
-                placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5；留空仅按起止时间"
-              />
+              <NInput v-model:value="form.scope.cron" placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5；留空仅按起止时间" />
               <NText depth="3" style="font-size: 12px">
                 周期 cron 与起止时间为「且」关系；支持 * / 逗号列表 /
                 区间(9-18)。留空表示仅受起止时间限制。
@@ -572,14 +531,8 @@ async function exclusiveRemove(id: string) {
         <NFormItem label="指定单品可用" label-placement="left">
           <NFlex vertical :size="4" style="width: 100%">
             <NSwitch v-model:value="form.scope.enabledItems" />
-            <NSelect
-              v-if="form.scope.enabledItems"
-              v-model:value="form.scope.itemIds"
-              :options="itemOptions"
-              multiple
-              filterable
-              placeholder="选择单品"
-            />
+            <NSelect v-if="form.scope.enabledItems" v-model:value="form.scope.itemIds" :options="itemOptions" multiple
+              filterable placeholder="选择单品" />
           </NFlex>
         </NFormItem>
 
@@ -591,23 +544,11 @@ async function exclusiveRemove(id: string) {
             <template v-if="form.randomEnabled">
               <NSelect v-model:value="form.randomKind" :options="randomKindOptions" />
               <NFlex :size="8" align="center">
-                <NInputNumber
-                  v-model:value="form.randomMin"
-                  :min="0"
-                  :precision="form.randomKind === 'amount' ? 2 : 0"
-                  :max="form.randomKind === 'ratio' ? 100 : undefined"
-                  placeholder="最小值"
-                  style="width: 160px"
-                />
+                <NInputNumber v-model:value="form.randomMin" :min="0" :precision="form.randomKind === 'amount' ? 2 : 0"
+                  :max="form.randomKind === 'ratio' ? 100 : undefined" placeholder="最小值" style="width: 160px" />
                 <NText>~</NText>
-                <NInputNumber
-                  v-model:value="form.randomMax"
-                  :min="0"
-                  :precision="form.randomKind === 'amount' ? 2 : 0"
-                  :max="form.randomKind === 'ratio' ? 100 : undefined"
-                  placeholder="最大值"
-                  style="width: 160px"
-                />
+                <NInputNumber v-model:value="form.randomMax" :min="0" :precision="form.randomKind === 'amount' ? 2 : 0"
+                  :max="form.randomKind === 'ratio' ? 100 : undefined" placeholder="最大值" style="width: 160px" />
               </NFlex>
               <NText depth="3" style="font-size: 12px">
                 随机立减填写金额区间（元）；随机打折填写折扣力度区间（%）。优惠一旦被订单捕获，数额即固化。
@@ -618,15 +559,9 @@ async function exclusiveRemove(id: string) {
 
         <!-- 随机触发 -->
         <NFormItem label="随机触发概率（%）">
-          <NInputNumber
-            :value="form.triggerChance ?? null"
-            @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)"
-            :min="0"
-            :max="100"
-            :precision="0"
-            placeholder="100（必触发）"
-            style="width: 100%"
-          />
+          <NInputNumber :value="form.triggerChance ?? null"
+            @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)" :min="0" :max="100"
+            :precision="0" placeholder="100（必触发）" style="width: 100%" />
           <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
             留空或 100 表示每次都尝试触发；小于 100
             时按概率触发（仅自动优惠生效，附券码优惠不受影响）。
@@ -640,11 +575,7 @@ async function exclusiveRemove(id: string) {
             <NSwitch v-model:value="form.couponEnabled" />
             <template v-if="form.couponEnabled">
               <NInputGroup>
-                <NInput
-                  v-model:value="form.couponCode"
-                  placeholder="留空将自动生成"
-                  style="text-transform: uppercase"
-                />
+                <NInput v-model:value="form.couponCode" placeholder="留空将自动生成" style="text-transform: uppercase" />
                 <NButton @click="genCode">生成</NButton>
               </NInputGroup>
               <NText depth="3" style="font-size: 12px">
@@ -659,13 +590,8 @@ async function exclusiveRemove(id: string) {
         <NFormItem label="互斥组">
           <NFlex vertical :size="6" style="width: 100%">
             <NFlex :size="8" align="center">
-              <NSelect
-                v-model:value="form.exclusiveGroupId"
-                :options="exclusiveOptions"
-                placeholder="不加入互斥组"
-                clearable
-                style="flex: 1"
-              />
+              <NSelect v-model:value="form.exclusiveGroupId" :options="exclusiveOptions" placeholder="不加入互斥组" clearable
+                style="flex: 1" />
               <NButton size="small" @click="showExclusiveManager = true">管理</NButton>
             </NFlex>
             <NText depth="3" style="font-size: 12px; display: block">
@@ -677,14 +603,8 @@ async function exclusiveRemove(id: string) {
         <NFormItem label="上限组">
           <NFlex vertical :size="6" style="width: 100%">
             <NFlex :size="8" align="center">
-              <NSelect
-                v-model:value="form.limitGroups"
-                :options="limitGroupOptions"
-                multiple
-                filterable
-                placeholder="不加入上限组"
-                style="flex: 1"
-              />
+              <NSelect v-model:value="form.limitGroups" :options="limitGroupOptions" multiple filterable
+                placeholder="不加入上限组" style="flex: 1" />
               <NButton size="small" @click="showLimitManager = true">管理</NButton>
             </NFlex>
             <NText depth="3" style="font-size: 12px; display: block">
@@ -697,41 +617,33 @@ async function exclusiveRemove(id: string) {
     <template #footer>
       <NFlex justify="end">
         <NButton @click="close">
-          <NIcon><IconX /></NIcon>
+          <NIcon>
+            <IconX />
+          </NIcon>
           取消
         </NButton>
         <NButton type="primary" @click="save">
-          <NIcon><IconDeviceFloppy /></NIcon>
+          <NIcon>
+            <IconDeviceFloppy />
+          </NIcon>
           保存
         </NButton>
       </NFlex>
     </template>
 
     <!-- 内嵌上限组管理 -->
-    <ManageModal
-      v-if="showLimitManager"
-      title="上限组管理"
-      :items="limitGroupStore.groups"
-      :load="() => limitGroupStore.load()"
-      :empty-form="
-        () => ({
-          name: '',
-          limitType: 'amount',
-          limit: 0,
-          scope: 'all',
-          itemIds: [],
-          categoryIds: [],
-        })
-      "
-      :to-form="limitToForm"
-      :row-text="limitRowText"
-      :validate="limitValidate"
-      :create="limitCreate"
-      :update="limitUpdate"
-      :remove="limitRemove"
-      :close="() => (showLimitManager = false)"
-      confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？"
-    >
+    <ManageModal v-if="showLimitManager" title="上限组管理" :items="limitGroupStore.groups"
+      :load="() => limitGroupStore.load()" :empty-form="() => ({
+        name: '',
+        limitType: 'amount',
+        limit: 0,
+        scope: 'all',
+        itemIds: [],
+        categoryIds: [],
+      })
+        " :to-form="limitToForm" :row-text="limitRowText" :validate="limitValidate" :create="limitCreate"
+      :update="limitUpdate" :remove="limitRemove" :close="() => (showLimitManager = false)"
+      confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？">
       <template #form-extra="{ form: lf }">
         <NGi>
           <NText depth="3" class="small-label">计算范围</NText>
@@ -739,13 +651,7 @@ async function exclusiveRemove(id: string) {
         </NGi>
         <NGi v-if="lf.scope === 'items'">
           <NText depth="3" class="small-label">参与计算的单品</NText>
-          <NSelect
-            v-model:value="lf.itemIds"
-            :options="limitItemOptions"
-            multiple
-            filterable
-            placeholder="选择单品"
-          />
+          <NSelect v-model:value="lf.itemIds" :options="limitItemOptions" multiple filterable placeholder="选择单品" />
         </NGi>
         <NGi v-if="lf.scope === 'categories'">
           <NText depth="3" class="small-label">参与计算的分类</NText>
@@ -759,28 +665,16 @@ async function exclusiveRemove(id: string) {
           <NText depth="3" class="small-label">
             组上限（{{ lf.limitType === 'amount' ? '元' : '%' }}）
           </NText>
-          <NInputNumber
-            v-model:value="lf.limit"
-            :min="0"
-            :precision="lf.limitType === 'amount' ? 2 : 0"
-            style="width: 100%"
-          />
+          <NInputNumber v-model:value="lf.limit" :min="0" :precision="lf.limitType === 'amount' ? 2 : 0"
+            style="width: 100%" />
         </NGi>
       </template>
     </ManageModal>
 
     <!-- 内嵌互斥组管理 -->
-    <ManageModal
-      v-if="showExclusiveManager"
-      title="互斥组管理"
-      :items="exclusiveStore.groups"
-      :load="() => exclusiveStore.load()"
-      :empty-form="() => ({ name: '' })"
-      :create="exclusiveCreate"
-      :update="exclusiveUpdate"
-      :remove="exclusiveRemove"
-      :close="() => (showExclusiveManager = false)"
-      confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？"
-    />
+    <ManageModal v-if="showExclusiveManager" title="互斥组管理" :items="exclusiveStore.groups"
+      :load="() => exclusiveStore.load()" :empty-form="() => ({ name: '' })" :create="exclusiveCreate"
+      :update="exclusiveUpdate" :remove="exclusiveRemove" :close="() => (showExclusiveManager = false)"
+      confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？" />
   </NModal>
 </template>
