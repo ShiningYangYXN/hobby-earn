@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   NCard,
   NCheckbox,
@@ -71,6 +71,14 @@ const autoDrafts = computed(() => apply.drafts.value)
 
 const allDrafts = computed<DiscountDraft[]>(() => [...autoDrafts.value, ...redeemed.value])
 
+// 折叠态只展示前若干项，展开后显示全部
+const COLLAPSED_COUNT = 3
+const collapsed = computed(() => !expanded.value && allDrafts.value.length > COLLAPSED_COUNT)
+const visibleDrafts = computed<DiscountDraft[]>(() =>
+  collapsed.value ? allDrafts.value.slice(0, COLLAPSED_COUNT) : allDrafts.value,
+)
+const hiddenCount = computed(() => allDrafts.value.length - visibleDrafts.value.length)
+
 const subtotal = computed(() => subtotalOf(props.items ?? []))
 
 // 最优用券方案：互斥组择一 + 上限组封顶后实算，优先级为「优惠额最大 > 用券最少 > 消耗稀缺/临期券」
@@ -97,39 +105,102 @@ function ruleTextOf(d: DiscountDraft): string {
   return discountRuleText(d.discount, d.capturedRandom)
 }
 
-// —— 稀有 / 临期标记 ——
-const EXPIRING_SOON_DAYS = 7
+// —— 稀有 / 限时 / 临期标记 ——
+const EXPIRING_HOURS = 24 // 距失效不足 24 小时才算「临期」，其余仅标「限时」
+const LOW_STOCK = 10 // 总剩余不多于此值时直接展示余量
 
-function daysToExpire(d: Discount): number | null {
+// 倒计时需要逐秒刷新，仅在存在「临期」券时才启动时钟
+const now = ref(Date.now())
+let clock: number | null = null
+function startClock() {
+  if (clock) return
+  clock = window.setInterval(() => (now.value = Date.now()), 1000)
+}
+function stopClock() {
+  if (clock) {
+    clearInterval(clock)
+    clock = null
+  }
+}
+
+function msToExpire(d: Discount): number | null {
   const until = d.scope?.timeWindow?.validUntil
   if (!until) return null
   const t = new Date(until).getTime()
   if (Number.isNaN(t)) return null
-  return Math.floor((t - Date.now()) / 86400000)
+  return t - now.value
 }
-/** 即将到期（含今天） */
+/** 带有效期＝限时券 */
+function isTimeLimited(d: Discount): boolean {
+  return msToExpire(d) != null
+}
+/** 距失效不足 24 小时（含已失效） */
 function isExpiring(d: Discount): boolean {
-  const days = daysToExpire(d)
-  return days != null && days <= EXPIRING_SOON_DAYS
+  const ms = msToExpire(d)
+  return ms != null && ms < EXPIRING_HOURS * 3600_000
+}
+function countdownText(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return m > 0 ? `${h}小时${m}分` : `${h}小时`
+  if (m > 0) return `${m}分${sec}秒`
+  return `${sec}秒`
+}
+/** 标签文案：临期显示倒计时，否则显示「限时」 */
+function expireText(d: Discount): string {
+  const ms = msToExpire(d)
+  if (ms == null) return '限时'
+  if (ms <= 0) return '已失效'
+  if (ms < EXPIRING_HOURS * 3600_000) return countdownText(ms)
+  return '限时'
+}
+function expireTagType(d: Discount): 'error' | 'default' {
+  return isExpiring(d) ? 'error' : 'default'
 }
 function expireTitle(d: Discount): string {
-  const days = daysToExpire(d)
-  if (days == null) return ''
-  const date = d.scope?.timeWindow?.validUntil?.slice(0, 10) ?? ''
-  if (days < 0) return `已于 ${date} 过期`
-  if (days === 0) return `今天到期（${date}）`
-  return `${days} 天后到期（${date}）`
+  const until = d.scope?.timeWindow?.validUntil
+  if (!until) return ''
+  const at = until.length > 10 ? `${until.slice(0, 10)} ${until.slice(11, 16)}` : until.slice(0, 10)
+  const ms = msToExpire(d)
+  if (ms != null && ms <= 0) return `已于 ${at} 失效`
+  const tail = `（${at}）`
+  return ms == null ? `有效期至 ${at}` : `${countdownText(ms)}后失效${tail}`
 }
+
 /** 带用量上限（总用量或每会员限用）＝会消耗掉的稀缺券 */
 function isLimited(d: Discount): boolean {
   return !!(d.usageLimit || d.memberLimit)
 }
+/** 总剩余张数（所有用户共享）；无总用量限制时返回 null */
+function stockLeft(d: Discount): number | null {
+  if (!d.usageLimit) return null
+  return Math.max(0, d.usageLimit - d.usedCount)
+}
+/** 余量不足时直接显示剩余张数 */
+function limitText(d: Discount): string {
+  const left = stockLeft(d)
+  if (left == null) return '限量'
+  if (left <= 0) return '已用完'
+  return left <= LOW_STOCK ? `仅剩${left}张` : '限量'
+}
 function limitTitle(d: Discount): string {
   const parts: string[] = []
-  if (d.usageLimit) parts.push(`总剩余 ${Math.max(0, d.usageLimit - d.usedCount)} 次`)
+  const left = stockLeft(d)
+  if (left != null) parts.push(`总剩余 ${left} 张 / 共 ${d.usageLimit} 张`)
+  else if (d.usageLimit) parts.push(`总限 ${d.usageLimit} 次`)
   if (d.memberLimit) parts.push(`每会员限 ${d.memberLimit} 次`)
   return parts.join('，')
 }
+
+// 存在临期券才挂秒级时钟，避免无谓刷新
+watch(
+  () => allDrafts.value.some((d) => isExpiring(d.discount)),
+  (v) => (v ? startClock() : stopClock()),
+  { immediate: true },
+)
+onUnmounted(stopClock)
 /** 随机数额类：立减/打折的数额在范围内随机 */
 function isRandomAmount(d: Discount): boolean {
   return !!d.random
@@ -206,7 +277,6 @@ function toggle(id: string, val: boolean) {
   manual.value = true // 手动改动后尊重用户选择，不再自动套用最优方案
   if (val) checked.value.add(id)
   else checked.value.delete(id)
-  if (val && checked.value.size) expanded.value = true
 }
 
 function redeem() {
@@ -281,7 +351,7 @@ defineExpose({
 
       <NCard v-if="allDrafts.length" size="small" :title="`可用优惠（${allDrafts.length}）`" :segmented="{ content: true }">
         <NFlex vertical :size="8">
-          <NCheckbox v-for="d in allDrafts" :key="d.discount.id" class="draft-checkbox"
+          <NCheckbox v-for="d in visibleDrafts" :key="d.discount.id" class="draft-checkbox"
             :checked="checked.has(d.discount.id)"
             @update:checked="(v: boolean) => toggle(d.discount.id, v)">
             <NFlex justify="space-between" class="draft-row">
@@ -289,9 +359,9 @@ defineExpose({
                 <NText class="name-text">{{ d.discount.name }}</NText>
                 <NTag v-if="d.discount.couponCode" size="tiny" type="info" :bordered="false">券码</NTag>
                 <NTag v-if="isLimited(d.discount)" size="tiny" type="warning" :bordered="false"
-                  :title="limitTitle(d.discount)">限量</NTag>
-                <NTag v-if="isExpiring(d.discount)" size="tiny" type="error" :bordered="false"
-                  :title="expireTitle(d.discount)">临期</NTag>
+                  :title="limitTitle(d.discount)">{{ limitText(d.discount) }}</NTag>
+                <NTag v-if="isTimeLimited(d.discount)" size="tiny" :type="expireTagType(d.discount)"
+                  :bordered="false" :title="expireTitle(d.discount)">{{ expireText(d.discount) }}</NTag>
                 <NTag v-if="isRandomAmount(d.discount)" size="tiny" type="primary" :bordered="false"
                   :title="randomTitle(d.discount)">随机</NTag>
                 <NTag v-if="isRandomTrigger(d.discount)" size="tiny" type="primary" :bordered="false"
@@ -306,8 +376,8 @@ defineExpose({
             </NFlex>
           </NCheckbox>
 
-          <NButton v-if="allDrafts.length > 3" text size="tiny" @click="expanded = !expanded">
-            {{ expanded ? '收起' : '展开全部' }}
+          <NButton v-if="allDrafts.length > COLLAPSED_COUNT" text size="tiny" @click="expanded = !expanded">
+            {{ expanded ? '收起' : `展开全部（还有 ${hiddenCount} 项）` }}
           </NButton>
         </NFlex>
       </NCard>

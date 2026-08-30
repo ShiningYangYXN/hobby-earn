@@ -13,17 +13,20 @@ import {
   NFlex,
   NIcon,
   NText,
+  NDatePicker,
   useMessage,
 } from 'naive-ui'
 import { IconX, IconDeviceFloppy } from '@tabler/icons-vue'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useUiStore } from '@/stores/useUiStore'
 
 const props = defineProps<{ id?: string }>()
 const router = useRouter()
 const msg = useMessage()
 const memberStore = useMemberStore()
 const memberTypeStore = useMemberTypeStore()
+const ui = useUiStore()
 
 const editing = computed(() => !!props.id)
 const memberIdDisplay = computed(() => {
@@ -40,6 +43,8 @@ const empty = () => ({
   typeIds: [] as string[],
   notes: '',
   isActive: true,
+  // 入会时间为建档字段，默认只读；仅作弊模式可改写
+  joinDate: null as number | null,
 })
 const form = ref(empty())
 
@@ -56,6 +61,7 @@ watch(
           typeIds: [...(m.typeIds ?? [])],
           notes: m.notes ?? '',
           isActive: m.isActive !== false,
+          joinDate: m.joinDate ? Date.parse(m.joinDate) || null : null,
         }
         : empty()
     } else {
@@ -71,12 +77,23 @@ async function save() {
     return
   }
   try {
-    const payload = {
+    const payload: {
+      name: string
+      phone: string
+      typeIds: string[]
+      notes: string
+      isActive: boolean
+      joinDate?: string
+    } = {
       name: form.value.name,
       phone: form.value.phone,
       typeIds: form.value.typeIds,
       notes: form.value.notes,
       isActive: form.value.isActive,
+    }
+    // 入会时间仅作弊模式可改写
+    if (editing.value && ui.advancedMode && form.value.joinDate) {
+      payload.joinDate = new Date(form.value.joinDate).toISOString()
     }
     if (editing.value && props.id) {
       await memberStore.update(props.id, payload)
@@ -104,6 +121,9 @@ function close() {
           <NText class="mono" :depth="editing ? undefined : 3">{{
             editing ? memberIdDisplay : '保存后自动生成'
             }}</NText>
+        </NFormItem>
+        <NFormItem v-if="editing && ui.advancedMode" label="入会时间（作弊模式）">
+          <NDatePicker v-model:value="form.joinDate" type="datetime" clearable style="width: 100%" />
         </NFormItem>
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="会员名称" />

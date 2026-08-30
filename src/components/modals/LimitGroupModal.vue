@@ -6,7 +6,8 @@ import ItemManageModal from '@/components/ItemManageModal.vue'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
-import CategorySelect from '@/components/CategorySelect.vue'
+import TypeSelect from '@/components/TypeSelect.vue'
+import { useCategoryManage } from '@/composables/useTypeManage'
 import type { DiscountLimitGroup } from '@/stores/types'
 type FormShape = Record<string, unknown>
 
@@ -14,6 +15,7 @@ const router = useRouter()
 const store = useLimitGroupStore()
 const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
+const categoryManage = useCategoryManage()
 
 function close() {
   router.push('/discounts')
@@ -122,7 +124,7 @@ function updateGroup(id: string, f: FormShape) {
       </NGi>
       <NGi v-if="form.scope === 'categories'">
         <NText depth="3" class="small-label">参与计算的分类</NText>
-        <CategorySelect v-model="form.categoryIds" />
+        <TypeSelect v-model="form.categoryIds" :manage="categoryManage" />
       </NGi>
       <NGi>
         <NText depth="3" class="small-label">组上限类型</NText>

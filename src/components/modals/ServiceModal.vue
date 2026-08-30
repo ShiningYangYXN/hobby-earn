@@ -19,7 +19,8 @@ import {
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { type PricingMode } from '@/stores/types'
-import CategorySelect from '@/components/CategorySelect.vue'
+import TypeSelect from '@/components/TypeSelect.vue'
+import { useCategoryManage } from '@/composables/useTypeManage'
 import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
@@ -29,6 +30,7 @@ const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 
 const editing = computed(() => !!props.id)
+const categoryManage = useCategoryManage()
 const serviceIdDisplay = computed(() => {
   if (!props.id) return ''
   return serviceStore.services.find((x) => x.id === props.id)?.id ?? ''
@@ -133,7 +135,7 @@ function close() {
           <NInput v-model:value="form.name" placeholder="如：修电脑" />
         </NFormItem>
         <NFormItem label="分类（可多选）">
-          <CategorySelect v-model="form.categoryIds" />
+          <TypeSelect v-model="form.categoryIds" :manage="categoryManage" />
         </NFormItem>
         <NFormItem label="计价方式">
           <NSelect v-model:value="form.pricingMode" :options="modeOptions" />

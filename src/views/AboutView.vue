@@ -9,6 +9,8 @@ import {
   NText,
   NButton,
   NA,
+  NUl,
+  NLi,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -134,6 +136,14 @@ function clearAllData() {
         </NFlex>
         <NSwitch v-model:value="ui.advancedMode" @update:value="onAdvancedChange" />
       </NFlex>
+      <NText strong>作弊模式权限</NText>
+      <NUl class="perm-list">
+        <NLi>删除已完成订单、强制重开已关闭订单、直接改写订单应收金额</NLi>
+        <NLi>删除已被订单引用的服务 / 优惠（递归删除，连同关联订单一并清除）</NLi>
+        <NLi>改写订单只读字段：状态、归属会员、小计、创建时间与完成时间</NLi>
+        <NLi>改写优惠已用次数、会员入会时间</NLi>
+        <NLi>删除存在关联订单或优惠的会员（递归清理）</NLi>
+      </NUl>
       <NButton type="error" @click="clearAllData">
         <NIcon>
           <IconTrash />
@@ -148,5 +158,10 @@ function clearAllData() {
 .debug-menu {
   max-width: 640px;
   margin: 24px auto 0;
+}
+.perm-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
 }
 </style>

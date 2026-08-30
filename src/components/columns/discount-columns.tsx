@@ -47,7 +47,10 @@ export function buildDiscountColumns(opts: {
   openEdit: (d: Discount) => void
   toggle: (d: Discount) => void
   remove: (d: Discount) => void
+  /** 是否展示删除按钮：被订单引用且未开启作弊模式时隐藏 */
+  canDelete?: (d: Discount) => boolean
 }): DiscountColumn[] {
+  const canDelete = opts.canDelete ?? (() => true)
   const memberTypeStore = useMemberTypeStore()
   const memberStore = useMemberStore()
   const discountStore = useDiscountStore()
@@ -253,9 +256,11 @@ export function buildDiscountColumns(opts: {
           >
             {row.isActive ? '停用' : '启用'}
           </NButton>
-          <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>
-            删除
-          </NButton>
+          {canDelete(row) && (
+            <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>
+              删除
+            </NButton>
+          )}
         </NFlex>
       ),
     },

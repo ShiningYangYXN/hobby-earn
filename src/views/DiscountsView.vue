@@ -17,6 +17,8 @@ import {
 } from 'naive-ui'
 import { IconPlus, IconLayersIntersect, IconTransitionTop } from '@tabler/icons-vue'
 import { useDiscountStore } from '@/stores/useDiscountStore'
+import { useOrderStore } from '@/stores/useOrderStore'
+import { useUiStore } from '@/stores/useUiStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
 import { tableScrollX } from '@/stores/types'
 import { type Discount, ruleTypeLabel, isCouponRequired } from '@/stores/types'
@@ -25,6 +27,8 @@ const router = useRouter()
 const dialog = useDialog()
 const msg = useMessage()
 const discountStore = useDiscountStore()
+const orderStore = useOrderStore()
+const uiStore = useUiStore()
 
 function openExclusiveGroups() {
   router.push('/discounts/exclusive-groups')
@@ -83,23 +87,51 @@ function toggle(d: Discount) {
   discountStore.update(d.id, { isActive: !d.isActive })
 }
 
-const columns = buildDiscountColumns({ copyCode, openEdit, toggle, remove })
+// 引用（捕获）该优惠的订单数（>0 时普通模式下禁止删除）
+function orderRefCount(d: Discount): number {
+  return orderStore.orders.filter((o) => o.discountRecords.some((r) => r.discountId === d.id))
+    .length
+}
+// 被订单引用的优惠：非作弊模式隐藏删除按钮，作弊模式允许递归删除
+function canDelete(d: Discount): boolean {
+  return orderRefCount(d) === 0 || uiStore.advancedMode
+}
+
+const columns = buildDiscountColumns({ copyCode, openEdit, toggle, remove, canDelete })
 
 function remove(d: Discount) {
+  const n = orderRefCount(d)
+  const doRemove = async () => {
+    try {
+      await discountStore.remove(d.id)
+      msg.success(n ? `优惠与 ${n} 笔关联订单已一并删除` : '已删除')
+    } catch (e) {
+      msg.error('删除失败：' + (e as Error).message)
+    }
+  }
+  if (n) {
+    dialog.warning({
+      title: '递归删除优惠（作弊模式）',
+      content: `「${d.name}」已被 ${n} 笔订单引用。作弊模式下将连同这 ${n} 笔订单一并强制删除，且不可恢复。确认删除？`,
+      positiveText: '递归删除',
+      negativeText: '取消',
+      onPositiveClick: doRemove,
+    })
+    return
+  }
   dialog.warning({
     title: '删除优惠',
     content: `确认删除「${d.name}」？`,
     positiveText: '删除',
     negativeText: '取消',
-    onPositiveClick: async () => {
-      await discountStore.remove(d.id)
-      msg.success('已删除')
-    },
+    onPositiveClick: doRemove,
   })
 }
 
 onMounted(() => {
   if (!discountStore.discounts.length) discountStore.load()
+  // 订单是「是否被引用」的判定依据，必须加载后再允许删除
+  if (!orderStore.orders.length) orderStore.load()
 })
 </script>
 

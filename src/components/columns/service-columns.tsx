@@ -16,7 +16,10 @@ export function buildServiceColumns(opts: {
   openEdit: (row: ServiceEntry) => void
   toggle: (row: ServiceEntry) => Promise<void>
   remove: (row: ServiceEntry) => void
+  /** 是否展示删除按钮：被订单引用且未开启作弊模式时隐藏 */
+  canDelete?: (row: ServiceEntry) => boolean
 }): ServiceColumn[] {
+  const canDelete = opts.canDelete ?? (() => true)
   const categoryStore = useCategoryStore()
   const catName = (id: string) => categoryStore.categories.find((c) => c.id === id)?.name ?? id
   return [
@@ -87,9 +90,11 @@ export function buildServiceColumns(opts: {
           >
             {row.isActive ? '停用' : '启用'}
           </NButton>
-          <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>
-            删除
-          </NButton>
+          {canDelete(row) && (
+            <NButton size="tiny" type="error" onClick={() => opts.remove(row)}>
+              删除
+            </NButton>
+          )}
         </NFlex>
       ),
     },

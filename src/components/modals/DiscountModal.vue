@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
@@ -14,6 +14,8 @@ import {
   NSelect,
   NForm,
   NFormItem,
+  NFormItemGi,
+  NGrid,
   NSwitch,
   NDatePicker,
   NDivider,
@@ -28,8 +30,9 @@ import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useServiceStore } from '@/stores/useServiceStore'
-import CategorySelect from '@/components/CategorySelect.vue'
-import ItemManageModal from '@/components/ItemManageModal.vue'
+import { useUiStore } from '@/stores/useUiStore'
+import TypeSelect from '@/components/TypeSelect.vue'
+import { useCategoryManage, useMemberTypeManage, type TypeManageSource } from '@/composables/useTypeManage'
 import {
   genCouponCode,
   normalizeCouponCode,
@@ -55,6 +58,7 @@ const categoryStore = useCategoryStore()
 const memberTypeStore = useMemberTypeStore()
 const memberStore = useMemberStore()
 const serviceStore = useServiceStore()
+const ui = useUiStore()
 
 const editing = computed(() => !!props.id)
 const discountIdDisplay = computed(() => {
@@ -68,27 +72,17 @@ const ruleOptions = [
   { label: '每满减（阶梯立减）', value: 'stepDown' as RuleType },
   { label: '件件减（每件立减）', value: 'perItem' as RuleType },
 ]
-const randomKindOptions = [
-  { label: '随机立减（金额随机）', value: 'amount' as const },
-  { label: '随机打折（折扣力度随机）', value: 'ratio' as const },
-]
 
-const memberTypeOptions = computed(() =>
-  memberTypeStore.types.map((t) => ({ label: t.name, value: t.id })),
-)
+// 「类型选择」统一走 TypeSelect：选择器 + 就地管理，新增类型无需离开当前表单
+const memberTypeManage = useMemberTypeManage()
+const categoryManage = useCategoryManage()
+
 const memberOptions = computed(() =>
   memberStore.members.map((m) => ({ label: m.name, value: m.id })),
 )
 const itemOptions = computed(() =>
   serviceStore.services.map((p) => ({ label: p.name, value: p.id })),
 )
-const exclusiveOptions = computed(() =>
-  exclusiveStore.groups.map((g) => ({ label: g.name, value: g.id })),
-)
-const limitGroupOptions = computed(() =>
-  limitGroupStore.groups.map((g) => ({ label: g.name, value: g.id })),
-)
-
 interface DiscountForm {
   name: string
   isActive: boolean
@@ -118,6 +112,9 @@ interface DiscountForm {
   triggerChance?: number // 0-100；不填=100（必触发）
   couponEnabled: boolean
   couponCode: string
+  usageLimit?: number // 总可用次数（所有会员共享）；空=不限
+  memberLimit?: number // 每会员限用次数；空=不限
+  remark: string
   exclusiveGroupId?: string | null
   limitGroups: string[]
 }
@@ -152,12 +149,32 @@ function emptyForm(): DiscountForm {
     triggerChance: undefined,
     couponEnabled: false,
     couponCode: '',
+    usageLimit: undefined,
+    memberLimit: undefined,
+    remark: '',
     exclusiveGroupId: null,
     limitGroups: [],
   }
 }
 
 const form = ref<DiscountForm>(emptyForm())
+// 已用次数为统计字段，只读展示（编辑时回填 existing 值）
+const usedCount = ref(0)
+
+/**
+ * 执行方式决定随机的取值类型：打折→折扣力度，其余→金额。
+ * 切换执行方式时同步类型并清空区间，避免把「元」当「百分比」存下去。
+ */
+let loading = false
+watch(
+  () => form.value.ruleType,
+  (r) => {
+    if (loading) return
+    form.value.randomKind = r === 'percentage' ? 'ratio' : 'amount'
+    form.value.randomMin = 0
+    form.value.randomMax = 0
+  },
+)
 
 watch(
   () => props.id,
@@ -174,6 +191,7 @@ watch(
       const d = store.discounts.find((x) => x.id === id)
       if (d) {
         const s = d.scope
+        loading = true
         form.value = {
           name: d.name,
           isActive: d.isActive !== false,
@@ -198,18 +216,38 @@ watch(
           },
           randomEnabled: !!d.random,
           randomKind: d.random?.kind ?? 'amount',
-          randomMin: d.random ? Math.round(d.random.min / 100) : 0,
-          randomMax: d.random ? Math.round(d.random.max / 100) : 0,
+          // 元↔分换算仅适用于金额类；ratio 的 min/max 本就是 0-100 的支付比例，不换算
+          randomMin: d.random
+            ? d.random.kind === 'amount'
+              ? Math.round(d.random.min / 100)
+              : d.random.min
+            : 0,
+          randomMax: d.random
+            ? d.random.kind === 'amount'
+              ? Math.round(d.random.max / 100)
+              : d.random.max
+            : 0,
           triggerChance: d.triggerChance,
           couponEnabled: !!d.couponCode,
           couponCode: d.couponCode ?? '',
+          usageLimit: d.usageLimit ?? undefined,
+          memberLimit: d.memberLimit ?? undefined,
+          remark: d.remark ?? '',
           exclusiveGroupId: d.exclusiveGroupId ?? null,
           limitGroups: d.limitGroups ?? [],
         }
+        usedCount.value = d.usedCount
+        // 等 watcher 冲刷完毕再解除屏蔽，避免回填的数据被「切换执行方式」的联动清空
+        await nextTick()
+        loading = false
         return
       }
     }
+    loading = true
     form.value = emptyForm()
+    usedCount.value = 0
+    await nextTick()
+    loading = false
   },
   { immediate: true },
 )
@@ -228,6 +266,80 @@ const minAmountLabel = computed(() =>
 )
 // 件件减按件计，无金额门槛
 const showMinAmount = computed(() => form.value.ruleType !== 'perItem')
+const showMaxUnits = computed(
+  () => form.value.ruleType === 'perItem' || form.value.ruleType === 'stepDown',
+)
+
+// 各执行方式的计算口径说明，合并为一行，避免每个字段下重复堆提示
+const ruleHint = computed(() => {
+  const r = form.value.ruleType
+  if (r === 'perItem')
+    return '对范围内的每个计价单元立减：按件计费项目单件 = 一件；按工时计费项目单件 = 一个工时（按时价计算）。超出最大件数的部分不再立减。'
+  if (r === 'stepDown')
+    return '每满一个「每满金额」即减免一个该金额，如每满 100 减 20。超出最大阶梯数的部分不再享受。'
+  if (r === 'percentage') return '0 = 免单，100 = 不打折。'
+  return null
+})
+
+// 只有打折的 value 是 0-100 的比例；其余执行方式的 value 都是金额（元）
+const valueIsPercent = computed(() => form.value.ruleType === 'percentage')
+const valueStep = computed(() => (valueIsPercent.value ? 0 : 2))
+
+/**
+ * 随机类型与执行方式的对应关系取自 calcDiscount 的实际分支：
+ *   fixed + amount        → 随机立减额（替代固定减免金额）
+ *   percentage + ratio    → 随机折扣力度（替代固定折扣）
+ * 其余组合下随机减免额不参与计算，随机值只在封顶环节起作用。
+ */
+const derivedRandomKind = computed<'amount' | 'ratio'>(() =>
+  form.value.ruleType === 'percentage' ? 'ratio' : 'amount',
+)
+// 历史数据可能存在不匹配的组合，此时该随机配置不生效
+const randomKindMismatch = computed(
+  () => form.value.randomEnabled && form.value.randomKind !== derivedRandomKind.value,
+)
+const randomIsAmount = computed(() => form.value.randomKind === 'amount')
+const randomEffectText = computed(() => {
+  const r = form.value.ruleType
+  if (r === 'fixed')
+    return '开启后在范围内随机取一个金额作为立减额，上方固定金额作废，但仍需满足最低消费。'
+  if (r === 'percentage')
+    return '开启后在范围内随机取一个折扣力度作为实际折扣，上方固定折扣作废，如 85 表示打 8.5 折。'
+  return '每满减 / 件件减不支持随机减免额：固定额度仍照常生效，随机金额仅作为减免上限参与封顶。'
+})
+
+// calcDiscount 对所有执行方式都应用 maxDiscount 封顶；
+// 但随机立减时封顶由捕获到的随机值取代，此时再设上限无效
+const maxDiscountDisabled = computed(
+  () => form.value.randomEnabled && form.value.randomKind === 'amount',
+)
+
+// 带券码的优惠只能兑换，不参与自动触发，随机触发概率对其无意义
+const triggerDisabled = computed(() => form.value.couponEnabled)
+
+/**
+ * 随机额度是否顶掉固定额度（二者互斥）。
+ * 依据 calcDiscount：仅满减+随机金额、打折+随机力度这两种组合会完全取代 value；
+ * 每满减/件件减仍按 value 计算，随机值只参与封顶，故此时不冲突。
+ */
+const randomOverridesValue = computed(
+  () =>
+    form.value.randomEnabled &&
+    !randomKindMismatch.value &&
+    (form.value.ruleType === 'fixed' || form.value.ruleType === 'percentage'),
+)
+const valueDisabled = computed(() => randomOverridesValue.value)
+const valueHint = computed(() => {
+  if (!randomOverridesValue.value) return null
+  return form.value.ruleType === 'percentage'
+    ? '已开启随机折扣力度，此处固定折扣作废，实际力度由随机范围抽取。'
+    : '已开启随机立减，此处固定金额作废，实际立减额由随机范围抽取。'
+})
+
+// 剩余可用次数（编辑既有优惠时展示）
+const usageLeft = computed(() =>
+  form.value.usageLimit != null ? Math.max(0, form.value.usageLimit - usedCount.value) : null,
+)
 
 function buildScope(f: DiscountForm): DiscountScope | undefined {
   const s = f.scope
@@ -270,10 +382,16 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
     }
     payload.random = rnd
   }
-  if (f.triggerChance != null && f.triggerChance < 100) payload.triggerChance = f.triggerChance
+  // 带券码的优惠走兑换路径，不参与自动触发，随机触发概率对其无意义
+  if (!f.couponEnabled && f.triggerChance != null && f.triggerChance < 100)
+    payload.triggerChance = f.triggerChance
   if (f.couponEnabled) {
     payload.couponCode = normalizeCouponCode(f.couponCode.trim() || genCouponCode())
   }
+  // 留空=不限；配额调小时需不小于已用次数
+  payload.usageLimit = f.usageLimit ?? undefined
+  payload.memberLimit = f.memberLimit ?? undefined
+  payload.remark = f.remark.trim() || undefined
   payload.exclusiveGroupId = f.exclusiveGroupId || null
   payload.limitGroups = f.limitGroups.length ? [...f.limitGroups] : []
   return payload
@@ -282,20 +400,36 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
 function validate(f: DiscountForm): string | null {
   if (!f.name.trim()) return '请输入优惠名称'
   const r = f.ruleType
-  if (r === 'percentage') {
-    if (f.value < 0 || f.value > 100) return '折扣力度需为 0-100（0 = 免单）'
-  } else if (r === 'stepDown') {
-    if (f.value <= 0 || f.value > 100) return '折扣力度需为 1-100'
-  } else if (f.value <= 0) {
-    return '优惠金额需大于 0'
+  // 随机额度已顶掉固定额度时，value 不参与计算，无需校验
+  if (!randomOverridesValue.value) {
+    if (r === 'percentage') {
+      // percentage 的 value 是「支付比例」0-100，0 表示免单
+      if (f.value < 0 || f.value > 100) return '折扣力度需为 0-100（0 = 免单）'
+    } else if (r === 'stepDown') {
+      if (f.value <= 0) return '每阶梯减免金额需大于 0'
+    } else if (f.value <= 0) {
+      return '优惠金额需大于 0'
+    }
   }
-  if (r !== 'percentage' && f.maxDiscount != null && f.maxDiscount > 0 && f.maxDiscount < f.value)
+  // 仅当 value 与 maxDiscount 同为金额时才可比较（percentage 的 value 是比例；随机顶掉 value 时不可比）
+  if (
+    r !== 'percentage' &&
+    !randomOverridesValue.value &&
+    f.maxDiscount != null &&
+    f.maxDiscount > 0 &&
+    f.maxDiscount < f.value
+  )
     return '优惠上限不能小于优惠金额'
   if (r === 'stepDown' && (!f.minAmount || f.minAmount <= 0)) return '请填写每满金额（大于 0）'
-  if (r === 'perItem' && (!f.value || f.value <= 0)) return '请填写每件立减金额（大于 0）'
   if (f.maxUnits != null && f.maxUnits <= 0) return '最大执行件数/阶梯数需大于 0'
-  if (f.scope.enabledTime && (!f.scope.validFrom || !f.scope.validUntil))
-    return '请设置有效的起止时间'
+  // TimeWindow 各字段均可选：起止时间可以只填其一，也可以只配周期
+  if (
+    f.scope.enabledTime &&
+    !f.scope.validFrom &&
+    !f.scope.validUntil &&
+    !f.scope.cron.trim()
+  )
+    return '请设置起止时间或周期表达式'
   if (f.scope.enabledMemberTypes && f.scope.memberTypeIds.length === 0) return '请选择限定会员种类'
   if (f.scope.enabledMembers && f.scope.memberIds.length === 0) return '请选择限定会员'
   if (f.scope.enabledCategories && f.scope.categoryIds.length === 0) return '请选择参与优惠的分类'
@@ -303,9 +437,18 @@ function validate(f: DiscountForm): string | null {
   if (f.randomEnabled) {
     if (f.randomMin < 0 || f.randomMax < 0) return '随机范围不能为负'
     if (f.randomMax < f.randomMin) return '随机上限不能小于下限'
+    // 随机的取值类型必须与实际生效的分支一致，否则数值会被当成另一种单位解释
+    if (f.randomKind !== (r === 'percentage' ? 'ratio' : 'amount'))
+      return `随机类型（${f.randomKind === 'ratio' ? '折扣力度' : '金额'}）与当前执行方式不匹配，请重新填写随机范围`
   }
   if (f.couponEnabled && f.couponCode.trim() && !isValidCouponCode(f.couponCode))
     return `券码需为 ${COUPON_CODE_LENGTH} 位字母或数字`
+  if (f.usageLimit != null && f.usageLimit <= 0) return '总可用次数需大于 0'
+  if (f.usageLimit != null && usedCount.value > f.usageLimit)
+    return `总可用次数不能小于已用次数（${usedCount.value}）`
+  if (f.memberLimit != null && f.memberLimit <= 0) return '每会员限用次数需大于 0'
+  if (f.memberLimit != null && f.usageLimit != null && f.memberLimit > f.usageLimit)
+    return '每会员限用次数不能大于总可用次数'
   return null
 }
 
@@ -319,6 +462,10 @@ async function save() {
     const payload = buildPayload(form.value)
     if (editing.value && props.id) {
       await store.update(props.id, payload)
+      // 已用次数为统计字段，仅作弊模式可改写
+      if (ui.advancedMode) {
+        await store.update(props.id, { usedCount: Math.max(0, Math.round(usedCount.value)) })
+      }
       msg.success('优惠已更新')
     } else {
       await store.add(payload)
@@ -348,10 +495,7 @@ function couponAllowInput(char: string): boolean {
   return /[a-zA-Z0-9]/.test(char)
 }
 
-// 内嵌上限组 / 互斥组管理，提供「编辑入口」而无需离开优惠编辑框
-const showLimitManager = ref(false)
-const showExclusiveManager = ref(false)
-
+// 上限组 / 互斥组同属「类型选择」，与品类、会员种类共用 TypeSelect，样式与交互保持一致
 const limitItemOptions = computed(() =>
   serviceStore.services.map((p) => ({ label: p.name, value: p.id })),
 )
@@ -424,208 +568,332 @@ async function exclusiveRemove(id: string) {
   await exclusiveStore.remove(id)
   if (form.value.exclusiveGroupId === id) form.value.exclusiveGroupId = null
 }
+
+const exclusiveManage = computed<TypeManageSource>(() => ({
+  title: '互斥组管理',
+  items: exclusiveStore.groups,
+  load: () => exclusiveStore.load(),
+  create: exclusiveCreate,
+  update: exclusiveUpdate,
+  remove: exclusiveRemove,
+  confirmText: '删除后将从所有优惠中移除该互斥组归属，确认删除？',
+}))
+const limitGroupManage = computed<TypeManageSource>(() => ({
+  title: '上限组管理',
+  items: limitGroupStore.groups,
+  load: () => limitGroupStore.load(),
+  emptyForm: () => ({
+    name: '',
+    limitType: 'amount',
+    limit: 0,
+    scope: 'all',
+    itemIds: [],
+    categoryIds: [],
+  }),
+  toForm: limitToForm,
+  rowText: limitRowText,
+  validate: limitValidate,
+  create: limitCreate,
+  update: limitUpdate,
+  remove: limitRemove,
+  confirmText: '删除后将从所有优惠中移除该上限组归属，确认删除？',
+}))
+
+// 互斥组至多归属一个，单选模式；模型值统一为数组，取首个元素
+const exclusiveGroupIds = computed<string[]>({
+  get: () => (form.value.exclusiveGroupId ? [form.value.exclusiveGroupId] : []),
+  set: (v) => (form.value.exclusiveGroupId = v[0] ?? null),
+})
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" :autoFocus="false" @update:show="close">
+  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" :autoFocus="false" style="width: 760px"
+    @update:show="close">
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
         <!-- 基础 -->
-        <NFormItem label="优惠号">
-          <NText class="mono" :depth="editing ? undefined : 3">{{
-            editing ? discountIdDisplay : '保存后自动生成'
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="2" label="优惠名称" required>
+            <NInput v-model:value="form.name" placeholder="如：新客首单立减 20" />
+          </NFormItemGi>
+
+          <NFormItemGi :span="1" label="启用">
+            <NFlex align="center" :size="8">
+              <NSwitch v-model:value="form.isActive" />
+              <NText depth="3" style="font-size: 12px">{{ form.isActive ? '启用中' : '已停用' }}</NText>
+            </NFlex>
+          </NFormItemGi>
+
+          <NFormItemGi :span="1" label="优惠执行方式">
+            <NSelect v-model:value="form.ruleType" :options="ruleOptions" />
+          </NFormItemGi>
+
+          <NFormItemGi :span="2" label="优惠号">
+            <NText class="mono" :depth="editing ? undefined : 3">{{
+              editing ? discountIdDisplay : '保存后自动生成'
             }}</NText>
-        </NFormItem>
-        <NFormItem label="优惠名称" required>
-          <NInput v-model:value="form.name" placeholder="优惠名称" />
-        </NFormItem>
+          </NFormItemGi>
+        </NGrid>
 
-        <NFormItem label="启用" label-placement="left">
-          <NSwitch v-model:value="form.isActive" />
-        </NFormItem>
+        <!-- 规则 -->
+        <NDivider title-placement="left">规则</NDivider>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="1" :label="valueDisabled ? `${valueLabel}（随机额度生效时作废）` : valueLabel"
+            :required="!valueDisabled">
+            <NInputNumber v-model:value="form.value" :disabled="valueDisabled" :min="0"
+              :max="valueIsPercent ? 100 : undefined" :precision="valueStep"
+              :placeholder="valueDisabled ? '已被随机额度取代' : undefined" style="width: 100%" />
+          </NFormItemGi>
 
-        <!-- 优惠执行方式 -->
-        <NFormItem label="优惠执行方式">
-          <NSelect v-model:value="form.ruleType" :options="ruleOptions" />
-        </NFormItem>
+          <NGi v-if="valueHint" :span="2">
+            <NText type="warning" style="font-size: 12px">{{ valueHint }}</NText>
+          </NGi>
 
-        <NFormItem :label="valueLabel">
-          <NFlex vertical>
-            <NInputNumber v-model:value="form.value" :min="0"
-              :max="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 100 : undefined"
-              :precision="form.ruleType === 'percentage' || form.ruleType === 'stepDown' ? 0 : 2" style="width: 100%" />
-            <NText v-if="form.ruleType === 'perItem'" depth="3"
-              style="font-size: 12px; display: block; margin-top: 4px">
-              对优惠范围内的每个计价单元立减固定金额。按件计费项目：单件 = 一件；按工时计费项目：单件
-              = 一个工时（按时价计算）。
-            </NText>
-          </NFlex>
-        </NFormItem>
+          <NFormItemGi v-if="showMinAmount" :span="1" :label="minAmountLabel">
+            <NInputNumber v-model:value="form.minAmount" :min="0" :precision="2" placeholder="0 表示不限制"
+              style="width: 100%" />
+          </NFormItemGi>
 
-        <NFormItem v-if="form.ruleType === 'perItem' || form.ruleType === 'stepDown'"
-          :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'">
-          <NFlex vertical>
+          <NFormItemGi v-if="showMaxUnits" :span="1" :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'">
             <NInputNumber :value="form.maxUnits ?? null"
               @update:value="(v: number | null) => (form.maxUnits = v ?? undefined)" :min="1" :precision="0"
               placeholder="不限制" style="width: 100%" />
-            <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-              {{
-                form.ruleType === 'stepDown'
-                  ? '超过该阶梯数的部分不再享受每满减。'
-                  : '超过该件数的部分不再享受立减。'
-              }}
-            </NText>
-          </NFlex>
-        </NFormItem>
+          </NFormItemGi>
 
-        <NFormItem v-if="showMinAmount" :label="minAmountLabel">
-          <NInputNumber v-model:value="form.minAmount" :min="0" :precision="2" placeholder="0 表示不限制"
-            style="width: 100%" />
-        </NFormItem>
+          <NFormItemGi :span="1" label="优惠上限（元，可选）">
+            <NInputNumber :value="form.maxDiscount ?? null" :disabled="maxDiscountDisabled"
+              @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)" :min="0" :precision="2"
+              placeholder="不限制" style="width: 100%" />
+          </NFormItemGi>
 
-        <NFormItem v-if="form.ruleType !== 'percentage'" label="优惠上限（元，可选）">
-          <NInputNumber :value="form.maxDiscount ?? null"
-            @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)" :min="0" :precision="2"
-            placeholder="不限制" style="width: 100%" />
-          <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-            封顶优惠金额；留空表示不限制。
-          </NText>
-        </NFormItem>
+          <NGi v-if="ruleHint" :span="2">
+            <NText depth="3" style="font-size: 12px">{{ ruleHint }}</NText>
+          </NGi>
+          <NGi v-if="maxDiscountDisabled" :span="2">
+            <NText depth="3" style="font-size: 12px">随机立减时减免额已被随机值封顶，优惠上限设置无效。</NText>
+          </NGi>
+        </NGrid>
 
         <!-- 作用域指标 -->
         <NDivider title-placement="left">作用域（可自由组合）</NDivider>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="2" label="指定会员类型可用">
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NSwitch v-model:value="form.scope.enabledMemberTypes" />
+              <TypeSelect v-if="form.scope.enabledMemberTypes" v-model="form.scope.memberTypeIds"
+                :manage="memberTypeManage" placeholder="选择会员种类（命中任一即可）" style="flex: 1" />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+          </NFormItemGi>
 
-        <NFormItem label="指定会员类型可用" label-placement="left">
-          <NFlex vertical :size="4" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledMemberTypes" />
-            <NSelect v-if="form.scope.enabledMemberTypes" v-model:value="form.scope.memberTypeIds"
-              :options="memberTypeOptions" multiple filterable placeholder="选择会员种类（命中任一即可）" />
-          </NFlex>
-        </NFormItem>
+          <NFormItemGi :span="2" label="指定会员可用">
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NSwitch v-model:value="form.scope.enabledMembers" />
+              <NSelect v-if="form.scope.enabledMembers" v-model:value="form.scope.memberIds" :options="memberOptions"
+                multiple filterable placeholder="选择会员" style="flex: 1" />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+          </NFormItemGi>
 
-        <NFormItem label="指定会员可用" label-placement="left">
-          <NFlex vertical :size="4" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledMembers" />
-            <NSelect v-if="form.scope.enabledMembers" v-model:value="form.scope.memberIds" :options="memberOptions"
-              multiple filterable placeholder="选择会员" />
-          </NFlex>
-        </NFormItem>
-
-        <NFormItem label="指定时段可用（含周期）" label-placement="left">
-          <NFlex vertical :size="6" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledTime" />
-            <template v-if="form.scope.enabledTime">
-              <NFlex :size="8" align="center">
-                <NDatePicker :value="form.scope.validFrom ?? null"
-                  @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)" type="datetime"
-                  clearable placeholder="开始时间" style="width: 220px" />
-                <NText>~</NText>
-                <NDatePicker :value="form.scope.validUntil ?? null"
-                  @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)" type="datetime"
-                  clearable placeholder="结束时间" style="width: 220px" />
+          <NGi :span="2">
+            <NFormItem label="指定时段可用（含周期）">
+              <NFlex vertical :size="6" style="width: 100%">
+                <NFlex align="center" :size="10">
+                  <NSwitch v-model:value="form.scope.enabledTime" />
+                  <NText v-if="!form.scope.enabledTime" depth="3" style="font-size: 12px">不限制</NText>
+                </NFlex>
+                <template v-if="form.scope.enabledTime">
+                  <NFlex :size="8" align="center">
+                    <NDatePicker :value="form.scope.validFrom ?? null"
+                      @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)" type="datetime"
+                      clearable placeholder="开始时间" style="flex: 1" />
+                    <NText>~</NText>
+                    <NDatePicker :value="form.scope.validUntil ?? null"
+                      @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)" type="datetime"
+                      clearable placeholder="结束时间" style="flex: 1" />
+                  </NFlex>
+                  <NInput v-model:value="form.scope.cron" placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5" />
+                  <NText depth="3" style="font-size: 12px">
+                    支持 * / 逗号列表 / 区间(9-18)。起止时间与周期为「且」关系，留空则仅按起止时间限制。
+                  </NText>
+                </template>
               </NFlex>
-              <NInput v-model:value="form.scope.cron" placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5；留空仅按起止时间" />
-              <NText depth="3" style="font-size: 12px">
-                周期 cron 与起止时间为「且」关系；支持 * / 逗号列表 /
-                区间(9-18)。留空表示仅受起止时间限制。
-              </NText>
-            </template>
-          </NFlex>
-        </NFormItem>
+            </NFormItem>
+          </NGi>
 
-        <NFormItem label="指定品类可用" label-placement="left">
-          <NFlex vertical :size="4" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledCategories" />
-            <CategorySelect v-if="form.scope.enabledCategories" v-model="form.scope.categoryIds" />
-          </NFlex>
-        </NFormItem>
+          <NFormItemGi :span="2" label="指定品类可用">
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NSwitch v-model:value="form.scope.enabledCategories" />
+              <TypeSelect v-if="form.scope.enabledCategories" v-model="form.scope.categoryIds"
+                :manage="categoryManage" placeholder="选择品类（命中任一品类下的服务即可）" style="flex: 1" />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+          </NFormItemGi>
 
-        <NFormItem label="指定单品可用" label-placement="left">
-          <NFlex vertical :size="4" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledItems" style="align-self: flex-end;" />
-            <NSelect v-if="form.scope.enabledItems" v-model:value="form.scope.itemIds" :options="itemOptions" multiple
-              filterable placeholder="选择单品" />
-          </NFlex>
-        </NFormItem>
+          <NFormItemGi :span="2" label="指定单品可用">
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NSwitch v-model:value="form.scope.enabledItems" />
+              <NSelect v-if="form.scope.enabledItems" v-model:value="form.scope.itemIds" :options="itemOptions" multiple
+                filterable placeholder="选择单品" style="flex: 1" />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+          </NFormItemGi>
+        </NGrid>
 
         <!-- 随机指标 -->
         <NDivider title-placement="left">随机</NDivider>
-        <NFormItem label="启用随机优惠" label-placement="left">
-          <NFlex vertical :size="6" style="width: 100%">
-            <NSwitch v-model:value="form.randomEnabled" />
-            <template v-if="form.randomEnabled">
-              <NSelect v-model:value="form.randomKind" :options="randomKindOptions" />
-              <NFlex :size="8" align="center">
-                <NInputNumber v-model:value="form.randomMin" :min="0" :precision="form.randomKind === 'amount' ? 2 : 0"
-                  :max="form.randomKind === 'ratio' ? 100 : undefined" placeholder="最小值" style="width: 160px" />
-                <NText>~</NText>
-                <NInputNumber v-model:value="form.randomMax" :min="0" :precision="form.randomKind === 'amount' ? 2 : 0"
-                  :max="form.randomKind === 'ratio' ? 100 : undefined" placeholder="最大值" style="width: 160px" />
-              </NFlex>
-              <NText depth="3" style="font-size: 12px">
-                随机立减填写金额区间（元）；随机打折填写折扣力度区间（%）。优惠一旦被订单捕获，数额即固化。
-              </NText>
-            </template>
-          </NFlex>
-        </NFormItem>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="2" label="随机减免额">
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NSwitch v-model:value="form.randomEnabled" />
+              <NText depth="3" style="font-size: 12px">{{
+                form.randomEnabled ? randomEffectText : '关闭 · 按上方固定数值计算'
+                }}</NText>
+            </NFlex>
+          </NFormItemGi>
 
-        <!-- 随机触发 -->
-        <NFormItem label="随机触发概率（%）">
-          <NInputNumber :value="form.triggerChance ?? null"
-            @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)" :min="0" :max="100"
-            :precision="0" placeholder="100（必触发）" style="width: 100%" />
-          <NText depth="3" style="font-size: 12px; display: block; margin-top: 4px">
-            留空或 100 表示每次都尝试触发；小于 100
-            时按概率触发（仅自动优惠生效，附券码优惠不受影响）。
-          </NText>
-        </NFormItem>
+          <NFormItemGi v-if="form.randomEnabled" :span="1" :label="`随机下限（${randomIsAmount ? '元' : '力度%'}）`">
+            <NInputNumber v-model:value="form.randomMin" :min="0" :precision="randomIsAmount ? 2 : 0"
+              :max="randomIsAmount ? undefined : 100" placeholder="最小值" style="width: 100%" />
+          </NFormItemGi>
+
+          <NFormItemGi v-if="form.randomEnabled" :span="1" :label="`随机上限（${randomIsAmount ? '元' : '力度%'}）`">
+            <NInputNumber v-model:value="form.randomMax" :min="0" :precision="randomIsAmount ? 2 : 0"
+              :max="randomIsAmount ? undefined : 100" placeholder="最大值" style="width: 100%" />
+          </NFormItemGi>
+
+          <NGi v-if="form.randomEnabled" :span="2">
+            <NFlex vertical :size="2">
+              <NText v-if="randomKindMismatch" type="warning" style="font-size: 12px">
+                该随机类型与当前执行方式不匹配（不会生效），请按上方单位重新填写范围。
+              </NText>
+              <NText depth="3" style="font-size: 12px">优惠一旦被订单捕获，随机数额即固化，之后不再变化。</NText>
+            </NFlex>
+          </NGi>
+
+          <NFormItemGi :span="2" label="随机触发概率（%）">
+            <NFlex vertical :size="2" style="width: 100%">
+              <NInputNumber :value="form.triggerChance ?? null" :disabled="triggerDisabled"
+                @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)" :min="0" :max="100"
+                :precision="0" placeholder="100（必触发）" style="width: 100%" />
+              <NText depth="3" style="font-size: 12px">
+                {{
+                  triggerDisabled
+                    ? '已附加券码的优惠只能凭券兑换，不参与自动触发。'
+                    : '留空或 100 表示每次都尝试触发；小于 100 时按概率触发。'
+                }}
+              </NText>
+            </NFlex>
+          </NFormItemGi>
+        </NGrid>
 
         <!-- 券码 -->
-        <NDivider title-placement="left">券码（附加开关）</NDivider>
-        <NFormItem label="附加券码" label-placement="left">
-          <NFlex vertical :size="6" style="width: 100%">
-            <NSwitch v-model:value="form.couponEnabled" />
-            <template v-if="form.couponEnabled">
-              <NFlex :size="8" align="center" wrap>
-                <NInputOtp v-model:value="couponSlots" :length="COUPON_LENGTH" :allow-input="couponAllowInput"
-                  placeholder="-" class="coupon-otp" />
-                <NButton size="small" @click="genCode">生成</NButton>
-                <NButton v-if="form.couponCode" size="small" quaternary @click="form.couponCode = ''">清空</NButton>
+        <NDivider title-placement="left">券码</NDivider>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="2" label="附加券码">
+            <NFlex vertical :size="6" style="width: 100%">
+              <NFlex align="center" :size="10">
+                <NSwitch v-model:value="form.couponEnabled" />
+                <NText v-if="!form.couponEnabled" depth="3" style="font-size: 12px">
+                  不附加 · 满足作用域即自动生效
+                </NText>
               </NFlex>
-              <NText depth="3" style="font-size: 12px">
-                {{ COUPON_LENGTH }} 位字母或数字，留空将自动生成。附加券码后，该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
-              </NText>
-            </template>
-          </NFlex>
-        </NFormItem>
+              <template v-if="form.couponEnabled">
+                <NFlex :size="8" align="center" wrap>
+                  <NInputOtp v-model:value="couponSlots" :length="COUPON_LENGTH" :allow-input="couponAllowInput"
+                    placeholder="-" class="coupon-otp" />
+                  <NButton size="small" @click="genCode">生成</NButton>
+                  <NButton v-if="form.couponCode" size="small" quaternary @click="form.couponCode = ''">清空</NButton>
+                </NFlex>
+                <NText depth="3" style="font-size: 12px">
+                  {{ COUPON_LENGTH }} 位字母或数字，留空将自动生成。附加券码后该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
+                </NText>
+              </template>
+            </NFlex>
+          </NFormItemGi>
+        </NGrid>
+
+        <!-- 用量控制 -->
+        <NDivider title-placement="left">用量控制</NDivider>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="1" label="总可用次数（可选）">
+            <NInputNumber :value="form.usageLimit ?? null"
+              @update:value="(v: number | null) => (form.usageLimit = v ?? undefined)" :min="1" :precision="0"
+              placeholder="不限（所有会员共享）" style="width: 100%" />
+          </NFormItemGi>
+
+          <NFormItemGi :span="1" label="每会员限用次数（可选）">
+            <NInputNumber :value="form.memberLimit ?? null"
+              @update:value="(v: number | null) => (form.memberLimit = v ?? undefined)" :min="1" :precision="0"
+              placeholder="不限" style="width: 100%" />
+          </NFormItemGi>
+
+          <!-- 已用次数：统计字段，仅作弊模式可改写 -->
+          <NFormItemGi v-if="editing && ui.advancedMode" :span="2" label="已用次数（作弊模式）">
+            <NInputNumber v-model:value="usedCount" :min="0" :precision="0" style="width: 100%" />
+          </NFormItemGi>
+
+          <NGi :span="2">
+            <NText depth="3" style="font-size: 12px">
+              <template v-if="editing && usageLeft != null">
+                已用 {{ usedCount }} 次，剩余 {{ usageLeft }} 次；余量不足 10 次时结算面板会标出「仅剩 N 张」。
+              </template>
+              <template v-else>
+                总可用次数为所有会员共享的额度，用尽后自动失效；每会员限用控制单个会员的使用上限。
+              </template>
+            </NText>
+          </NGi>
+        </NGrid>
 
         <!-- 互斥组 / 上限组 -->
         <NDivider title-placement="left">分组</NDivider>
-        <NFormItem label="互斥组">
-          <NFlex vertical :size="6" style="width: 100%">
-            <NFlex :size="8" align="center">
-              <NSelect v-model:value="form.exclusiveGroupId" :options="exclusiveOptions" placeholder="不加入互斥组" clearable
-                style="flex: 1" />
-              <NButton size="small" @click="showExclusiveManager = true">管理</NButton>
-            </NFlex>
-            <NText depth="3" style="font-size: 12px; display: block">
-              归属同一互斥组的优惠同时只会生效减免最大者。
-            </NText>
-          </NFlex>
-        </NFormItem>
+        <NGrid :cols="2" :x-gap="12">
+          <NFormItemGi :span="1" label="互斥组">
+            <TypeSelect v-model="exclusiveGroupIds" :manage="exclusiveManage" :multiple="false"
+              placeholder="不加入" />
+          </NFormItemGi>
 
-        <NFormItem label="上限组">
-          <NFlex vertical :size="6" style="width: 100%">
-            <NFlex :size="8" align="center">
-              <NSelect v-model:value="form.limitGroups" :options="limitGroupOptions" multiple filterable
-                placeholder="不加入上限组" style="flex: 1" />
-              <NButton size="small" @click="showLimitManager = true">管理</NButton>
-            </NFlex>
-            <NText depth="3" style="font-size: 12px; display: block">
-              归属同一上限组的优惠共享该组的减免上限（如全场累计优惠不超过 ¥100）。
+          <NFormItemGi :span="1" label="上限组">
+            <TypeSelect v-model="form.limitGroups" :manage="limitGroupManage" placeholder="不加入">
+              <template #form-extra="{ form: lf }">
+                <NGi>
+                  <NText depth="3" class="small-label">计算范围</NText>
+                  <NSelect v-model:value="lf.scope" :options="limitScopeOptions" />
+                </NGi>
+                <NGi v-if="lf.scope === 'items'">
+                  <NText depth="3" class="small-label">参与计算的单品</NText>
+                  <NSelect v-model:value="lf.itemIds" :options="limitItemOptions" multiple filterable
+                    placeholder="选择单品" />
+                </NGi>
+                <NGi v-if="lf.scope === 'categories'">
+                  <NText depth="3" class="small-label">参与计算的分类</NText>
+                  <TypeSelect v-model="lf.categoryIds" :manage="categoryManage" />
+                </NGi>
+                <NGi>
+                  <NText depth="3" class="small-label">组上限类型</NText>
+                  <NSelect v-model:value="lf.limitType" :options="limitTypeOptions" />
+                </NGi>
+                <NGi>
+                  <NText depth="3" class="small-label">
+                    组上限（{{ lf.limitType === 'amount' ? '元' : '%' }}）
+                  </NText>
+                  <NInputNumber v-model:value="lf.limit" :min="0"
+                    :precision="lf.limitType === 'amount' ? 2 : 0" style="width: 100%" />
+                </NGi>
+              </template>
+            </TypeSelect>
+          </NFormItemGi>
+
+          <NGi :span="2">
+            <NText depth="3" style="font-size: 12px">
+              互斥组：同组的优惠同时只会生效减免最大者。上限组：同组的优惠共享该组减免上限（如全场累计优惠不超过 ¥100）。
             </NText>
-          </NFlex>
-        </NFormItem>
+          </NGi>
+
+          <NFormItemGi :span="2" label="备注（可选）">
+            <NInput v-model:value="form.remark" type="textarea" :rows="2" placeholder="内部说明，不对外展示" />
+          </NFormItemGi>
+        </NGrid>
       </NForm>
     </NScrollbar>
     <template #footer>
@@ -645,51 +913,6 @@ async function exclusiveRemove(id: string) {
       </NFlex>
     </template>
 
-    <!-- 内嵌上限组管理 -->
-    <ItemManageModal v-if="showLimitManager" title="上限组管理" :items="limitGroupStore.groups"
-      :load="() => limitGroupStore.load()" :empty-form="() => ({
-        name: '',
-        limitType: 'amount',
-        limit: 0,
-        scope: 'all',
-        itemIds: [],
-        categoryIds: [],
-      })
-        " :to-form="limitToForm" :row-text="limitRowText" :validate="limitValidate" :create="limitCreate"
-      :update="limitUpdate" :remove="limitRemove" :close="() => (showLimitManager = false)"
-      confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？">
-      <template #form-extra="{ form: lf }">
-        <NGi>
-          <NText depth="3" class="small-label">计算范围</NText>
-          <NSelect v-model:value="lf.scope" :options="limitScopeOptions" />
-        </NGi>
-        <NGi v-if="lf.scope === 'items'">
-          <NText depth="3" class="small-label">参与计算的单品</NText>
-          <NSelect v-model:value="lf.itemIds" :options="limitItemOptions" multiple filterable placeholder="选择单品" />
-        </NGi>
-        <NGi v-if="lf.scope === 'categories'">
-          <NText depth="3" class="small-label">参与计算的分类</NText>
-          <CategorySelect v-model="lf.categoryIds" />
-        </NGi>
-        <NGi>
-          <NText depth="3" class="small-label">组上限类型</NText>
-          <NSelect v-model:value="lf.limitType" :options="limitTypeOptions" />
-        </NGi>
-        <NGi>
-          <NText depth="3" class="small-label">
-            组上限（{{ lf.limitType === 'amount' ? '元' : '%' }}）
-          </NText>
-          <NInputNumber v-model:value="lf.limit" :min="0" :precision="lf.limitType === 'amount' ? 2 : 0"
-            style="width: 100%" />
-        </NGi>
-      </template>
-    </ItemManageModal>
-
-    <!-- 内嵌互斥组管理 -->
-    <ManageModal v-if="showExclusiveManager" title="互斥组管理" :items="exclusiveStore.groups"
-      :load="() => exclusiveStore.load()" :empty-form="() => ({ name: '' })" :create="exclusiveCreate"
-      :update="exclusiveUpdate" :remove="exclusiveRemove" :close="() => (showExclusiveManager = false)"
-      confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？" />
   </NModal>
 </template>
 

@@ -4,6 +4,7 @@ import { getAll, put, add, del } from './db'
 import type { Order, PaymentMethod, DiscountRecord, OrderItem } from './types'
 import { genOrderId, now, subtotalOf } from './types'
 import { useDiscountStore } from './useDiscountStore'
+import { useUiStore } from './useUiStore'
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([])
@@ -211,12 +212,22 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  async function remove(id: string, opts: { force?: boolean } = {}): Promise<void> {
+  async function remove(
+    id: string,
+    opts: { force?: boolean; rollbackDiscounts?: boolean } = {},
+  ): Promise<void> {
     const idx = orders.value.findIndex((x) => x.id === id)
     const o = orders.value[idx]
-    // 删除订单不回滚优惠（优惠回滚仅发生在「关闭」时）；force 用于会员级联清理，绕过状态限制
+    // 删除订单默认不回滚优惠（优惠回滚仅发生在「关闭」时）；
+    // force 用于级联清理，绕过状态限制；rollbackDiscounts 用于级联清理时退还其他优惠的占用
     if (idx < 0 || !o) return
     if (!opts.force && o.status !== 'closed' && o.status !== 'completed') return
+    if (opts.rollbackDiscounts) {
+      for (const rec of o.discountRecords) {
+        const d = discountStore.discounts.find((x) => x.id === rec.discountId)
+        if (d) await discountStore.rollbackUsage(d, o.memberId)
+      }
+    }
     orders.value.splice(idx, 1)
     await del('orders', id)
   }
@@ -239,6 +250,21 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
+  // 调试：直接改写订单的「只读」字段（状态 / 归属会员 / 小计 / 创建与完成时间等），
+  // 绕过计价器与状态机校验。写入后仅保证金额非负，不做任何业务一致性重算。
+  async function debugPatch(id: string, patch: Partial<Order>): Promise<void> {
+    const uiStore = useUiStore()
+    if (!uiStore.advancedMode) throw new Error('需开启作弊模式才能改写订单只读字段')
+    const o = orders.value.find((x) => x.id === id)
+    if (!o) return
+    Object.assign(o, patch)
+    o.subtotal = Math.max(0, Math.round(o.subtotal))
+    o.discountAmount = Math.max(0, Math.round(o.discountAmount))
+    o.finalAmount = Math.max(0, Math.round(o.finalAmount))
+    o.updatedAt = now()
+    await put('orders', o)
+  }
+
   return {
     orders,
     pendingOrders,
@@ -257,6 +283,7 @@ export const useOrderStore = defineStore('order', () => {
     remove,
     setFinalAmount,
     forceReopen,
+    debugPatch,
   }
 })
 

@@ -18,6 +18,8 @@ import {
 import { IconPlus, IconTags } from '@tabler/icons-vue'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
+import { useOrderStore } from '@/stores/useOrderStore'
+import { useUiStore } from '@/stores/useUiStore'
 import { buildServiceColumns } from '@/components/columns/service-columns'
 import { tableScrollX } from '@/stores/types'
 import { type ServiceEntry } from '@/stores/types'
@@ -27,6 +29,8 @@ const dialog = useDialog()
 const msg = useMessage()
 const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
+const orderStore = useOrderStore()
+const uiStore = useUiStore()
 
 const keyword = ref('')
 const filterCategory = ref('')
@@ -69,24 +73,51 @@ function openEdit(p: ServiceEntry) {
 async function toggle(p: ServiceEntry) {
   await serviceStore.update(p.id, { isActive: !p.isActive })
 }
-const columns = buildServiceColumns({ openEdit, toggle, remove })
+// 引用该服务的订单数（>0 时普通模式下禁止删除）
+function orderRefCount(p: ServiceEntry): number {
+  return orderStore.orders.filter((o) => o.items.some((it) => it.priceEntryId === p.id)).length
+}
+// 被订单引用的服务：非作弊模式隐藏删除按钮，作弊模式允许递归删除
+function canDelete(p: ServiceEntry): boolean {
+  return orderRefCount(p) === 0 || uiStore.advancedMode
+}
+
+const columns = buildServiceColumns({ openEdit, toggle, remove, canDelete })
 
 function remove(p: ServiceEntry) {
+  const n = orderRefCount(p)
+  const doRemove = async () => {
+    try {
+      await serviceStore.remove(p.id)
+      msg.success(n ? `服务与 ${n} 笔关联订单已一并删除` : '已删除')
+    } catch (e) {
+      msg.error('删除失败：' + (e as Error).message)
+    }
+  }
+  if (n) {
+    dialog.warning({
+      title: '递归删除服务（作弊模式）',
+      content: `「${p.name}」已被 ${n} 笔订单引用。作弊模式下将连同这 ${n} 笔订单一并强制删除，并退还它们占用的优惠用量，且不可恢复。确认删除？`,
+      positiveText: '递归删除',
+      negativeText: '取消',
+      onPositiveClick: doRemove,
+    })
+    return
+  }
   dialog.warning({
     title: '删除服务',
     content: `确认删除「${p.name}」？`,
     positiveText: '删除',
     negativeText: '取消',
-    onPositiveClick: async () => {
-      await serviceStore.remove(p.id)
-      msg.success('已删除')
-    },
+    onPositiveClick: doRemove,
   })
 }
 
 onMounted(() => {
   if (!serviceStore.services.length) serviceStore.load()
   if (!categoryStore.categories.length) categoryStore.load()
+  // 订单是「是否被引用」的判定依据，必须加载后再允许删除
+  if (!orderStore.orders.length) orderStore.load()
 })
 </script>
 

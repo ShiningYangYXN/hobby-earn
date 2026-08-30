@@ -29,6 +29,10 @@ export const useMemberStore = defineStore('member', () => {
     return item
   }
   async function update(id: string, patch: Partial<Member>): Promise<void> {
+    // 入会时间为建档字段，默认只读；仅作弊模式可改写
+    if (patch.joinDate !== undefined && !uiStore.advancedMode) {
+      throw new Error('入会时间需开启作弊模式才能修改')
+    }
     const idx = members.value.findIndex((x) => x.id === id)
     if (idx < 0) throw new Error('not found')
     const next = { ...members.value[idx]!, ...patch }
@@ -47,20 +51,20 @@ export const useMemberStore = defineStore('member', () => {
     const relatedDiscounts = discountStore.discounts.filter((d) => d.scope?.memberIds?.includes(id))
     const hasAssoc = relatedOrders.length > 0 || relatedDiscounts.length > 0
     if (hasAssoc && !uiStore.advancedMode) {
-      throw new Error('会员存在关联订单或优惠，需开启高级模式（作弊模式）才能删除')
+      throw new Error('会员存在关联订单或优惠，需开启作弊模式后递归删除')
     }
 
-    // 1. 递归清理关联订单
+    // 1. 递归清理关联订单（并退还这些订单占用的优惠用量）
     for (const o of relatedOrders) {
-      await orderStore.remove(o.id, { force: true })
+      await orderStore.remove(o.id, { force: true, rollbackDiscounts: true })
     }
 
     // 2. 递归处理包含该会员的优惠
     for (const d of relatedDiscounts) {
       const mids = (d.scope?.memberIds ?? []).filter((x) => x !== id)
       if (mids.length === 0) {
-        // 该会员专属优惠：直接删除
-        await discountStore.remove(d.id)
+        // 该会员专属优惠：直接删除（内部级联，跳过引用校验，递归清理关联订单）
+        await discountStore.remove(d.id, { force: true })
       } else {
         // 否则仅移除该会员引用
         await discountStore.update(d.id, { scope: { ...d.scope!, memberIds: mids } })

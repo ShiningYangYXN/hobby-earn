@@ -136,7 +136,9 @@ export interface Discount {
   ruleType: RuleType
   value: number // fixed: 减免金额(分)；percentage: 折扣力度(0-100，如 85=打8.5折)；stepDown: 每阶梯减免(分)；perItem: 每件立减金额(分)
   minAmount: number // 满减/打折门槛(分)；stepDown: 每满金额(分)；perItem: 不适用（按件计，无门槛）
-  maxDiscount?: number // 最大减免封顶(分)，仅 percentage/stepDown/perItem 有意义；random.amount 时也作封顶
+  // 最大减免封顶(分)：calcDiscount 对所有执行方式都生效（含 fixed，可把固定立减压得更低）；
+  // 例外是随机立减（random.kind='amount'），此时封顶由捕获到的随机值取代，该字段不参与
+  maxDiscount?: number
   maxUnits?: number // 最大执行件数/阶梯数：perItem 限制立减件数，stepDown 限制生效阶梯数；留空=不限
 
   // —— 作用域指标（省略即不限） ——

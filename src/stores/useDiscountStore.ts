@@ -12,6 +12,9 @@ import {
   isValidCouponCode,
 } from './types'
 import { getAll, put, del } from './db'
+import type { Order } from './types'
+import { useOrderStore } from './useOrderStore'
+import { useUiStore } from './useUiStore'
 
 type DiscountStatus = 'active' | 'upcoming' | 'expired' | 'disabled' | 'exhausted'
 
@@ -305,6 +308,10 @@ export const useDiscountStore = defineStore('discount', () => {
     return full
   }
   async function update(id: string, patch: Partial<Discount>) {
+    // 已用次数为统计字段，默认只读；仅作弊模式可改写
+    if (patch.usedCount !== undefined && !useUiStore().advancedMode) {
+      throw new Error('已用次数为统计字段，需开启作弊模式才能修改')
+    }
     const idx = discounts.value.findIndex((x) => x.id === id)
     if (idx < 0) return
     const next = { ...discounts.value[idx]!, ...patch }
@@ -313,7 +320,27 @@ export const useDiscountStore = defineStore('discount', () => {
     await put('discounts', next)
     discounts.value[idx] = next
   }
-  async function remove(id: string) {
+
+  /** 引用（捕获）了该优惠的订单：订单的 discountRecords 固化记录 */
+  function ordersUsing(id: string): Order[] {
+    const orderStore = useOrderStore()
+    return orderStore.orders.filter((o) => o.discountRecords.some((r) => r.discountId === id))
+  }
+
+  // 删除优惠：
+  // - 已被订单捕获时默认禁止删除；开启作弊模式后「递归删除」——连同引用它的订单一并强制删除
+  // - force：内部级联（如删除会员时连带删除其专属优惠）跳过引用校验，直接递归删除
+  async function remove(id: string, opts: { force?: boolean } = {}): Promise<void> {
+    const relatedOrders = ordersUsing(id)
+    if (relatedOrders.length && !opts.force && !useUiStore().advancedMode) {
+      throw new Error(`优惠已被 ${relatedOrders.length} 笔订单引用，需开启作弊模式后递归删除`)
+    }
+    if (relatedOrders.length) {
+      const orderStore = useOrderStore()
+      for (const o of relatedOrders) {
+        await orderStore.remove(o.id, { force: true, rollbackDiscounts: true })
+      }
+    }
     await del('discounts', id)
     discounts.value = discounts.value.filter((x) => x.id !== id)
   }
@@ -337,6 +364,7 @@ export const useDiscountStore = defineStore('discount', () => {
     add,
     update,
     remove,
+    ordersUsing,
     emptyDiscount,
   }
 })

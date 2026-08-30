@@ -15,6 +15,7 @@ import {
   NInputNumber,
   NSelect,
   NFormItem,
+  NDatePicker,
   NCard,
   NIcon,
   useDialog,
@@ -346,6 +347,63 @@ async function forceReopenOrder() {
   msg.success('调试：已强制重新打开订单')
   close()
 }
+
+// 调试面板：直接改写订单的只读字段（状态 / 归属会员 / 小计 / 时间）
+const debugOpen = ref(false)
+const debugForm = ref({
+  status: 'pending' as OrderStatus,
+  memberId: '',
+  subtotalYuan: 0,
+  createdAt: null as number | null,
+  completedAt: null as number | null,
+})
+const debugStatusOptions = (
+  Object.keys(statusCfg) as OrderStatus[]
+).map((s) => ({ label: statusCfg[s].label, value: s }))
+const debugMemberOptions = computed(() => [
+  { label: '（散客，无会员）', value: '' },
+  ...memberStore.members.map((m) => ({ label: `${m.name}（${m.id}）`, value: m.id })),
+])
+function openDebugPanel() {
+  const o = order.value
+  if (!o) return
+  debugForm.value = {
+    status: o.status,
+    memberId: o.memberId ?? '',
+    subtotalYuan: Number((o.subtotal / 100).toFixed(2)),
+    createdAt: Date.parse(o.createdAt) || null,
+    completedAt: o.completedAt ? Date.parse(o.completedAt) || null : null,
+  }
+  debugOpen.value = true
+}
+async function saveDebug() {
+  const o = order.value
+  if (!o) return
+  const mid = debugForm.value.memberId
+  const m = mid ? memberStore.members.find((x) => x.id === mid) : null
+  if (mid && !m) {
+    msg.error('会员不存在')
+    return
+  }
+  try {
+    await orderStore.debugPatch(o.id, {
+      status: debugForm.value.status,
+      memberId: mid || null,
+      memberName: m?.name ?? '散客',
+      subtotal: Math.round(debugForm.value.subtotalYuan * 100),
+      createdAt: debugForm.value.createdAt
+        ? new Date(debugForm.value.createdAt).toISOString()
+        : o.createdAt,
+      completedAt: debugForm.value.completedAt
+        ? new Date(debugForm.value.completedAt).toISOString()
+        : undefined,
+    })
+    debugOpen.value = false
+    msg.success('调试：订单只读字段已改写')
+  } catch (e) {
+    msg.error('改写失败：' + (e as Error).message)
+  }
+}
 </script>
 
 <template>
@@ -515,6 +573,39 @@ async function forceReopenOrder() {
           备注：{{ order.notes }}
         </NText>
       </template>
+
+      <!-- 调试面板（仅作弊模式）：改写订单只读字段 -->
+      <NCard v-if="ui.advancedMode && debugOpen" size="small" title="调试：改写只读字段" style="margin-top: 12px">
+        <NFlex vertical :size="8">
+          <NFormItem label="订单状态">
+            <NSelect v-model:value="debugForm.status" :options="debugStatusOptions" style="width: 180px" />
+          </NFormItem>
+          <NFormItem label="归属会员">
+            <NSelect
+              v-model:value="debugForm.memberId"
+              :options="debugMemberOptions"
+              filterable
+              style="width: 100%"
+            />
+          </NFormItem>
+          <NFormItem label="小计（元）">
+            <NInputNumber v-model:value="debugForm.subtotalYuan" :min="0" :precision="2" style="width: 180px" />
+          </NFormItem>
+          <NFormItem label="创建时间">
+            <NDatePicker v-model:value="debugForm.createdAt" type="datetime" clearable style="width: 220px" />
+          </NFormItem>
+          <NFormItem label="完成时间">
+            <NDatePicker v-model:value="debugForm.completedAt" type="datetime" clearable style="width: 220px" />
+          </NFormItem>
+          <NFlex :size="8">
+            <NButton type="primary" size="small" @click="saveDebug">保存调试修改</NButton>
+            <NButton size="small" text @click="debugOpen = false">取消</NButton>
+          </NFlex>
+          <NText depth="3" style="font-size: 12px">
+            直接落库，不做计价与状态机校验；完成时间留空表示未完成（不计入收入统计）。
+          </NText>
+        </NFlex>
+      </NCard>
     </NScrollbar>
 
     <template #footer>
@@ -573,6 +664,7 @@ async function forceReopenOrder() {
           <template v-if="ui.advancedMode">
             <NButton type="warning" @click="forceReopenOrder">调试：强制重开</NButton>
             <NButton @click="startEditAmount">调试：改金额</NButton>
+            <NButton @click="openDebugPanel">调试：更多</NButton>
             <template v-if="debugEditing">
               <NInputNumber v-model:value="debugAmount" :min="0" :precision="2" />
               <NButton type="primary" @click="confirmEditAmount">确认</NButton>
