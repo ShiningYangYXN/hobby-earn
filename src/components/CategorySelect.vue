@@ -30,19 +30,13 @@ function update(v: string[] | null) {
 </script>
 
 <template>
-  <NFlex align="center" :size="8">
-    <NSelect
-      :value="modelValue"
-      :options="options"
-      multiple
-      filterable
-      clearable
-      :placeholder="placeholder ?? '选择分类（可多选）'"
-      style="flex: 1"
-      @update:value="update"
-    />
+  <NFlex align="center" style="width: 100%;">
+    <NSelect :value="modelValue" :options="options" multiple filterable clearable
+      :placeholder="placeholder ?? '选择分类（可多选）'" style="flex: 1" @update:value="update" />
     <NButton size="small" quaternary type="primary" @click="router.push({ name: 'categories' })">
-      <NIcon :size="16"><IconSettings /></NIcon> 管理
+      <NIcon :size="16">
+        <IconSettings />
+      </NIcon> 管理
     </NButton>
   </NFlex>
 </template>

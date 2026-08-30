@@ -8,6 +8,8 @@ import {
   type OrderItem,
   type TimeWindow,
   genDiscountId,
+  normalizeCouponCode,
+  isValidCouponCode,
 } from './types'
 import { getAll, put, del } from './db'
 
@@ -184,8 +186,9 @@ export const useDiscountStore = defineStore('discount', () => {
       categoryIdsOf: (priceEntryId: string) => string[]
     },
   ): Discount | null {
-    const c = code.trim().toUpperCase()
-    const d = discounts.value.find((x) => x.couponCode && x.couponCode.toUpperCase() === c)
+    const c = normalizeCouponCode(code)
+    if (!isValidCouponCode(c)) return null // 非 6 位券码一律无效
+    const d = discounts.value.find((x) => x.couponCode && normalizeCouponCode(x.couponCode) === c)
     if (!d) return null
     if (!isUsable(d, ctx.memberId)) return null
     if (!scopeEligible(d.scope, ctx)) return null
@@ -290,6 +293,8 @@ export const useDiscountStore = defineStore('discount', () => {
   async function add(d: Omit<Discount, 'id' | 'createdAt' | 'usedCount'>): Promise<Discount> {
     const full: Discount = {
       ...d,
+      // 数据层兜底：券码统一大写存储
+      couponCode: d.couponCode ? normalizeCouponCode(d.couponCode) : d.couponCode,
       id: genDiscountId(),
       createdAt: Date.now(),
       usedCount: 0,
@@ -303,6 +308,8 @@ export const useDiscountStore = defineStore('discount', () => {
     const idx = discounts.value.findIndex((x) => x.id === id)
     if (idx < 0) return
     const next = { ...discounts.value[idx]!, ...patch }
+    // 数据层兜底：券码统一大写存储
+    if (next.couponCode) next.couponCode = normalizeCouponCode(next.couponCode)
     await put('discounts', next)
     discounts.value[idx] = next
   }

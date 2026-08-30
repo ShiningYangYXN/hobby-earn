@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import ManageModal from '@/components/CategoryManageModal.vue'
+import ItemManageModal from '@/components/ItemManageModal.vue'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 
 const router = useRouter()
@@ -16,19 +16,10 @@ async function removeGroup(id: string) {
 </script>
 
 <template>
-  <ManageModal
-    title="互斥组管理"
-    :items="store.groups"
-    :load="() => store.load()"
-    :empty-form="() => ({ name: '' })"
-    :create="
-      (f) => {
-        void store.create(f.name)
-      }
-    "
-    :update="(id, f) => store.update(id, { name: f.name })"
-    :remove="removeGroup"
-    :close="close"
-    confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？"
-  />
+  <ItemManageModal title="互斥组管理" :items="store.groups" :load="() => store.load()" :empty-form="() => ({ name: '' })"
+    :create="(f) => {
+      void store.create(f.name)
+    }
+      " :update="(id, f) => store.update(id, { name: f.name })" :remove="removeGroup" :close="close"
+    confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？" />
 </template>

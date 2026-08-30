@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NText, NSelect, NGi, NInputNumber } from 'naive-ui'
-import ManageModal from '@/components/CategoryManageModal.vue'
+import ItemManageModal from '@/components/ItemManageModal.vue'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
@@ -44,7 +44,8 @@ const scopeText: Record<string, string> = {
 interface LimitGroupForm {
   name: string
   limitType: 'amount' | 'ratio'
-  limit: number
+  limit?: number
+  limitValue?: number
   scope: 'all' | 'items' | 'categories'
   itemIds: string[]
   categoryIds: string[]
@@ -52,13 +53,14 @@ interface LimitGroupForm {
 
 function rowText(f: FormShape): string {
   const g = f as unknown as LimitGroupForm
-  const limit = g.limitType === 'amount' ? `¥${(g.limit / 100).toFixed(2)}` : `${g.limit}%`
+  const limitValue = Number(g.limitValue)
+  const limit = g.limitType === 'amount' ? `¥${(limitValue / 100).toFixed(2)}` : `${limitValue}%`
   return `${g.name}（${scopeText[g.scope] ?? g.scope}，${limit}）`
 }
 
 function validate(f: FormShape): string | null {
   const g = f as unknown as LimitGroupForm
-  if (g.limit <= 0) return '请填写组上限（大于 0）'
+  if (Number(g.limit) <= 0) return '请填写组上限（大于 0）'
   if (g.scope === 'items' && (!g.itemIds || !g.itemIds.length)) return '请选择参与计算的具体单品'
   if (g.scope === 'categories' && (!g.categoryIds || !g.categoryIds.length))
     return '请选择参与计算的分类'
@@ -70,7 +72,7 @@ function toForm(item: FormShape) {
   return {
     name: g.name,
     limitType: g.limitType,
-    limit: g.limitType === 'amount' ? g.limit / 100 : g.limit,
+    limit: g.limitType === 'amount' ? Number(g.limitValue) / 100 : Number(g.limitValue),
     scope: g.scope,
     itemIds: g.itemIds ?? [],
     categoryIds: g.categoryIds ?? [],
@@ -82,7 +84,7 @@ function buildPayload(f: FormShape): Omit<DiscountLimitGroup, 'id'> {
   return {
     name: g.name.trim(),
     limitType: g.limitType,
-    limitValue: Math.round(g.limit * (g.limitType === 'amount' ? 100 : 1)),
+    limitValue: Math.round(Number(g.limit) * (g.limitType === 'amount' ? 100 : 1)),
     scope: g.scope,
     itemIds: g.scope === 'items' ? g.itemIds : undefined,
     categoryIds: g.scope === 'categories' ? g.categoryIds : undefined,
@@ -99,29 +101,16 @@ function updateGroup(id: string, f: FormShape) {
 </script>
 
 <template>
-  <ManageModal
-    title="上限组管理"
-    :items="store.groups"
-    :load="load"
-    :empty-form="
-      () => ({
-        name: '',
-        limitType: 'amount',
-        limit: 0,
-        scope: 'all',
-        itemIds: [],
-        categoryIds: [],
-      })
-    "
-    :to-form="toForm"
-    :row-text="rowText"
-    :validate="validate"
-    :create="createGroup"
-    :update="updateGroup"
-    :remove="(id) => store.remove(id)"
-    :close="close"
-    confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？"
-  >
+  <ItemManageModal title="上限组管理" :items="store.groups" :load="load" :empty-form="() => ({
+    name: '',
+    limitType: 'amount',
+    limit: 0,
+    scope: 'all',
+    itemIds: [],
+    categoryIds: [],
+  })
+    " :to-form="toForm" :row-text="rowText" :validate="validate" :create="createGroup" :update="updateGroup"
+    :remove="(id) => store.remove(id)" :close="close" confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？">
     <template #form-extra="{ form }">
       <NGi>
         <NText depth="3" class="small-label">计算范围</NText>
@@ -129,13 +118,7 @@ function updateGroup(id: string, f: FormShape) {
       </NGi>
       <NGi v-if="form.scope === 'items'">
         <NText depth="3" class="small-label">参与计算的单品</NText>
-        <NSelect
-          v-model:value="form.itemIds"
-          :options="itemOptions"
-          multiple
-          filterable
-          placeholder="选择单品"
-        />
+        <NSelect v-model:value="form.itemIds" :options="itemOptions" multiple filterable placeholder="选择单品" />
       </NGi>
       <NGi v-if="form.scope === 'categories'">
         <NText depth="3" class="small-label">参与计算的分类</NText>
@@ -149,13 +132,9 @@ function updateGroup(id: string, f: FormShape) {
         <NText depth="3" class="small-label">
           组上限（{{ form.limitType === 'amount' ? '元' : '%' }}）
         </NText>
-        <NInputNumber
-          v-model:value="form.limit"
-          :min="0"
-          :precision="form.limitType === 'amount' ? 2 : 0"
-          style="width: 100%"
-        />
+        <NInputNumber v-model:value="form.limit" :min="0" :precision="form.limitType === 'amount' ? 2 : 0"
+          style="width: 100%" />
       </NGi>
     </template>
-  </ManageModal>
+  </ItemManageModal>
 </template>

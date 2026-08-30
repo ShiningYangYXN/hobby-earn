@@ -9,13 +9,13 @@ import {
   NIcon,
   NText,
   NInput,
+  NInputOtp,
   NInputNumber,
   NSelect,
   NForm,
   NFormItem,
   NSwitch,
   NDatePicker,
-  NInputGroup,
   NDivider,
   NGi,
   useMessage,
@@ -29,8 +29,13 @@ import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import CategorySelect from '@/components/CategorySelect.vue'
-import ManageModal from '@/components/CategoryManageModal.vue'
-import { genCouponCode } from '@/stores/types'
+import ItemManageModal from '@/components/ItemManageModal.vue'
+import {
+  genCouponCode,
+  normalizeCouponCode,
+  isValidCouponCode,
+  COUPON_CODE_LENGTH,
+} from '@/stores/types'
 import type {
   Discount,
   DiscountLimitGroup,
@@ -267,7 +272,7 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
   }
   if (f.triggerChance != null && f.triggerChance < 100) payload.triggerChance = f.triggerChance
   if (f.couponEnabled) {
-    payload.couponCode = (f.couponCode.trim() || genCouponCode()).toUpperCase()
+    payload.couponCode = normalizeCouponCode(f.couponCode.trim() || genCouponCode())
   }
   payload.exclusiveGroupId = f.exclusiveGroupId || null
   payload.limitGroups = f.limitGroups.length ? [...f.limitGroups] : []
@@ -299,12 +304,8 @@ function validate(f: DiscountForm): string | null {
     if (f.randomMin < 0 || f.randomMax < 0) return '随机范围不能为负'
     if (f.randomMax < f.randomMin) return '随机上限不能小于下限'
   }
-  if (
-    f.couponEnabled &&
-    f.couponCode.trim() &&
-    !/^[A-Z0-9]{4,}$/.test(f.couponCode.trim().toUpperCase())
-  )
-    return '券码需为 4 位以上字母或数字'
+  if (f.couponEnabled && f.couponCode.trim() && !isValidCouponCode(f.couponCode))
+    return `券码需为 ${COUPON_CODE_LENGTH} 位字母或数字`
   return null
 }
 
@@ -337,6 +338,16 @@ function genCode() {
   form.value.couponCode = genCouponCode()
 }
 
+// OTP 逐格输入的桥接：内部为字符数组，表单仍存字符串（空位被压实，保证券码连续）
+const COUPON_LENGTH = COUPON_CODE_LENGTH
+const couponSlots = computed<string[]>({
+  get: () => (form.value.couponCode || '').split(''),
+  set: (v) => (form.value.couponCode = normalizeCouponCode(v.join(''))),
+})
+function couponAllowInput(char: string): boolean {
+  return /[a-zA-Z0-9]/.test(char)
+}
+
 // 内嵌上限组 / 互斥组管理，提供「编辑入口」而无需离开优惠编辑框
 const showLimitManager = ref(false)
 const showExclusiveManager = ref(false)
@@ -360,7 +371,8 @@ const limitScopeText: Record<string, string> = {
 }
 function limitRowText(g: Record<string, unknown>): string {
   const scope = (g.scope as string) ?? 'all'
-  const limit = g.limitType === 'amount' ? `¥${(Number(g.limit) / 100).toFixed(2)}` : `${g.limit}%`
+  const limitValue = Number(g.limitValue)
+  const limit = g.limitType === 'amount' ? `¥${(limitValue / 100).toFixed(2)}` : `${limitValue}%`
   return `${g.name}（${limitScopeText[scope] ?? scope}，${limit}）`
 }
 function limitValidate(f: Record<string, unknown>): string | null {
@@ -374,7 +386,7 @@ function limitToForm(g: Record<string, unknown>) {
   return {
     name: g.name,
     limitType: g.limitType,
-    limit: g.limitType === 'amount' ? (g.limit as number) / 100 : g.limit,
+    limit: g.limitType === 'amount' ? (g.limitValue as number) / 100 : g.limitValue,
     scope: g.scope,
     itemIds: (g.itemIds as string[]) ?? [],
     categoryIds: (g.categoryIds as string[]) ?? [],
@@ -530,7 +542,7 @@ async function exclusiveRemove(id: string) {
 
         <NFormItem label="指定单品可用" label-placement="left">
           <NFlex vertical :size="4" style="width: 100%">
-            <NSwitch v-model:value="form.scope.enabledItems" />
+            <NSwitch v-model:value="form.scope.enabledItems" style="align-self: flex-end;" />
             <NSelect v-if="form.scope.enabledItems" v-model:value="form.scope.itemIds" :options="itemOptions" multiple
               filterable placeholder="选择单品" />
           </NFlex>
@@ -574,12 +586,14 @@ async function exclusiveRemove(id: string) {
           <NFlex vertical :size="6" style="width: 100%">
             <NSwitch v-model:value="form.couponEnabled" />
             <template v-if="form.couponEnabled">
-              <NInputGroup>
-                <NInput v-model:value="form.couponCode" placeholder="留空将自动生成" style="text-transform: uppercase" />
-                <NButton @click="genCode">生成</NButton>
-              </NInputGroup>
+              <NFlex :size="8" align="center" wrap>
+                <NInputOtp v-model:value="couponSlots" :length="COUPON_LENGTH" :allow-input="couponAllowInput"
+                  placeholder="-" class="coupon-otp" />
+                <NButton size="small" @click="genCode">生成</NButton>
+                <NButton v-if="form.couponCode" size="small" quaternary @click="form.couponCode = ''">清空</NButton>
+              </NFlex>
               <NText depth="3" style="font-size: 12px">
-                附加券码后，该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
+                {{ COUPON_LENGTH }} 位字母或数字，留空将自动生成。附加券码后，该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
               </NText>
             </template>
           </NFlex>
@@ -632,7 +646,7 @@ async function exclusiveRemove(id: string) {
     </template>
 
     <!-- 内嵌上限组管理 -->
-    <ManageModal v-if="showLimitManager" title="上限组管理" :items="limitGroupStore.groups"
+    <ItemManageModal v-if="showLimitManager" title="上限组管理" :items="limitGroupStore.groups"
       :load="() => limitGroupStore.load()" :empty-form="() => ({
         name: '',
         limitType: 'amount',
@@ -669,7 +683,7 @@ async function exclusiveRemove(id: string) {
             style="width: 100%" />
         </NGi>
       </template>
-    </ManageModal>
+    </ItemManageModal>
 
     <!-- 内嵌互斥组管理 -->
     <ManageModal v-if="showExclusiveManager" title="互斥组管理" :items="exclusiveStore.groups"
@@ -678,3 +692,10 @@ async function exclusiveRemove(id: string) {
       confirm-text="删除后将从所有优惠中移除该互斥组归属，确认删除？" />
   </NModal>
 </template>
+
+<style scoped>
+/* 券码逐格输入：统一显示为大写，与存储的券码一致 */
+.coupon-otp :deep(.n-input__input-el) {
+  text-transform: uppercase;
+}
+</style>

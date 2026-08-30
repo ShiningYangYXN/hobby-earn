@@ -171,6 +171,58 @@ export function hasCouponCode(d: Discount): boolean {
   return !!d.couponCode
 }
 
+/** 券码固定长度：仅 6 位有效 */
+export const COUPON_CODE_LENGTH = 6
+
+/** 券码归一化：去空格并统一大写，校验与比对前一律先过此函数 */
+export function normalizeCouponCode(code: string): string {
+  return code.trim().toUpperCase()
+}
+
+/** 券码是否合法：6 位字母或数字 */
+export function isValidCouponCode(code: string): boolean {
+  return new RegExp(`^[A-Z0-9]{${COUPON_CODE_LENGTH}}$`).test(normalizeCouponCode(code))
+}
+
+/**
+ * 优惠规则的简短描述（面向用户展示，供下单/结算/订单详情复用）。
+ * 传入 capturedRandom 时按已抽取的随机值展示实际力度，否则展示随机范围。
+ */
+export function discountRuleText(d: Discount, capturedRandom?: number): string {
+  const parts: string[] = []
+  const rnd = d.random
+  const captured = capturedRandom ?? null
+  if (d.ruleType === 'percentage') {
+    const r = rnd?.kind === 'ratio' && captured != null ? captured : d.value
+    parts.push(formatZhe(r))
+    if (d.minAmount > 0) parts.push(`满${fmt(d.minAmount)}可用`)
+  } else if (d.ruleType === 'stepDown') {
+    parts.push(`每满${fmt(d.minAmount)}减${fmt(d.value)}`)
+    if (d.maxUnits != null) parts.push(`最多${d.maxUnits}阶`)
+  } else if (d.ruleType === 'perItem') {
+    parts.push(`每件减${fmt(d.value)}`)
+    if (d.maxUnits != null) parts.push(`最多${d.maxUnits}件`)
+  } else {
+    const v = rnd?.kind === 'amount' && captured != null ? captured : d.value
+    parts.push(d.minAmount > 0 ? `满${fmt(d.minAmount)}减${fmt(v)}` : `立减${fmt(v)}`)
+  }
+  if (rnd && captured == null) {
+    const lo = Math.min(rnd.min, rnd.max)
+    const hi = Math.max(rnd.min, rnd.max)
+    parts.push(
+      rnd.kind === 'amount'
+        ? `随机 ${fmt(lo)}~${fmt(hi)}`
+        : `随机 ${formatZhe(lo)}~${formatZhe(hi)}`,
+    )
+  }
+  // 随机立减的捕获值即最终立减额，此时 maxDiscount 不再额外封顶
+  if (d.maxDiscount != null && !(rnd?.kind === 'amount' && captured != null)) {
+    parts.push(`最高减${fmt(d.maxDiscount)}`)
+  }
+  if (d.triggerChance != null && d.triggerChance < 100) parts.push(`${d.triggerChance}%概率触发`)
+  return parts.join(' · ')
+}
+
 // ============================================================
 // 互斥组 / 上限组
 // ============================================================
@@ -352,10 +404,11 @@ export function subtotalOf(items: OrderItem[]): number {
   return items.reduce((s, it) => s + itemAmount(it), 0)
 }
 
-export function genCouponCode(len = 6): string {
+/** 生成 6 位随机券码（字符集剔除易混淆的 I/O/0/1） */
+export function genCouponCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let s = ''
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  for (let i = 0; i < COUPON_CODE_LENGTH; i++) s += chars[Math.floor(Math.random() * chars.length)]
   return s
 }
 

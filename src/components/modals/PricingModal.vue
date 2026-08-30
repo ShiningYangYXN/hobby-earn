@@ -38,6 +38,7 @@ import {
   type OrderItem,
   type OrderStatus,
   type PaymentMethod,
+  type DiscountRecord,
 } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 
@@ -85,6 +86,8 @@ const editing = reactive<Record<number, boolean>>({})
 const payMethod = ref<PaymentMethod>('cash')
 const newServiceId = ref<string | null>(null)
 const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
+// 由优惠面板同步的优惠额，用于实时推导应付金额
+const discountAmount = ref(0)
 
 let timer: number | null = null
 function ensureTimer() {
@@ -117,6 +120,8 @@ async function load() {
   payMethod.value = o.paymentMethod ?? 'cash'
   newServiceId.value = null
   discountPanel.value?.hydrate(o.discountRecords)
+  // 初始即为一个计费节点：补全随机优惠的资格与数额，避免展示未计优惠的金额
+  discountPanel.value?.finalizeRandom?.()
 }
 
 watch(
@@ -135,23 +140,20 @@ onUnmounted(stopTimer)
 function toggle(idx: number) {
   running[idx] = !(running[idx] ?? false)
   if (running[idx]) {
-    ensureTimer()
-    discountPanel.value?.resetDraw?.() // 走时：恢复到范围展示
+    ensureTimer() // 走时沿用上一计费节点的抽取结果，实时展示优惠后金额
   } else if (!Object.values(running).some(Boolean)) {
     stopTimer()
-    discountPanel.value?.drawRandom?.() // 全部停表：抽取
+    discountPanel.value?.drawRandom?.() // 全部停表=计费节点：重算资格与金额
   }
 }
 function resetItem(idx: number) {
   const it = items.value[idx]
   if (!it) return
   it.elapsed = 0
-  if (running[idx]) {
-    delete running[idx]
-    if (!Object.values(running).some(Boolean)) {
-      stopTimer()
-      discountPanel.value?.drawRandom?.()
-    }
+  if (running[idx]) delete running[idx]
+  if (!Object.values(running).some(Boolean)) {
+    stopTimer()
+    discountPanel.value?.drawRandom?.()
   }
 }
 // 删除已有计费项目，并同步重排 running/editing 的下标（删除点之后的项前移一位）
@@ -207,9 +209,13 @@ function addService() {
     hourlyRate: p.pricingMode === 'hourly' ? p.basePrice : undefined,
   })
   newServiceId.value = null
+  // 新增项目可能命中优惠作用域，停表状态下按新计费节点重算
+  if (!Object.values(running).some(Boolean)) discountPanel.value?.drawRandom?.()
 }
 
 const liveSubtotal = computed(() => subtotalOf(items.value))
+// 实时应付金额：小计随秒表跳动，优惠额为上一计费节点算定的结果
+const payable = computed(() => Math.max(0, liveSubtotal.value - discountAmount.value))
 
 async function saveProgress() {
   if (!order.value) return
@@ -351,6 +357,7 @@ function closePricing() {
             ref="discountPanel"
             :member-id="order?.memberId ?? null"
             :items="items"
+            @change="(_recs: DiscountRecord[], amt: number) => (discountAmount = amt)"
           />
 
           <NCard size="small">
@@ -360,22 +367,17 @@ function closePricing() {
                 <NText>{{ fmt(liveSubtotal) }}</NText>
               </NFlex>
               <NFlex
-                v-if="(discountPanel?.getDiscountAmount?.() ?? 0) > 0"
+                v-if="discountAmount > 0"
                 justify="space-between"
                 align="center"
               >
-                <NText depth="3">优惠</NText>
-                <NText type="error">-{{ fmt(discountPanel?.getDiscountAmount?.() ?? 0) }}</NText>
+                <NText depth="3">优惠合计</NText>
+                <NText type="error">-{{ fmt(discountAmount) }}</NText>
               </NFlex>
               <NFlex justify="space-between" align="center">
-                <NFlex align="center" :size="6">
-                  <NText strong>金额</NText>
-                  <NTag v-if="discountPanel?.hasRandomPending?.()" size="tiny" type="warning"
-                    >随机优惠待定</NTag
-                  >
-                </NFlex>
-                <NText type="warning" class="meter-num qty-display" style="font-size: 20px">{{
-                  fmt(discountPanel?.getFinalAmount?.() ?? liveSubtotal)
+                <NText strong>金额</NText>
+                <NText type="warning" class="meter-num" style="font-size: 20px">{{
+                  fmt(payable)
                 }}</NText>
               </NFlex>
             </NFlex>

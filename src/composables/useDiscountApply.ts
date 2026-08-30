@@ -12,6 +12,72 @@ export interface ApplyContext {
   items: OrderItem[]
 }
 
+/** 最优用券方案的搜索结果 */
+export interface BestPlan {
+  ids: string[]
+  total: number // 实算总减免（已含上限组封顶，且不超过小计）
+}
+
+// 候选数超过此值退化为贪心搜索；节点预算防止极端组合数拖慢界面
+const EXHAUSTIVE_LIMIT = 14
+const MAX_PLAN_STEPS = 20000
+
+/**
+ * 券的稀缺度：越大越稀缺，用于同额同数量方案的取舍（优先消耗稀缺券，把长期有效的通用优惠留着）。
+ * 构成：需券码兑换 +2（要手动输入才拿得到）／总或会员用量上限 +1（会被消耗掉）
+ *      ／随机触发概率加成 0~2（概率越低越难得，既已抽中就该先用掉）
+ */
+export function couponScarcity(d: Discount): number {
+  let s = 0
+  if (d.couponCode) s += 2
+  if (d.usageLimit) s += 1
+  if (d.memberLimit) s += 1
+  return s + triggerRarity(d)
+}
+
+/** 随机优惠的范围文案：随机数额显示区间，随机触发显示概率 */
+export function randomRangeLabel(d: Discount): string {
+  if (d.random?.kind === 'amount') {
+    return `随机立减 ¥${(Math.min(d.random.min, d.random.max) / 100).toFixed(2)}~¥${(
+      Math.max(d.random.min, d.random.max) / 100
+    ).toFixed(2)}`
+  }
+  if (d.random?.kind === 'ratio') {
+    // ratio 的 min/max 为 0-100「支付比例」（与 percentage.value 同单位）：
+    // 85 = 8.5折（支付85%），折数 = 支付比例 / 10；0 = 免单
+    const lo = Math.min(d.random.min, d.random.max)
+    const hi = Math.max(d.random.min, d.random.max)
+    const zhe = (v: number) => {
+      const z = v / 10
+      return Number.isInteger(z) ? String(z) : z.toFixed(1)
+    }
+    return `随机 ${zhe(lo)}折~${zhe(hi)}折`
+  }
+  if (d.triggerChance != null) return `随机生效 ${d.triggerChance}%`
+  return '随机优惠'
+}
+
+/**
+ * 随机触发类的稀缺加成（0~2）：概率越低，抽中越难得。
+ * 既已抽中，就应优先用掉——下次未必还能抽到。
+ */
+export function triggerRarity(d: Discount): number {
+  if (d.triggerChance == null || d.triggerChance >= 100) return 0
+  const p = Math.min(100, Math.max(0, d.triggerChance))
+  return 1 + (100 - p) / 100
+}
+
+/** 临期紧急度：无有效期=0；越接近到期越大（已过期记为 3） */
+export function expiryUrgency(d: Discount, now = Date.now()): number {
+  const until = d.scope?.timeWindow?.validUntil
+  if (!until) return 0
+  const t = new Date(until).getTime()
+  if (Number.isNaN(t)) return 0
+  const days = (t - now) / 86400000
+  if (days <= 0) return 3
+  return 1 / (1 + days)
+}
+
 /**
  * 优惠应用层：
  *  - 自动结算时收集「auto + 作用域命中 + 概率通过 + 无券码」的候选
@@ -45,7 +111,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
 
   // 已抽取的随机结果：key=discountId -> { captured, decided, triggered }
   //  - captured: 随机数额类捕获到的实际值（amount=分；ratio=0-100 百分比）
-  //  - decided: 资格是否已决定（随机触发类在下单时固化，停表抽取时仍为 false）
+  //  - decided: 资格是否已决定（每个计费节点即每次停表抽取时一次性决定）
   //  - triggered: 命中与否（true=生效；false=未触发排除；null=待定）
   interface DrawResult {
     captured: number
@@ -57,30 +123,6 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   // 是否为「随机数额」或「随机触发」类优惠（需要抽取/固化）
   function isRandom(d: Discount): boolean {
     return !!(d.random || d.triggerChance != null)
-  }
-
-  // 走时 / 未抽取期间展示的范围文案
-  function randomRangeLabel(d: Discount): string {
-    if (d.random?.kind === 'amount') {
-      return `随机立减 ¥${(Math.min(d.random.min, d.random.max) / 100).toFixed(2)}~¥${(
-        Math.max(d.random.min, d.random.max) / 100
-      ).toFixed(2)}`
-    }
-    if (d.random?.kind === 'ratio') {
-      // ratio 的 min/max 为 0-100「支付比例」（与 percentage.value 同单位）：
-      // 85 = 8.5折（支付85%），折数 = 支付比例 / 10；0 = 免单
-      const lo = Math.min(d.random.min, d.random.max)
-      const hi = Math.max(d.random.min, d.random.max)
-      const zhe = (v: number) => {
-        const z = v / 10
-        return Number.isInteger(z) ? String(z) : z.toFixed(1)
-      }
-      return `随机 ${zhe(lo)}折~${zhe(hi)}折`
-    }
-    if (d.triggerChance != null) {
-      return `随机生效 ${d.triggerChance}%`
-    }
-    return '随机优惠'
   }
 
   // 自动候选，随 ctx 变化自动重算（此处不再掷骰，随机在抽取时一次性决定）
@@ -139,7 +181,8 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return { discount: d, record: rec, capturedRandom: captured }
   }
 
-  // 停表抽取：对所有适用随机优惠一次性抽取数额（随机触发类的资格仍留待下单）
+  // 计费节点（所有秒表均暂停）抽取：对所有适用随机优惠一次性计算资格与数额
+  // 每次停表都会重掷，随机触发类若未命中则从候选中移除
   function drawRandom() {
     const c = ctx()
     const next: Record<string, DrawResult> = {}
@@ -152,8 +195,8 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     for (const d of cands) {
       if (!isRandom(d)) continue
       const captured = d.random ? discountStore.captureRandom(d.random) : 0
-      const decided = d.triggerChance == null
-      next[d.id] = { captured, decided, triggered: decided ? true : null }
+      const triggered = d.triggerChance != null ? Math.random() * 100 < d.triggerChance : true
+      next[d.id] = { captured, decided: true, triggered }
     }
     drawnRandom.value = next
   }
@@ -284,6 +327,141 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return rec.discountAmount
   }
 
+  // —— 最优用券方案 ——
+  // 优先级：实际优惠额最大 > 用券数最少 > 优先消耗稀有券 > 优先消耗临期券
+  // 互斥组（同组至多一个）在搜索阶段约束，上限组封顶在 planTotal 内计入。
+  // 说明：各优惠的减免额互不依赖（均按各自作用域基数独立计算），上限组只做「超额等比压缩」，
+  // 因此总额对候选集合单调不减，可用「上界剪枝 + 节点预算」的深度搜索求最优。
+
+  function subtotalOfItems(items: OrderItem[]): number {
+    return items.reduce((s, it) => s + itemAmount(it), 0)
+  }
+
+  /** 按规则实算一组草稿的总减免：互斥组择一 → 上限组封顶 → 不超过小计 */
+  function planTotal(list: DiscountDraft[], items: OrderItem[]): number {
+    if (!list.length) return 0
+    const base = subtotalOfItems(items)
+    const recs = applyLimitGroups(pickDiscounts(list), base, items)
+    return Math.min(
+      recs.reduce((s, r) => s + r.discountAmount, 0),
+      base,
+    )
+  }
+
+  /** 无贡献的券不参与搜索（占用名额却不增加减免＝浪费券） */
+  function planPool(candidates: DiscountDraft[]): DiscountDraft[] {
+    return candidates.filter((d) => d.record.discountAmount > 0)
+  }
+
+  interface ScoredPlan {
+    ids: string[]
+    total: number
+    scarcity: number
+    urgency: number
+  }
+
+  function scoreOf(list: DiscountDraft[], total: number): ScoredPlan {
+    return {
+      ids: list.map((d) => d.discount.id),
+      total,
+      scarcity: list.reduce((s, d) => s + couponScarcity(d.discount), 0),
+      urgency: list.reduce((s, d) => s + expiryUrgency(d.discount), 0),
+    }
+  }
+
+  /** 同额同数量时：优先消耗更稀缺、更临期的券 */
+  function isBetter(a: ScoredPlan, b: ScoredPlan): boolean {
+    if (a.total !== b.total) return a.total > b.total
+    if (a.ids.length !== b.ids.length) return a.ids.length < b.ids.length
+    if (a.scarcity !== b.scarcity) return a.scarcity > b.scarcity
+    return a.urgency > b.urgency
+  }
+
+  // 候选过多时退化为贪心：按单算减免降序尝试加入，只有能严格增加总额才采纳
+  function greedyPlan(pool: DiscountDraft[], items: OrderItem[]): ScoredPlan {
+    const sorted = [...pool].sort((a, b) => b.record.discountAmount - a.record.discountAmount)
+    const chosen: DiscountDraft[] = []
+    const usedGroups = new Set<string>()
+    let cur = 0
+    for (const d of sorted) {
+      const gid = d.discount.exclusiveGroupId
+      if (gid) {
+        if (usedGroups.has(gid)) continue
+      }
+      chosen.push(d)
+      const next = planTotal(chosen, items)
+      if (next > cur) {
+        cur = next
+        if (gid) usedGroups.add(gid)
+      } else {
+        chosen.pop() // 加了没用就不浪费这张券
+      }
+    }
+    return scoreOf(chosen, cur)
+  }
+
+  /**
+   * 求最优用券方案。返回入选优惠的 id 列表与实算总减免。
+   * 互斥组同组至多取一张；总额取 min(减免合计, 小计)，故超额部分不算数。
+   */
+  function bestPlan(candidates: DiscountDraft[], items: OrderItem[]): BestPlan {
+    const pool = planPool(candidates)
+    if (!pool.length) return { ids: [], total: 0 }
+    if (pool.length > EXHAUSTIVE_LIMIT) return pick(greedyPlan(pool, items))
+
+    // 互斥组归并为「选择单元」，每单元至多选一项（含不选）
+    const groups = new Map<string, DiscountDraft[]>()
+    for (const d of pool) {
+      const key = d.discount.exclusiveGroupId || `solo:${d.discount.id}`
+      const arr = groups.get(key)
+      if (arr) arr.push(d)
+      else groups.set(key, [d])
+    }
+    const units = [...groups.values()].map((opts) =>
+      [...opts].sort((a, b) => b.record.discountAmount - a.record.discountAmount),
+    )
+    // 后缀最大贡献，用于剪枝上界
+    const suffixMax: number[] = Array.from({ length: units.length + 1 }, () => 0)
+    for (let i = units.length - 1; i >= 0; i--) {
+      suffixMax[i] = suffixMax[i + 1]! + units[i]![0]!.record.discountAmount
+    }
+
+    const subtotal = subtotalOfItems(items)
+    const cap = (t: number) => Math.min(t, subtotal)
+    let best: ScoredPlan = { ids: [], total: 0, scarcity: 0, urgency: 0 }
+    const chosen: DiscountDraft[] = []
+    let steps = 0
+    let aborted = false
+
+    const dfs = (i: number, running: number) => {
+      if (aborted) return
+      if (++steps > MAX_PLAN_STEPS) {
+        aborted = true
+        return
+      }
+      if (i === units.length) {
+        const candidate = scoreOf(chosen, cap(planTotal(chosen, items)))
+        if (isBetter(candidate, best)) best = candidate
+        return
+      }
+      // 即便后续全取最优也追不上当前最优解，剪枝（取等号仍继续，以保留「更少券」的机会）
+      if (cap(running + suffixMax[i]!) < best.total) return
+      for (const d of units[i]!) {
+        chosen.push(d)
+        dfs(i + 1, running + d.record.discountAmount)
+        chosen.pop()
+        if (aborted) return
+      }
+      dfs(i + 1, running)
+    }
+    dfs(0, 0)
+    return pick(best)
+  }
+
+  function pick(p: ScoredPlan): BestPlan {
+    return { ids: p.ids, total: p.total }
+  }
+
   function autoRecords(): DiscountRecord[] {
     const c = ctx()
     const picked = pickDiscounts(drafts.value)
@@ -360,6 +538,8 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     drafts,
     pickDiscounts,
     applyLimitGroups,
+    planTotal,
+    bestPlan,
     amountOf,
     autoRecords,
     scopeBaseAmount,
