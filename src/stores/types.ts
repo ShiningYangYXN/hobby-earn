@@ -135,11 +135,12 @@ export interface Discount {
   // —— 优惠执行方式 ——
   ruleType: RuleType
   value: number // fixed: 减免金额(分)；percentage: 折扣力度(0-100，如 85=打8.5折)；stepDown: 每阶梯减免(分)；perItem: 每件立减金额(分)
-  minAmount: number // 满减/打折门槛(分)；stepDown: 每满金额(分)；perItem: 不适用（按件计，无门槛）
+  minAmount: number // 保底消费(分)，门槛，0=不限：所有执行方式的最低消费门槛（含 stepDown 的起用门槛）
   // 最大减免封顶(分)：calcDiscount 对所有执行方式都生效（含 fixed，可把固定立减压得更低）；
   // 例外是随机立减（random.kind='amount'），此时封顶由捕获到的随机值取代，该字段不参与
   maxDiscount?: number
   maxUnits?: number // 最大执行件数/阶梯数：perItem 限制立减件数，stepDown 限制生效阶梯数；留空=不限
+  stepAmount?: number // 阶梯步长(分)，仅 stepDown：每满该金额减免一个 value；0/undefined=不限
 
   // —— 作用域指标（省略即不限） ——
   scope?: DiscountScope
@@ -162,8 +163,8 @@ export interface Discount {
   // —— 生效上限组 ——
   limitGroups?: string[] // 关联的 DiscountLimitGroup.id
 
-  // —— 互斥组 ——
-  exclusiveGroupId?: string | null
+  // —— 互斥组（可归属多个，执行时需同时满足每个所属组的规则） ——
+  exclusiveGroupIds?: string[]
 
   createdAt: number
 }
@@ -199,9 +200,11 @@ export function discountRuleText(d: Discount, capturedRandom?: number): string {
     parts.push(formatZhe(r))
     if (d.minAmount > 0) parts.push(`满${fmt(d.minAmount)}可用`)
   } else if (d.ruleType === 'stepDown') {
-    parts.push(`每满${fmt(d.minAmount)}减${fmt(d.value)}`)
+    if (d.minAmount > 0) parts.push(`满${fmt(d.minAmount)}可用`)
+    parts.push(`每满${fmt(d.stepAmount ?? 0)}减${fmt(d.value)}`)
     if (d.maxUnits != null) parts.push(`最多${d.maxUnits}阶`)
   } else if (d.ruleType === 'perItem') {
+    if (d.minAmount > 0) parts.push(`满${fmt(d.minAmount)}可用`)
     parts.push(`每件减${fmt(d.value)}`)
     if (d.maxUnits != null) parts.push(`最多${d.maxUnits}件`)
   } else {
@@ -284,7 +287,7 @@ export interface DiscountRecord {
   couponCodeSnapshot?: string
 
   // 用于互斥/上限组反查
-  exclusiveGroupId?: string | null
+  exclusiveGroupIds?: string[]
   limitGroups?: string[]
 
   // 随机数额类：停表/下单抽取后固化的实际捕获值（amount=分；ratio=0-100 百分比）

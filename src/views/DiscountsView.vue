@@ -94,7 +94,7 @@ function orderRefCount(d: Discount): number {
 }
 // 被订单引用的优惠：非作弊模式隐藏删除按钮，作弊模式允许递归删除
 function canDelete(d: Discount): boolean {
-  return orderRefCount(d) === 0 || uiStore.advancedMode
+  return orderRefCount(d) === 0 || uiStore.labMode
 }
 
 const columns = buildDiscountColumns({ copyCode, openEdit, toggle, remove, canDelete })
@@ -142,7 +142,12 @@ onMounted(() => {
       <NFlex vertical>
         <NFlex align="center" justify="space-between" wrap>
           <NFlex align="center" wrap>
-            <NInput v-model:value="keyword" placeholder="搜索名称 / 券码" clearable style="width: 200px" />
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索名称 / 券码"
+              clearable
+              style="width: 200px"
+            />
             <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
             <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
           </NFlex>
@@ -168,8 +173,14 @@ onMounted(() => {
           </NFlex>
         </NFlex>
 
-        <NDataTable v-if="filtered.length" :columns="columns" :data="filtered" :pagination="{ pageSize: 10 }"
-          :scroll-x="tableScrollX(columns)" size="small" />
+        <NDataTable
+          v-if="filtered.length"
+          :columns="columns"
+          :data="filtered"
+          :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
+          size="small"
+        />
         <NEmpty v-else description="暂无优惠" />
       </NFlex>
     </NCard>

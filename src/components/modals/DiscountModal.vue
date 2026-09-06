@@ -32,7 +32,11 @@ import { useMemberStore } from '@/stores/useMemberStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useUiStore } from '@/stores/useUiStore'
 import TypeSelect from '@/components/TypeSelect.vue'
-import { useCategoryManage, useMemberTypeManage, type TypeManageSource } from '@/composables/useTypeManage'
+import {
+  useCategoryManage,
+  useMemberTypeManage,
+  type TypeManageSource,
+} from '@/composables/useTypeManage'
 import {
   genCouponCode,
   normalizeCouponCode,
@@ -88,9 +92,10 @@ interface DiscountForm {
   isActive: boolean
   ruleType: RuleType
   value: number // percentage: 折扣力度(0-100)；其余: 元
-  minAmount: number // 元
+  minAmount: number // 保底消费（元，所有方式；0=不限）
   maxDiscount?: number // 元
   maxUnits?: number // 最大执行件数/阶梯数；perItem/stepDown 用
+  stepAmount: number // 阶梯步长（元，仅 stepDown 的每满金额）；0=不限
   scope: {
     enabledMemberTypes: boolean
     enabledMembers: boolean
@@ -115,7 +120,7 @@ interface DiscountForm {
   usageLimit?: number // 总可用次数（所有会员共享）；空=不限
   memberLimit?: number // 每会员限用次数；空=不限
   remark: string
-  exclusiveGroupId?: string | null
+  exclusiveGroupIds: string[]
   limitGroups: string[]
 }
 
@@ -128,6 +133,7 @@ function emptyForm(): DiscountForm {
     minAmount: 0,
     maxDiscount: undefined,
     maxUnits: undefined,
+    stepAmount: 0,
     scope: {
       enabledMemberTypes: false,
       enabledMembers: false,
@@ -152,7 +158,7 @@ function emptyForm(): DiscountForm {
     usageLimit: undefined,
     memberLimit: undefined,
     remark: '',
-    exclusiveGroupId: null,
+    exclusiveGroupIds: [],
     limitGroups: [],
   }
 }
@@ -200,6 +206,7 @@ watch(
           minAmount: Math.round(d.minAmount / 100),
           maxDiscount: d.maxDiscount != null ? Math.round(d.maxDiscount / 100) : undefined,
           maxUnits: d.maxUnits ?? undefined,
+          stepAmount: d.stepAmount != null ? Math.round(d.stepAmount / 100) : 0,
           scope: {
             enabledMemberTypes: !!s?.memberTypeIds?.length,
             enabledMembers: !!s?.memberIds?.length,
@@ -233,7 +240,7 @@ watch(
           usageLimit: d.usageLimit ?? undefined,
           memberLimit: d.memberLimit ?? undefined,
           remark: d.remark ?? '',
-          exclusiveGroupId: d.exclusiveGroupId ?? null,
+          exclusiveGroupIds: d.exclusiveGroupIds ?? [],
           limitGroups: d.limitGroups ?? [],
         }
         usedCount.value = d.usedCount
@@ -261,11 +268,9 @@ const valueLabel = computed(() =>
         ? '每件立减金额（元）'
         : '优惠金额（元）',
 )
-const minAmountLabel = computed(() =>
-  form.value.ruleType === 'stepDown' ? '每满金额（元）' : '最低消费（元）',
-)
-// 件件减按件计，无金额门槛
-const showMinAmount = computed(() => form.value.ruleType !== 'perItem')
+const minAmountLabel = computed(() => '保底消费（元）')
+// 所有执行方式都有保底消费门槛（0=不限）
+const showMinAmount = computed(() => true)
 const showMaxUnits = computed(
   () => form.value.ruleType === 'perItem' || form.value.ruleType === 'stepDown',
 )
@@ -274,9 +279,9 @@ const showMaxUnits = computed(
 const ruleHint = computed(() => {
   const r = form.value.ruleType
   if (r === 'perItem')
-    return '对范围内的每个计价单元立减：按件计费项目单件 = 一件；按工时计费项目单件 = 一个工时（按时价计算）。超出最大件数的部分不再立减。'
+    return '对范围内的每个计价单元立减：按件计费项目单件 = 一件；按工时计费项目单件 = 一个工时（按时价计算）。仅有当订单小计达到「保底消费」门槛后才立减；超出最大件数的部分不再立减。'
   if (r === 'stepDown')
-    return '每满一个「每满金额」即减免一个该金额，如每满 100 减 20。超出最大阶梯数的部分不再享受。'
+    return '订单小计达到「保底消费」门槛后，每满一个「阶梯步长」即减免一个该金额，如每满 100 减 20。超出最大阶梯数的部分不再享受。'
   if (r === 'percentage') return '0 = 免单，100 = 不打折。'
   return null
 })
@@ -372,6 +377,7 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
       (f.ruleType === 'perItem' || f.ruleType === 'stepDown') && f.maxUnits != null
         ? f.maxUnits
         : undefined,
+    stepAmount: f.ruleType === 'stepDown' ? cents(f.stepAmount) : 0,
     scope: buildScope(f),
   }
   if (f.randomEnabled) {
@@ -392,7 +398,7 @@ function buildPayload(f: DiscountForm): Omit<Discount, 'id' | 'createdAt' | 'use
   payload.usageLimit = f.usageLimit ?? undefined
   payload.memberLimit = f.memberLimit ?? undefined
   payload.remark = f.remark.trim() || undefined
-  payload.exclusiveGroupId = f.exclusiveGroupId || null
+  payload.exclusiveGroupIds = f.exclusiveGroupIds.length ? [...f.exclusiveGroupIds] : []
   payload.limitGroups = f.limitGroups.length ? [...f.limitGroups] : []
   return payload
 }
@@ -420,15 +426,10 @@ function validate(f: DiscountForm): string | null {
     f.maxDiscount < f.value
   )
     return '优惠上限不能小于优惠金额'
-  if (r === 'stepDown' && (!f.minAmount || f.minAmount <= 0)) return '请填写每满金额（大于 0）'
+  if (r === 'stepDown' && (!f.stepAmount || f.stepAmount <= 0)) return '请填写阶梯步长（每满金额，大于 0）'
   if (f.maxUnits != null && f.maxUnits <= 0) return '最大执行件数/阶梯数需大于 0'
   // TimeWindow 各字段均可选：起止时间可以只填其一，也可以只配周期
-  if (
-    f.scope.enabledTime &&
-    !f.scope.validFrom &&
-    !f.scope.validUntil &&
-    !f.scope.cron.trim()
-  )
+  if (f.scope.enabledTime && !f.scope.validFrom && !f.scope.validUntil && !f.scope.cron.trim())
     return '请设置起止时间或周期表达式'
   if (f.scope.enabledMemberTypes && f.scope.memberTypeIds.length === 0) return '请选择限定会员种类'
   if (f.scope.enabledMembers && f.scope.memberIds.length === 0) return '请选择限定会员'
@@ -463,7 +464,7 @@ async function save() {
     if (editing.value && props.id) {
       await store.update(props.id, payload)
       // 已用次数为统计字段，仅作弊模式可改写
-      if (ui.advancedMode) {
+      if (ui.labMode) {
         await store.update(props.id, { usedCount: Math.max(0, Math.round(usedCount.value)) })
       }
       msg.success('优惠已更新')
@@ -566,7 +567,7 @@ function exclusiveUpdate(id: string, f: Record<string, unknown>) {
 }
 async function exclusiveRemove(id: string) {
   await exclusiveStore.remove(id)
-  if (form.value.exclusiveGroupId === id) form.value.exclusiveGroupId = null
+  form.value.exclusiveGroupIds = form.value.exclusiveGroupIds.filter((x) => x !== id)
 }
 
 const exclusiveManage = computed<TypeManageSource>(() => ({
@@ -599,16 +600,22 @@ const limitGroupManage = computed<TypeManageSource>(() => ({
   confirmText: '删除后将从所有优惠中移除该上限组归属，确认删除？',
 }))
 
-// 互斥组至多归属一个，单选模式；模型值统一为数组，取首个元素
+// 互斥组可归属多个，直接双向绑定表单数组
 const exclusiveGroupIds = computed<string[]>({
-  get: () => (form.value.exclusiveGroupId ? [form.value.exclusiveGroupId] : []),
-  set: (v) => (form.value.exclusiveGroupId = v[0] ?? null),
+  get: () => form.value.exclusiveGroupIds,
+  set: (v) => (form.value.exclusiveGroupIds = v),
 })
 </script>
 
 <template>
-  <NModal :show="true" :title="editing ? '编辑优惠' : '新建优惠'" preset="card" :autoFocus="false" style="width: 760px"
-    @update:show="close">
+  <NModal
+    :show="true"
+    :title="editing ? '编辑优惠' : '新建优惠'"
+    preset="card"
+    :autoFocus="false"
+    style="width: 760px"
+    @update:show="close"
+  >
     <NScrollbar class="modal-scroll">
       <NForm labelPlacement="top">
         <!-- 基础 -->
@@ -617,14 +624,16 @@ const exclusiveGroupIds = computed<string[]>({
             <NInput v-model:value="form.name" placeholder="如：新客首单立减 20" />
           </NFormItemGi>
 
-          <NFormItemGi :span="1" label="启用">
+          <NFormItemGi label="启用">
             <NFlex align="center" :size="8">
               <NSwitch v-model:value="form.isActive" />
-              <NText depth="3" style="font-size: 12px">{{ form.isActive ? '启用中' : '已停用' }}</NText>
+              <NText depth="3" style="font-size: 12px">{{
+                form.isActive ? '启用中' : '已停用'
+              }}</NText>
             </NFlex>
           </NFormItemGi>
 
-          <NFormItemGi :span="1" label="优惠执行方式">
+          <NFormItemGi label="优惠执行方式">
             <NSelect v-model:value="form.ruleType" :options="ruleOptions" />
           </NFormItemGi>
 
@@ -638,39 +647,78 @@ const exclusiveGroupIds = computed<string[]>({
         <!-- 规则 -->
         <NDivider title-placement="left">规则</NDivider>
         <NGrid :cols="2" :x-gap="12">
-          <NFormItemGi :span="1" :label="valueDisabled ? `${valueLabel}（随机额度生效时作废）` : valueLabel"
-            :required="!valueDisabled">
-            <NInputNumber v-model:value="form.value" :disabled="valueDisabled" :min="0"
-              :max="valueIsPercent ? 100 : undefined" :precision="valueStep"
-              :placeholder="valueDisabled ? '已被随机额度取代' : undefined" style="width: 100%" />
+          <NFormItemGi
+            :label="valueDisabled ? `${valueLabel}（随机额度生效时作废）` : valueLabel"
+            :required="!valueDisabled"
+          >
+            <NInputNumber
+              v-model:value="form.value"
+              :disabled="valueDisabled"
+              :min="0"
+              :max="valueIsPercent ? 100 : undefined"
+              :precision="valueStep"
+              :placeholder="valueDisabled ? '已被随机额度取代' : undefined"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
           <NGi v-if="valueHint" :span="2">
             <NText type="warning" style="font-size: 12px">{{ valueHint }}</NText>
           </NGi>
 
-          <NFormItemGi v-if="showMinAmount" :span="1" :label="minAmountLabel">
-            <NInputNumber v-model:value="form.minAmount" :min="0" :precision="2" placeholder="0 表示不限制"
-              style="width: 100%" />
+          <NFormItemGi v-if="showMinAmount" :label="minAmountLabel">
+            <NInputNumber
+              v-model:value="form.minAmount"
+              :min="0"
+              :precision="2"
+              placeholder="0 表示不限制"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
-          <NFormItemGi v-if="showMaxUnits" :span="1" :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'">
-            <NInputNumber :value="form.maxUnits ?? null"
-              @update:value="(v: number | null) => (form.maxUnits = v ?? undefined)" :min="1" :precision="0"
-              placeholder="不限制" style="width: 100%" />
+          <NFormItemGi v-if="form.ruleType === 'stepDown'" label="阶梯步长（元，每满金额）">
+            <NInputNumber
+              v-model:value="form.stepAmount"
+              :min="0"
+              :precision="2"
+              placeholder="0 表示不限制"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
-          <NFormItemGi :span="1" label="优惠上限（元，可选）">
-            <NInputNumber :value="form.maxDiscount ?? null" :disabled="maxDiscountDisabled"
-              @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)" :min="0" :precision="2"
-              placeholder="不限制" style="width: 100%" />
+          <NFormItemGi
+            v-if="showMaxUnits"
+            :label="form.ruleType === 'stepDown' ? '最大阶梯数（可选）' : '最大执行件数（可选）'"
+          >
+            <NInputNumber
+              :value="form.maxUnits ?? null"
+              @update:value="(v: number | null) => (form.maxUnits = v ?? undefined)"
+              :min="1"
+              :precision="0"
+              placeholder="不限制"
+              style="width: 100%"
+            />
+          </NFormItemGi>
+
+          <NFormItemGi label="优惠上限（元，可选）">
+            <NInputNumber
+              :value="form.maxDiscount ?? null"
+              :disabled="maxDiscountDisabled"
+              @update:value="(v: number | null) => (form.maxDiscount = v ?? undefined)"
+              :min="0"
+              :precision="2"
+              placeholder="不限制"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
           <NGi v-if="ruleHint" :span="2">
             <NText depth="3" style="font-size: 12px">{{ ruleHint }}</NText>
           </NGi>
           <NGi v-if="maxDiscountDisabled" :span="2">
-            <NText depth="3" style="font-size: 12px">随机立减时减免额已被随机值封顶，优惠上限设置无效。</NText>
+            <NText depth="3" style="font-size: 12px"
+              >随机立减时减免额已被随机值封顶，优惠上限设置无效。</NText
+            >
           </NGi>
         </NGrid>
 
@@ -680,8 +728,13 @@ const exclusiveGroupIds = computed<string[]>({
           <NFormItemGi :span="2" label="指定会员类型可用">
             <NFlex align="center" :size="10" style="width: 100%">
               <NSwitch v-model:value="form.scope.enabledMemberTypes" />
-              <TypeSelect v-if="form.scope.enabledMemberTypes" v-model="form.scope.memberTypeIds"
-                :manage="memberTypeManage" placeholder="选择会员种类（命中任一即可）" style="flex: 1" />
+              <TypeSelect
+                v-if="form.scope.enabledMemberTypes"
+                v-model="form.scope.memberTypeIds"
+                :manage="memberTypeManage"
+                placeholder="选择会员种类（命中任一即可）"
+                style="flex: 1"
+              />
               <NText v-else depth="3" style="font-size: 12px">不限制</NText>
             </NFlex>
           </NFormItemGi>
@@ -689,8 +742,15 @@ const exclusiveGroupIds = computed<string[]>({
           <NFormItemGi :span="2" label="指定会员可用">
             <NFlex align="center" :size="10" style="width: 100%">
               <NSwitch v-model:value="form.scope.enabledMembers" />
-              <NSelect v-if="form.scope.enabledMembers" v-model:value="form.scope.memberIds" :options="memberOptions"
-                multiple filterable placeholder="选择会员" style="flex: 1" />
+              <NSelect
+                v-if="form.scope.enabledMembers"
+                v-model:value="form.scope.memberIds"
+                :options="memberOptions"
+                multiple
+                filterable
+                placeholder="选择会员"
+                style="flex: 1"
+              />
               <NText v-else depth="3" style="font-size: 12px">不限制</NText>
             </NFlex>
           </NFormItemGi>
@@ -700,21 +760,37 @@ const exclusiveGroupIds = computed<string[]>({
               <NFlex vertical :size="6" style="width: 100%">
                 <NFlex align="center" :size="10">
                   <NSwitch v-model:value="form.scope.enabledTime" />
-                  <NText v-if="!form.scope.enabledTime" depth="3" style="font-size: 12px">不限制</NText>
+                  <NText v-if="!form.scope.enabledTime" depth="3" style="font-size: 12px"
+                    >不限制</NText
+                  >
                 </NFlex>
                 <template v-if="form.scope.enabledTime">
                   <NFlex :size="8" align="center">
-                    <NDatePicker :value="form.scope.validFrom ?? null"
-                      @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)" type="datetime"
-                      clearable placeholder="开始时间" style="flex: 1" />
+                    <NDatePicker
+                      :value="form.scope.validFrom ?? null"
+                      @update:value="(v: number | null) => (form.scope.validFrom = v ?? undefined)"
+                      type="datetime"
+                      clearable
+                      placeholder="开始时间"
+                      style="flex: 1"
+                    />
                     <NText>~</NText>
-                    <NDatePicker :value="form.scope.validUntil ?? null"
-                      @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)" type="datetime"
-                      clearable placeholder="结束时间" style="flex: 1" />
+                    <NDatePicker
+                      :value="form.scope.validUntil ?? null"
+                      @update:value="(v: number | null) => (form.scope.validUntil = v ?? undefined)"
+                      type="datetime"
+                      clearable
+                      placeholder="结束时间"
+                      style="flex: 1"
+                    />
                   </NFlex>
-                  <NInput v-model:value="form.scope.cron" placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5" />
+                  <NInput
+                    v-model:value="form.scope.cron"
+                    placeholder="周期表达式（分 时 日 月 周），如 0 9-18 * * 1-5"
+                  />
                   <NText depth="3" style="font-size: 12px">
-                    支持 * / 逗号列表 / 区间(9-18)。起止时间与周期为「且」关系，留空则仅按起止时间限制。
+                    支持 * / 逗号列表 /
+                    区间(9-18)。起止时间与周期为「且」关系，留空则仅按起止时间限制。
                   </NText>
                 </template>
               </NFlex>
@@ -724,8 +800,13 @@ const exclusiveGroupIds = computed<string[]>({
           <NFormItemGi :span="2" label="指定品类可用">
             <NFlex align="center" :size="10" style="width: 100%">
               <NSwitch v-model:value="form.scope.enabledCategories" />
-              <TypeSelect v-if="form.scope.enabledCategories" v-model="form.scope.categoryIds"
-                :manage="categoryManage" placeholder="选择品类（命中任一品类下的服务即可）" style="flex: 1" />
+              <TypeSelect
+                v-if="form.scope.enabledCategories"
+                v-model="form.scope.categoryIds"
+                :manage="categoryManage"
+                placeholder="选择品类（命中任一品类下的服务即可）"
+                style="flex: 1"
+              />
               <NText v-else depth="3" style="font-size: 12px">不限制</NText>
             </NFlex>
           </NFormItemGi>
@@ -733,8 +814,15 @@ const exclusiveGroupIds = computed<string[]>({
           <NFormItemGi :span="2" label="指定单品可用">
             <NFlex align="center" :size="10" style="width: 100%">
               <NSwitch v-model:value="form.scope.enabledItems" />
-              <NSelect v-if="form.scope.enabledItems" v-model:value="form.scope.itemIds" :options="itemOptions" multiple
-                filterable placeholder="选择单品" style="flex: 1" />
+              <NSelect
+                v-if="form.scope.enabledItems"
+                v-model:value="form.scope.itemIds"
+                :options="itemOptions"
+                multiple
+                filterable
+                placeholder="选择单品"
+                style="flex: 1"
+              />
               <NText v-else depth="3" style="font-size: 12px">不限制</NText>
             </NFlex>
           </NFormItemGi>
@@ -744,22 +832,40 @@ const exclusiveGroupIds = computed<string[]>({
         <NDivider title-placement="left">随机</NDivider>
         <NGrid :cols="2" :x-gap="12">
           <NFormItemGi :span="2" label="随机减免额">
-            <NFlex align="center" :size="10" style="width: 100%">
+            <NFlex style="width: 100%">
               <NSwitch v-model:value="form.randomEnabled" />
               <NText depth="3" style="font-size: 12px">{{
                 form.randomEnabled ? randomEffectText : '关闭 · 按上方固定数值计算'
-                }}</NText>
+              }}</NText>
             </NFlex>
           </NFormItemGi>
 
-          <NFormItemGi v-if="form.randomEnabled" :span="1" :label="`随机下限（${randomIsAmount ? '元' : '力度%'}）`">
-            <NInputNumber v-model:value="form.randomMin" :min="0" :precision="randomIsAmount ? 2 : 0"
-              :max="randomIsAmount ? undefined : 100" placeholder="最小值" style="width: 100%" />
+          <NFormItemGi
+            v-if="form.randomEnabled"
+            :label="`随机下限（${randomIsAmount ? '元' : '力度%'}）`"
+          >
+            <NInputNumber
+              v-model:value="form.randomMin"
+              :min="0"
+              :precision="randomIsAmount ? 2 : 0"
+              :max="randomIsAmount ? undefined : 100"
+              placeholder="最小值"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
-          <NFormItemGi v-if="form.randomEnabled" :span="1" :label="`随机上限（${randomIsAmount ? '元' : '力度%'}）`">
-            <NInputNumber v-model:value="form.randomMax" :min="0" :precision="randomIsAmount ? 2 : 0"
-              :max="randomIsAmount ? undefined : 100" placeholder="最大值" style="width: 100%" />
+          <NFormItemGi
+            v-if="form.randomEnabled"
+            :label="`随机上限（${randomIsAmount ? '元' : '力度%'}）`"
+          >
+            <NInputNumber
+              v-model:value="form.randomMax"
+              :min="0"
+              :precision="randomIsAmount ? 2 : 0"
+              :max="randomIsAmount ? undefined : 100"
+              placeholder="最大值"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
           <NGi v-if="form.randomEnabled" :span="2">
@@ -767,15 +873,24 @@ const exclusiveGroupIds = computed<string[]>({
               <NText v-if="randomKindMismatch" type="warning" style="font-size: 12px">
                 该随机类型与当前执行方式不匹配（不会生效），请按上方单位重新填写范围。
               </NText>
-              <NText depth="3" style="font-size: 12px">优惠一旦被订单捕获，随机数额即固化，之后不再变化。</NText>
+              <NText depth="3" style="font-size: 12px"
+                >优惠一旦被订单捕获，随机数额即固化，之后不再变化。</NText
+              >
             </NFlex>
           </NGi>
 
           <NFormItemGi :span="2" label="随机触发概率（%）">
             <NFlex vertical :size="2" style="width: 100%">
-              <NInputNumber :value="form.triggerChance ?? null" :disabled="triggerDisabled"
-                @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)" :min="0" :max="100"
-                :precision="0" placeholder="100（必触发）" style="width: 100%" />
+              <NInputNumber
+                :value="form.triggerChance ?? null"
+                :disabled="triggerDisabled"
+                @update:value="(v: number | null) => (form.triggerChance = v ?? undefined)"
+                :min="0"
+                :max="100"
+                :precision="0"
+                placeholder="100（必触发）"
+                style="width: 100%"
+              />
               <NText depth="3" style="font-size: 12px">
                 {{
                   triggerDisabled
@@ -799,14 +914,28 @@ const exclusiveGroupIds = computed<string[]>({
                 </NText>
               </NFlex>
               <template v-if="form.couponEnabled">
-                <NFlex :size="8" align="center" wrap>
-                  <NInputOtp v-model:value="couponSlots" :length="COUPON_LENGTH" :allow-input="couponAllowInput"
-                    placeholder="-" class="coupon-otp" />
+                <NFlex justify="center" style="width: 100%">
+                  <NInputOtp
+                    v-model:value="couponSlots"
+                    :length="COUPON_LENGTH"
+                    :allow-input="couponAllowInput"
+                    placeholder="*"
+                    class="coupon-otp"
+                  />
                   <NButton size="small" @click="genCode">生成</NButton>
-                  <NButton v-if="form.couponCode" size="small" quaternary @click="form.couponCode = ''">清空</NButton>
+                  <NButton
+                    v-if="form.couponCode"
+                    size="small"
+                    quaternary
+                    @click="form.couponCode = ''"
+                    >清空</NButton
+                  >
                 </NFlex>
                 <NText depth="3" style="font-size: 12px">
-                  {{ COUPON_LENGTH }} 位字母或数字，留空将自动生成。附加券码后该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
+                  {{
+                    COUPON_LENGTH
+                  }}
+                  位字母或数字，留空将自动生成。附加券码后该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
                 </NText>
               </template>
             </NFlex>
@@ -816,27 +945,38 @@ const exclusiveGroupIds = computed<string[]>({
         <!-- 用量控制 -->
         <NDivider title-placement="left">用量控制</NDivider>
         <NGrid :cols="2" :x-gap="12">
-          <NFormItemGi :span="1" label="总可用次数（可选）">
-            <NInputNumber :value="form.usageLimit ?? null"
-              @update:value="(v: number | null) => (form.usageLimit = v ?? undefined)" :min="1" :precision="0"
-              placeholder="不限（所有会员共享）" style="width: 100%" />
+          <NFormItemGi label="总可用次数（可选）">
+            <NInputNumber
+              :value="form.usageLimit ?? null"
+              @update:value="(v: number | null) => (form.usageLimit = v ?? undefined)"
+              :min="1"
+              :precision="0"
+              placeholder="不限（所有会员共享）"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
-          <NFormItemGi :span="1" label="每会员限用次数（可选）">
-            <NInputNumber :value="form.memberLimit ?? null"
-              @update:value="(v: number | null) => (form.memberLimit = v ?? undefined)" :min="1" :precision="0"
-              placeholder="不限" style="width: 100%" />
+          <NFormItemGi label="每会员限用次数（可选）">
+            <NInputNumber
+              :value="form.memberLimit ?? null"
+              @update:value="(v: number | null) => (form.memberLimit = v ?? undefined)"
+              :min="1"
+              :precision="0"
+              placeholder="不限"
+              style="width: 100%"
+            />
           </NFormItemGi>
 
           <!-- 已用次数：统计字段，仅作弊模式可改写 -->
-          <NFormItemGi v-if="editing && ui.advancedMode" :span="2" label="已用次数（作弊模式）">
+          <NFormItemGi v-if="editing && ui.labMode" :span="2" label="已用次数（作弊模式）">
             <NInputNumber v-model:value="usedCount" :min="0" :precision="0" style="width: 100%" />
           </NFormItemGi>
 
           <NGi :span="2">
             <NText depth="3" style="font-size: 12px">
               <template v-if="editing && usageLeft != null">
-                已用 {{ usedCount }} 次，剩余 {{ usageLeft }} 次；余量不足 10 次时结算面板会标出「仅剩 N 张」。
+                已用 {{ usedCount }} 次，剩余 {{ usageLeft }} 次；余量不足 10
+                次时结算面板会标出「仅剩 N 张」。
               </template>
               <template v-else>
                 总可用次数为所有会员共享的额度，用尽后自动失效；每会员限用控制单个会员的使用上限。
@@ -848,12 +988,15 @@ const exclusiveGroupIds = computed<string[]>({
         <!-- 互斥组 / 上限组 -->
         <NDivider title-placement="left">分组</NDivider>
         <NGrid :cols="2" :x-gap="12">
-          <NFormItemGi :span="1" label="互斥组">
-            <TypeSelect v-model="exclusiveGroupIds" :manage="exclusiveManage" :multiple="false"
-              placeholder="不加入" />
+          <NFormItemGi label="互斥组">
+            <TypeSelect
+              v-model="exclusiveGroupIds"
+              :manage="exclusiveManage"
+              placeholder="不加入"
+            />
           </NFormItemGi>
 
-          <NFormItemGi :span="1" label="上限组">
+          <NFormItemGi label="上限组">
             <TypeSelect v-model="form.limitGroups" :manage="limitGroupManage" placeholder="不加入">
               <template #form-extra="{ form: lf }">
                 <NGi>
@@ -862,8 +1005,13 @@ const exclusiveGroupIds = computed<string[]>({
                 </NGi>
                 <NGi v-if="lf.scope === 'items'">
                   <NText depth="3" class="small-label">参与计算的单品</NText>
-                  <NSelect v-model:value="lf.itemIds" :options="limitItemOptions" multiple filterable
-                    placeholder="选择单品" />
+                  <NSelect
+                    v-model:value="lf.itemIds"
+                    :options="limitItemOptions"
+                    multiple
+                    filterable
+                    placeholder="选择单品"
+                  />
                 </NGi>
                 <NGi v-if="lf.scope === 'categories'">
                   <NText depth="3" class="small-label">参与计算的分类</NText>
@@ -877,8 +1025,12 @@ const exclusiveGroupIds = computed<string[]>({
                   <NText depth="3" class="small-label">
                     组上限（{{ lf.limitType === 'amount' ? '元' : '%' }}）
                   </NText>
-                  <NInputNumber v-model:value="lf.limit" :min="0"
-                    :precision="lf.limitType === 'amount' ? 2 : 0" style="width: 100%" />
+                  <NInputNumber
+                    v-model:value="lf.limit"
+                    :min="0"
+                    :precision="lf.limitType === 'amount' ? 2 : 0"
+                    style="width: 100%"
+                  />
                 </NGi>
               </template>
             </TypeSelect>
@@ -886,12 +1038,18 @@ const exclusiveGroupIds = computed<string[]>({
 
           <NGi :span="2">
             <NText depth="3" style="font-size: 12px">
-              互斥组：同组的优惠同时只会生效减免最大者。上限组：同组的优惠共享该组减免上限（如全场累计优惠不超过 ¥100）。
+              互斥组：同组的优惠同时只会生效减免最大者。上限组：同组的优惠共享该组减免上限（如全场累计优惠不超过
+              ¥100）。
             </NText>
           </NGi>
 
           <NFormItemGi :span="2" label="备注（可选）">
-            <NInput v-model:value="form.remark" type="textarea" :rows="2" placeholder="内部说明，不对外展示" />
+            <NInput
+              v-model:value="form.remark"
+              type="textarea"
+              :rows="2"
+              placeholder="内部说明，不对外展示"
+            />
           </NFormItemGi>
         </NGrid>
       </NForm>
@@ -912,7 +1070,6 @@ const exclusiveGroupIds = computed<string[]>({
         </NButton>
       </NFlex>
     </template>
-
   </NModal>
 </template>
 

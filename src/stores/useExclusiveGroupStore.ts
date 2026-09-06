@@ -29,10 +29,12 @@ export const useExclusiveGroupStore = defineStore('exclusiveGroup', () => {
   async function remove(id: string): Promise<void> {
     const idx = groups.value.findIndex((x) => x.id === id)
     if (idx < 0) return
-    // 级联清理：解除引用该互斥组的优惠归属
+    // 级联清理：从引用该互斥组的优惠中摘除这一项（可能还归属其它组）
     const discountStore = useDiscountStore()
-    for (const d of discountStore.discounts.filter((x) => x.exclusiveGroupId === id)) {
-      await discountStore.update(d.id, { exclusiveGroupId: undefined })
+    for (const d of discountStore.discounts.filter((x) => x.exclusiveGroupIds?.includes(id))) {
+      await discountStore.update(d.id, {
+        exclusiveGroupIds: (d.exclusiveGroupIds ?? []).filter((g) => g !== id),
+      })
     }
     groups.value.splice(idx, 1)
     await del('exclusiveGroups', id)

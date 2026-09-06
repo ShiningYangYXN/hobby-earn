@@ -338,9 +338,15 @@ defineExpose({
 <template>
   <NScrollbar class="modal-scroll">
     <NFlex vertical :size="12">
-      <NFlex align="center" :size="8">
-        <NInputOtp v-model:value="couponSlots" :length="COUPON_LENGTH" :allow-input="couponAllowInput" placeholder="-"
-          class="coupon-otp" @finish="redeem" />
+      <NFlex justify="center" :size="8">
+        <NInputOtp
+          v-model:value="couponSlots"
+          :length="COUPON_LENGTH"
+          :allow-input="couponAllowInput"
+          placeholder="*"
+          class="coupon-otp"
+          @finish="redeem"
+        />
         <NButton :disabled="!couponReady" @click="redeem">
           <NIcon>
             <IconTicket />
@@ -349,34 +355,81 @@ defineExpose({
         </NButton>
       </NFlex>
 
-      <NCard v-if="allDrafts.length" size="small" :title="`可用优惠（${allDrafts.length}）`" :segmented="{ content: true }">
+      <NCard
+        v-if="allDrafts.length"
+        size="small"
+        :title="`可用优惠（${allDrafts.length}）`"
+        :segmented="{ content: true }"
+      >
         <NFlex vertical :size="8">
-          <NCheckbox v-for="d in visibleDrafts" :key="d.discount.id" class="draft-checkbox"
+          <NCheckbox
+            v-for="d in visibleDrafts"
+            :key="d.discount.id"
+            class="draft-checkbox"
             :checked="checked.has(d.discount.id)"
-            @update:checked="(v: boolean) => toggle(d.discount.id, v)">
+            @update:checked="(v: boolean) => toggle(d.discount.id, v)"
+          >
             <NFlex justify="space-between" class="draft-row">
               <NFlex align="center" :size="6" class="draft-name">
                 <NText class="name-text">{{ d.discount.name }}</NText>
-                <NTag v-if="d.discount.couponCode" size="tiny" type="info" :bordered="false">券码</NTag>
-                <NTag v-if="isLimited(d.discount)" size="tiny" type="warning" :bordered="false"
-                  :title="limitTitle(d.discount)">{{ limitText(d.discount) }}</NTag>
-                <NTag v-if="isTimeLimited(d.discount)" size="tiny" :type="expireTagType(d.discount)"
-                  :bordered="false" :title="expireTitle(d.discount)">{{ expireText(d.discount) }}</NTag>
-                <NTag v-if="isRandomAmount(d.discount)" size="tiny" type="primary" :bordered="false"
-                  :title="randomTitle(d.discount)">随机</NTag>
-                <NTag v-if="isRandomTrigger(d.discount)" size="tiny" type="primary" :bordered="false"
-                  :title="randomTitle(d.discount)">{{ d.discount.triggerChance }}%触发</NTag>
-                <NTag v-if="bestIds.has(d.discount.id)" size="tiny" type="success" :bordered="false">推荐</NTag>
+                <NTag v-if="d.discount.couponCode" size="tiny" type="info" :bordered="false"
+                  >券码</NTag
+                >
+                <NTag
+                  v-if="isLimited(d.discount)"
+                  size="tiny"
+                  type="warning"
+                  :bordered="false"
+                  :title="limitTitle(d.discount)"
+                  >{{ limitText(d.discount) }}</NTag
+                >
+                <NTag
+                  v-if="isTimeLimited(d.discount)"
+                  size="tiny"
+                  :type="expireTagType(d.discount)"
+                  :bordered="false"
+                  :title="expireTitle(d.discount)"
+                  >{{ expireText(d.discount) }}</NTag
+                >
+                <NTag
+                  v-if="isRandomAmount(d.discount)"
+                  size="tiny"
+                  type="primary"
+                  :bordered="false"
+                  :title="randomTitle(d.discount)"
+                  >随机</NTag
+                >
+                <NTag
+                  v-if="isRandomTrigger(d.discount)"
+                  size="tiny"
+                  type="primary"
+                  :bordered="false"
+                  :title="randomTitle(d.discount)"
+                  >{{ d.discount.triggerChance }}%触发</NTag
+                >
+                <NTag v-if="bestIds.has(d.discount.id)" size="tiny" type="success" :bordered="false"
+                  >推荐</NTag
+                >
               </NFlex>
               <NFlex align="center" :size="8" class="draft-meta">
                 <NText depth="3" class="rule-text">{{ ruleTextOf(d) }}</NText>
-                <NText class="amount-cell" :type="checked.has(d.discount.id) ? 'error' : 'default'" depth="3"
-                  :title="isCapped(d) ? '受上限组限制，实际减免少于单算' : undefined">{{ amountText(amountOf(d)) }}</NText>
+                <NText
+                  class="amount-cell"
+                  :type="checked.has(d.discount.id) ? 'error' : 'default'"
+                  depth="3"
+                  :title="isCapped(d) ? '受上限组限制，实际减免少于单算' : undefined"
+                  >{{ amountText(amountOf(d)) }}</NText
+                >
               </NFlex>
             </NFlex>
           </NCheckbox>
 
-          <NButton v-if="allDrafts.length > COLLAPSED_COUNT" text size="tiny" @click="expanded = !expanded">
+          <NButton
+            v-if="allDrafts.length > COLLAPSED_COUNT"
+            text
+            size="tiny"
+            @click="expanded = !expanded"
+          >
             {{ expanded ? '收起' : `展开全部（还有 ${hiddenCount} 项）` }}
           </NButton>
         </NFlex>
@@ -408,6 +461,7 @@ defineExpose({
 .draft-checkbox {
   width: 100%;
 }
+
 .draft-checkbox :deep(.n-checkbox__label) {
   flex: 1;
   min-width: 0;
@@ -423,6 +477,7 @@ defineExpose({
   flex-shrink: 1;
   min-width: 0;
 }
+
 .name-text {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -234,7 +234,7 @@ export const useOrderStore = defineStore('order', () => {
 
   // —— 以下为调试 / 作弊权限（仅高级模式可用） ——
 
-  // 调试：直接改写订单最终金额（单位：分），绕过计价器与优惠计算
+  // 实验室：直接改写订单最终金额（单位：分），绕过计价器与优惠计算
   async function setFinalAmount(id: string, amountCents: number): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o) return
@@ -242,7 +242,7 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  // 调试：强制重新打开已关闭订单，绕过优惠过期 / 停用 / 超兑校验（仅恢复状态，不修改优惠用量）
+  // 实验室：强制重新打开已关闭订单，绕过优惠过期 / 停用 / 超兑校验（仅恢复状态，不修改优惠用量）
   async function forceReopen(id: string): Promise<void> {
     const o = orders.value.find((x) => x.id === id)
     if (!o || o.status !== 'closed') return
@@ -250,11 +250,11 @@ export const useOrderStore = defineStore('order', () => {
     await put('orders', o)
   }
 
-  // 调试：直接改写订单的「只读」字段（状态 / 归属会员 / 小计 / 创建与完成时间等），
+  // 实验室：直接改写订单的「只读」字段（状态 / 归属会员 / 小计 / 创建与完成时间等），
   // 绕过计价器与状态机校验。写入后仅保证金额非负，不做任何业务一致性重算。
   async function debugPatch(id: string, patch: Partial<Order>): Promise<void> {
     const uiStore = useUiStore()
-    if (!uiStore.advancedMode) throw new Error('需开启作弊模式才能改写订单只读字段')
+    if (!uiStore.labMode) throw new Error('需开启作弊模式才能改写订单只读字段')
     const o = orders.value.find((x) => x.id === id)
     if (!o) return
     Object.assign(o, patch)

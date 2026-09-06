@@ -310,7 +310,7 @@ function doReopen() {
 function doDelete() {
   const o = order.value
   if (!o) return
-  if (o.status === 'completed' && !ui.advancedMode) {
+  if (o.status === 'completed' && !ui.labMode) {
     msg.warning('已完成订单需开启「高级模式」（关于页）后才能删除')
     return
   }
@@ -339,12 +339,12 @@ async function confirmEditAmount() {
   if (!order.value) return
   await orderStore.setFinalAmount(order.value.id, Math.round(debugAmount.value * 100))
   debugEditing.value = false
-  msg.success('调试：订单金额已改写')
+  msg.success('实验室：订单金额已改写')
 }
 async function forceReopenOrder() {
   if (!order.value) return
   await orderStore.forceReopen(order.value.id)
-  msg.success('调试：已强制重新打开订单')
+  msg.success('实验室：已强制重新打开订单')
   close()
 }
 
@@ -357,9 +357,10 @@ const debugForm = ref({
   createdAt: null as number | null,
   completedAt: null as number | null,
 })
-const debugStatusOptions = (
-  Object.keys(statusCfg) as OrderStatus[]
-).map((s) => ({ label: statusCfg[s].label, value: s }))
+const debugStatusOptions = (Object.keys(statusCfg) as OrderStatus[]).map((s) => ({
+  label: statusCfg[s].label,
+  value: s,
+}))
 const debugMemberOptions = computed(() => [
   { label: '（散客，无会员）', value: '' },
   ...memberStore.members.map((m) => ({ label: `${m.name}（${m.id}）`, value: m.id })),
@@ -399,7 +400,7 @@ async function saveDebug() {
         : undefined,
     })
     debugOpen.value = false
-    msg.success('调试：订单只读字段已改写')
+    msg.success('实验室：订单只读字段已改写')
   } catch (e) {
     msg.error('改写失败：' + (e as Error).message)
   }
@@ -407,13 +408,7 @@ async function saveDebug() {
 </script>
 
 <template>
-  <NModal
-    :show="!!order"
-    title="订单详情"
-    preset="card"
-    :autoFocus="false"
-    @update:show="close"
-  >
+  <NModal :show="!!order" title="订单详情" preset="card" :autoFocus="false" @update:show="close">
     <NScrollbar v-if="order" class="modal-scroll">
       <NDescriptions :column="2" bordered size="small">
         <NDescriptionsItem label="订单号">{{ order.id }}</NDescriptionsItem>
@@ -575,10 +570,19 @@ async function saveDebug() {
       </template>
 
       <!-- 调试面板（仅作弊模式）：改写订单只读字段 -->
-      <NCard v-if="ui.advancedMode && debugOpen" size="small" title="调试：改写只读字段" style="margin-top: 12px">
+      <NCard
+        v-if="ui.labMode && debugOpen"
+        size="small"
+        title="实验室：改写只读字段"
+        style="margin-top: 12px"
+      >
         <NFlex vertical :size="8">
           <NFormItem label="订单状态">
-            <NSelect v-model:value="debugForm.status" :options="debugStatusOptions" style="width: 180px" />
+            <NSelect
+              v-model:value="debugForm.status"
+              :options="debugStatusOptions"
+              style="width: 180px"
+            />
           </NFormItem>
           <NFormItem label="归属会员">
             <NSelect
@@ -589,13 +593,28 @@ async function saveDebug() {
             />
           </NFormItem>
           <NFormItem label="小计（元）">
-            <NInputNumber v-model:value="debugForm.subtotalYuan" :min="0" :precision="2" style="width: 180px" />
+            <NInputNumber
+              v-model:value="debugForm.subtotalYuan"
+              :min="0"
+              :precision="2"
+              style="width: 180px"
+            />
           </NFormItem>
           <NFormItem label="创建时间">
-            <NDatePicker v-model:value="debugForm.createdAt" type="datetime" clearable style="width: 220px" />
+            <NDatePicker
+              v-model:value="debugForm.createdAt"
+              type="datetime"
+              clearable
+              style="width: 220px"
+            />
           </NFormItem>
           <NFormItem label="完成时间">
-            <NDatePicker v-model:value="debugForm.completedAt" type="datetime" clearable style="width: 220px" />
+            <NDatePicker
+              v-model:value="debugForm.completedAt"
+              type="datetime"
+              clearable
+              style="width: 220px"
+            />
           </NFormItem>
           <NFlex :size="8">
             <NButton type="primary" size="small" @click="saveDebug">保存调试修改</NButton>
@@ -652,7 +671,7 @@ async function saveDebug() {
             删除
           </NButton>
           <NButton
-            v-if="order && order.status === 'completed' && ui.advancedMode"
+            v-if="order && order.status === 'completed' && ui.labMode"
             type="error"
             @click="doDelete"
           >
@@ -661,10 +680,10 @@ async function saveDebug() {
             </NIcon>
             删除
           </NButton>
-          <template v-if="ui.advancedMode">
-            <NButton type="warning" @click="forceReopenOrder">调试：强制重开</NButton>
-            <NButton @click="startEditAmount">调试：改金额</NButton>
-            <NButton @click="openDebugPanel">调试：更多</NButton>
+          <template v-if="ui.labMode">
+            <NButton type="warning" @click="forceReopenOrder">实验室：强制重开</NButton>
+            <NButton @click="startEditAmount">实验室：改金额</NButton>
+            <NButton @click="openDebugPanel">实验室：更多</NButton>
             <template v-if="debugEditing">
               <NInputNumber v-model:value="debugAmount" :min="0" :precision="2" />
               <NButton type="primary" @click="confirmEditAmount">确认</NButton>
@@ -709,14 +728,18 @@ async function saveDebug() {
             {{ selectedDiscount.value }}%（打 {{ formatZhe(selectedDiscount.value) }}）
           </template>
           <template v-else-if="selectedDiscount.ruleType === 'stepDown'">
-            每满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元减
+            <template v-if="selectedDiscount.minAmount > 0"
+              >满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元可用 · </template
+            >每满 {{ ((selectedDiscount.stepAmount ?? 0) / 100).toFixed(2) }} 元减
             {{ (selectedDiscount.value / 100).toFixed(2) }} 元
             <span v-if="selectedDiscount.maxUnits"
               >（最多 {{ selectedDiscount.maxUnits }} 阶）</span
             >
           </template>
           <template v-else-if="selectedDiscount.ruleType === 'perItem'">
-            每件立减 {{ (selectedDiscount.value / 100).toFixed(2) }} 元
+            <template v-if="selectedDiscount.minAmount > 0"
+              >满 {{ (selectedDiscount.minAmount / 100).toFixed(2) }} 元可用 · </template
+            >每件立减 {{ (selectedDiscount.value / 100).toFixed(2) }} 元
             <span v-if="selectedDiscount.maxUnits"
               >（最多 {{ selectedDiscount.maxUnits }} 件）</span
             >

@@ -43,7 +43,7 @@ export const useServiceStore = defineStore('service', () => {
   async function remove(id: string): Promise<void> {
     const p = services.value.find((x) => x.id === id)
     const relatedOrders = ordersUsing(id)
-    if (relatedOrders.length && !uiStore.advancedMode) {
+    if (relatedOrders.length && !uiStore.labMode) {
       throw new Error(`服务已被 ${relatedOrders.length} 笔订单引用，需开启作弊模式后递归删除`)
     }
     // 递归删除：强制删除引用该服务的订单，并退还这些订单占用的优惠用量

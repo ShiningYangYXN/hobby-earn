@@ -28,7 +28,7 @@ export interface OrderColumnsOpts {
   doCancel: (o: Order) => void
   doReopen: (o: Order) => void
   doDelete: (o: Order) => void
-  advancedMode: boolean
+  labMode: boolean
 }
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
@@ -122,7 +122,7 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
               重新打开
             </NButton>
           )}
-          {(row.status === 'closed' || (row.status === 'completed' && opts.advancedMode)) && (
+          {(row.status === 'closed' || (row.status === 'completed' && opts.labMode)) && (
             <NButton size="tiny" type="error" onClick={() => opts.doDelete(row)}>
               删除
             </NButton>

@@ -30,7 +30,7 @@ export const useMemberStore = defineStore('member', () => {
   }
   async function update(id: string, patch: Partial<Member>): Promise<void> {
     // 入会时间为建档字段，默认只读；仅作弊模式可改写
-    if (patch.joinDate !== undefined && !uiStore.advancedMode) {
+    if (patch.joinDate !== undefined && !uiStore.labMode) {
       throw new Error('入会时间需开启作弊模式才能修改')
     }
     const idx = members.value.findIndex((x) => x.id === id)
@@ -50,7 +50,7 @@ export const useMemberStore = defineStore('member', () => {
     const relatedOrders = orderStore.orders.filter((o) => o.memberId === id)
     const relatedDiscounts = discountStore.discounts.filter((d) => d.scope?.memberIds?.includes(id))
     const hasAssoc = relatedOrders.length > 0 || relatedDiscounts.length > 0
-    if (hasAssoc && !uiStore.advancedMode) {
+    if (hasAssoc && !uiStore.labMode) {
       throw new Error('会员存在关联订单或优惠，需开启作弊模式后递归删除')
     }
 

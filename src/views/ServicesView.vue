@@ -79,7 +79,7 @@ function orderRefCount(p: ServiceEntry): number {
 }
 // 被订单引用的服务：非作弊模式隐藏删除按钮，作弊模式允许递归删除
 function canDelete(p: ServiceEntry): boolean {
-  return orderRefCount(p) === 0 || uiStore.advancedMode
+  return orderRefCount(p) === 0 || uiStore.labMode
 }
 
 const columns = buildServiceColumns({ openEdit, toggle, remove, canDelete })
@@ -128,8 +128,17 @@ onMounted(() => {
       <NFlex vertical :size="12">
         <NFlex align="center" justify="space-between" :size="12" wrap>
           <NFlex align="center" :size="12" wrap>
-            <NInput v-model:value="keyword" placeholder="搜索名称 / 分类" clearable style="width: 200px" />
-            <NSelect v-model:value="filterCategory" :options="categoryOptions" style="width: 150px" />
+            <NInput
+              v-model:value="keyword"
+              placeholder="搜索名称 / 分类"
+              clearable
+              style="width: 200px"
+            />
+            <NSelect
+              v-model:value="filterCategory"
+              :options="categoryOptions"
+              style="width: 150px"
+            />
             <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
             <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
           </NFlex>
@@ -149,8 +158,14 @@ onMounted(() => {
           </NFlex>
         </NFlex>
 
-        <NDataTable v-if="filtered.length" :columns="columns" :data="filtered" :pagination="{ pageSize: 10 }"
-          :scroll-x="tableScrollX(columns)" size="small" />
+        <NDataTable
+          v-if="filtered.length"
+          :columns="columns"
+          :data="filtered"
+          :pagination="{ pageSize: 10 }"
+          :scroll-x="tableScrollX(columns)"
+          size="small"
+        />
         <NEmpty v-else description="暂无服务" />
       </NFlex>
       <RouterView />

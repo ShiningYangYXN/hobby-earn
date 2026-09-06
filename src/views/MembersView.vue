@@ -43,7 +43,7 @@ function hasAssoc(m: Member): boolean {
 
 // 非作弊模式下有关联的会员：隐藏删除按钮（而非禁用）
 function canDeleteMember(m: Member): boolean {
-  if (hasAssoc(m) && !uiStore.advancedMode) return false
+  if (hasAssoc(m) && !uiStore.labMode) return false
   return true
 }
 

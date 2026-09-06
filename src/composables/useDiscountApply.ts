@@ -271,17 +271,19 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return hit.reduce((s, it) => s + (it.quantity || 0), 0)
   }
 
-  // 互斥组：同组内保留减免最高的一个
+  /**
+   * 互斥组裁决：优惠可归属多个组，须同时满足每个所属组的规则——
+   * 即在所属的每个组里都得是当前减免最大者，任一组已被更优者占位即淘汰。
+   * 按减免降序遍历，保证每组保留的确实是该组最大者。
+   */
   function pickDiscounts(drafts: DiscountDraft[]): DiscountRecord[] {
     const chosen: DiscountRecord[] = []
     const usedGroups = new Set<string>()
     const sorted = [...drafts].sort((a, b) => b.record.discountAmount - a.record.discountAmount)
     for (const dr of sorted) {
-      const gid = dr.discount.exclusiveGroupId
-      if (gid) {
-        if (usedGroups.has(gid)) continue
-        usedGroups.add(gid)
-      }
+      const gids = dr.discount.exclusiveGroupIds ?? []
+      if (gids.some((g) => usedGroups.has(g))) continue
+      for (const g of gids) usedGroups.add(g)
       chosen.push(dr.record)
     }
     return chosen
@@ -294,6 +296,8 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     items: OrderItem[],
   ): DiscountRecord[] {
     const result = records.map((r) => ({ ...r }))
+    // 第一步：算出每个上限组各自需要的压缩比例
+    const groupScale = new Map<string, number>()
     for (const g of limitGroupStore.groups) {
       const ids = result
         .filter((r) => (r.limitGroups ?? []).includes(g.id))
@@ -312,12 +316,17 @@ export function useDiscountApply(ctx: () => ApplyContext) {
         .reduce((s, r) => s + r.discountAmount, 0)
       const cap =
         g.limitType === 'amount' ? g.limitValue : Math.round((scopeAmt * g.limitValue) / 100)
-      if (sum > cap) {
-        const scale = cap / sum
-        for (const r of result) {
-          if (ids.includes(r.discountId)) r.discountAmount = Math.round(r.discountAmount * scale)
-        }
+      if (sum > cap) groupScale.set(g.id, cap / sum)
+    }
+    // 第二步：每条记录取所属组中最严的比例，一次性应用。
+    // 逐组顺序缩放会连乘而过度缩减，取最小值同样满足所有组的上限但更贴合实际约束。
+    for (const r of result) {
+      let scale = 1
+      for (const gid of r.limitGroups ?? []) {
+        const s = groupScale.get(gid)
+        if (s != null && s < scale) scale = s
       }
+      if (scale < 1) r.discountAmount = Math.round(r.discountAmount * scale)
     }
     return result
   }
@@ -384,15 +393,13 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     const usedGroups = new Set<string>()
     let cur = 0
     for (const d of sorted) {
-      const gid = d.discount.exclusiveGroupId
-      if (gid) {
-        if (usedGroups.has(gid)) continue
-      }
+      const gids = d.discount.exclusiveGroupIds ?? []
+      if (gids.some((g) => usedGroups.has(g))) continue
       chosen.push(d)
       const next = planTotal(chosen, items)
       if (next > cur) {
         cur = next
-        if (gid) usedGroups.add(gid)
+        for (const g of gids) usedGroups.add(g)
       } else {
         chosen.pop() // 加了没用就不浪费这张券
       }
@@ -402,34 +409,38 @@ export function useDiscountApply(ctx: () => ApplyContext) {
 
   /**
    * 求最优用券方案。返回入选优惠的 id 列表与实算总减免。
-   * 互斥组同组至多取一张；总额取 min(减免合计, 小计)，故超额部分不算数。
+   * 互斥约束：优惠可归属多个组，入选集合里任意两项不得共享同一组。
+   * 总额取 min(减免合计, 小计)，故超额部分不算数。
    */
   function bestPlan(candidates: DiscountDraft[], items: OrderItem[]): BestPlan {
     const pool = planPool(candidates)
     if (!pool.length) return { ids: [], total: 0 }
     if (pool.length > EXHAUSTIVE_LIMIT) return pick(greedyPlan(pool, items))
 
-    // 互斥组归并为「选择单元」，每单元至多选一项（含不选）
-    const groups = new Map<string, DiscountDraft[]>()
-    for (const d of pool) {
-      const key = d.discount.exclusiveGroupId || `solo:${d.discount.id}`
-      const arr = groups.get(key)
-      if (arr) arr.push(d)
-      else groups.set(key, [d])
-    }
-    const units = [...groups.values()].map((opts) =>
-      [...opts].sort((a, b) => b.record.discountAmount - a.record.discountAmount),
-    )
-    // 后缀最大贡献，用于剪枝上界
-    const suffixMax: number[] = Array.from({ length: units.length + 1 }, () => 0)
-    for (let i = units.length - 1; i >= 0; i--) {
-      suffixMax[i] = suffixMax[i + 1]! + units[i]![0]!.record.discountAmount
+    // 后缀上界：剩余候选中，无组候选可全取，每个互斥组至多取该组最大值
+    const suffixMax: number[] = Array.from({ length: pool.length + 1 }, () => 0)
+    let freeSum = 0
+    const groupMax = new Map<string, number>()
+    for (let i = pool.length - 1; i >= 0; i--) {
+      const d = pool[i]!
+      const gids = d.discount.exclusiveGroupIds ?? []
+      if (!gids.length) {
+        freeSum += d.record.discountAmount
+      } else {
+        for (const g of gids) {
+          groupMax.set(g, Math.max(groupMax.get(g) ?? 0, d.record.discountAmount))
+        }
+      }
+      let s = freeSum
+      for (const v of groupMax.values()) s += v
+      suffixMax[i] = s
     }
 
     const subtotal = subtotalOfItems(items)
     const cap = (t: number) => Math.min(t, subtotal)
     let best: ScoredPlan = { ids: [], total: 0, scarcity: 0, urgency: 0 }
     const chosen: DiscountDraft[] = []
+    const usedGroups = new Set<string>()
     let steps = 0
     let aborted = false
 
@@ -439,19 +450,25 @@ export function useDiscountApply(ctx: () => ApplyContext) {
         aborted = true
         return
       }
-      if (i === units.length) {
+      if (i === pool.length) {
         const candidate = scoreOf(chosen, cap(planTotal(chosen, items)))
         if (isBetter(candidate, best)) best = candidate
         return
       }
       // 即便后续全取最优也追不上当前最优解，剪枝（取等号仍继续，以保留「更少券」的机会）
       if (cap(running + suffixMax[i]!) < best.total) return
-      for (const d of units[i]!) {
+      const d = pool[i]!
+      const gids = d.discount.exclusiveGroupIds ?? []
+      // 取这张券：其所属的每个组都必须还没被占位
+      if (!gids.some((g) => usedGroups.has(g))) {
         chosen.push(d)
+        for (const g of gids) usedGroups.add(g)
         dfs(i + 1, running + d.record.discountAmount)
         chosen.pop()
+        for (const g of gids) usedGroups.delete(g)
         if (aborted) return
       }
+      // 不取
       dfs(i + 1, running)
     }
     dfs(0, 0)

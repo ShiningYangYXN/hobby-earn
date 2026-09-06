@@ -366,11 +366,7 @@ function closePricing() {
                 <NText depth="3">小计</NText>
                 <NText>{{ fmt(liveSubtotal) }}</NText>
               </NFlex>
-              <NFlex
-                v-if="discountAmount > 0"
-                justify="space-between"
-                align="center"
-              >
+              <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
                 <NText depth="3">优惠合计</NText>
                 <NText type="error">-{{ fmt(discountAmount) }}</NText>
               </NFlex>

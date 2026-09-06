@@ -125,13 +125,7 @@ function close() {
 </script>
 
 <template>
-  <NModal
-    :show="true"
-    title="新建订单"
-    preset="card"
-    :autoFocus="false"
-    @update:show="close"
-  >
+  <NModal :show="true" title="新建订单" preset="card" :autoFocus="false" @update:show="close">
     <NScrollbar class="modal-scroll">
       <NEmpty v-if="!memberOptions.length" description="请先在「会员」中录入会员" />
       <NForm v-else labelPlacement="top">

@@ -33,7 +33,8 @@ export function useCategoryManage(): ComputedRef<TypeManageSource> {
     create: (f: Record<string, any>) => {
       void categoryStore.create(String(f.name ?? '').trim())
     },
-    update: (id: string, f: Record<string, any>) => categoryStore.update(id, String(f.name ?? '').trim()),
+    update: (id: string, f: Record<string, any>) =>
+      categoryStore.update(id, String(f.name ?? '').trim()),
     remove: (id: string) => categoryStore.remove(id),
     confirmText: '删除后引用该分类的服务项、优惠、上限组将同步移除该分类，确认删除？',
   }))

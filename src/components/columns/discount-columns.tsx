@@ -83,9 +83,9 @@ export function buildDiscountColumns(opts: {
       render: (row: Discount) => {
         if (row.ruleType === 'percentage') return `${row.value}% (${formatZhe(row.value)})`
         if (row.ruleType === 'perItem')
-          return `每件立减 ${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}件）` : ''}`
+          return `${row.minAmount > 0 ? `满${fmt(row.minAmount)}可用 · ` : ''}每件立减 ${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}件）` : ''}`
         if (row.ruleType === 'stepDown')
-          return `每满${fmt(row.minAmount)}减${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}阶）` : ''}`
+          return `${row.minAmount > 0 ? `满${fmt(row.minAmount)}可用 · ` : ''}每满${fmt(row.stepAmount ?? 0)}减${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}阶）` : ''}`
         return `满${fmt(row.minAmount)}减${fmt(row.value)}`
       },
     },
@@ -171,13 +171,15 @@ export function buildDiscountColumns(opts: {
     },
     {
       title: '互斥组',
-      key: 'exclusiveGroupId',
-      width: 120,
-      render: (row: Discount) =>
-        row.exclusiveGroupId
-          ? (exclusiveGroupStore.groups.find((x) => x.id === row.exclusiveGroupId)?.name ??
-            row.exclusiveGroupId)
-          : '-',
+      key: 'exclusiveGroupIds',
+      width: 140,
+      render: (row: Discount) => {
+        const ids = row.exclusiveGroupIds ?? []
+        if (!ids.length) return '-'
+        return ids
+          .map((id) => exclusiveGroupStore.groups.find((x) => x.id === id)?.name ?? id)
+          .join('、')
+      },
     },
     {
       title: '上限组',

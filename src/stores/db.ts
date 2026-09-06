@@ -8,6 +8,8 @@
  *   del(store, id)   → void
  */
 
+import { version } from '@/../package.json'
+
 const DB_NAME = 'hobby-earn-db'
 const DB_VERSION = 1
 const STORES = [
@@ -23,15 +25,6 @@ const STORES = [
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
-function deleteDB(): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB 删除失败'))
-    req.onblocked = () => resolve()
-  })
-}
-
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
   dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
@@ -45,21 +38,7 @@ function openDB(): Promise<IDBDatabase> {
       }
     }
     req.onsuccess = () => resolve(req.result)
-    req.onerror = () => {
-      // 若浏览器中已存在更高版本的旧库（如降级到初始版本时），
-      // 直接打开会抛「version too low」错误。删除旧库后重建即可自愈。
-      const err = req.error
-      const msg = err?.message ?? ''
-      if (/version/i.test(msg) && /low|down/i.test(msg)) {
-        dbPromise = null
-        deleteDB()
-          .then(() => openDB())
-          .then(resolve)
-          .catch(reject)
-      } else {
-        reject(err ?? new Error('IndexedDB 打开失败'))
-      }
-    }
+    req.onerror = () => reject(req.error ?? new Error('IndexedDB 打开失败'))
   })
   return dbPromise
 }
@@ -127,4 +106,37 @@ export function clear(): Promise<void> {
         tx.onerror = () => reject(tx.error ?? new Error('IndexedDB 清空失败'))
       }),
   )
+}
+
+/** 备份文件结构 */
+export interface BackupData {
+  app: 'hobby-earn'
+  version: string
+  exportedAt: string
+  stores: Record<string, unknown[]>
+}
+
+/** 导出全部业务数据为备份对象 */
+export async function exportAll(): Promise<BackupData> {
+  const stores: Record<string, unknown[]> = {}
+  for (const s of STORES) stores[s] = await getAll(s)
+  return { app: 'hobby-earn', version, exportedAt: new Date().toISOString(), stores }
+}
+
+/** 清空单个对象仓库（用于导入覆盖前清理） */
+export function clearStore(store: string): Promise<void> {
+  return run(store, 'readwrite', (os) => os.clear()).then(() => undefined)
+}
+
+/**
+ * 导入备份数据：按 store 覆盖写入（先清空该 store 再批量 put）。
+ * 校验文件来源，结构不符直接抛错。
+ */
+export async function importAll(data: BackupData): Promise<void> {
+  if (data?.app !== 'hobby-earn' || !data.stores) throw new Error('备份文件格式不支持')
+  for (const s of STORES) {
+    const items = (data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>
+    await clearStore(s)
+    for (const it of items) await put(s, it)
+  }
 }

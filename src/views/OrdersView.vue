@@ -114,7 +114,7 @@ function doReopen(o: Order) {
   })
 }
 function remove(o: Order) {
-  if (o.status === 'completed' && !ui.advancedMode) {
+  if (o.status === 'completed' && !ui.labMode) {
     msg.warning('已完成订单需开启「高级模式」（关于页）后才能删除')
     return
   }
@@ -136,7 +136,7 @@ const columns = buildOrderColumns({
   doCancel,
   doReopen,
   doDelete: remove,
-  advancedMode: ui.advancedMode,
+  labMode: ui.labMode,
 })
 
 onMounted(() => {

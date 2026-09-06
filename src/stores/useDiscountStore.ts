@@ -137,7 +137,8 @@ export const useDiscountStore = defineStore('discount', () => {
   const loaded = ref(false)
 
   async function load() {
-    discounts.value = await getAll<Discount>('discounts')
+    const list = await getAll<Discount>('discounts')
+    discounts.value = list
     loaded.value = true
   }
   function findById(id: string): Discount | undefined {
@@ -222,15 +223,20 @@ export const useDiscountStore = defineStore('discount', () => {
       const r = d.random?.kind === 'ratio' && capturedRandom != null ? capturedRandom : d.value
       if (base >= d.minAmount) amount = Math.round((base * (100 - r)) / 100)
     } else if (d.ruleType === 'stepDown') {
-      if (d.minAmount > 0) {
-        let steps = Math.floor(base / d.minAmount)
+      // 保底消费门槛：未达门槛不参与每满减
+      const step = d.stepAmount ?? 0
+      if (!(d.minAmount > 0 && base < d.minAmount) && step > 0) {
+        let steps = Math.floor(base / step)
         if (d.maxUnits != null) steps = Math.min(steps, d.maxUnits)
         amount = steps * d.value
       }
     } else if (d.ruleType === 'perItem') {
-      let u = units ?? 0
-      if (d.maxUnits != null) u = Math.min(u, d.maxUnits)
-      amount = Math.round(u * d.value)
+      // 最低消费门槛：未达门槛不立减
+      if (!(d.minAmount > 0 && base < d.minAmount)) {
+        let u = units ?? 0
+        if (d.maxUnits != null) u = Math.min(u, d.maxUnits)
+        amount = Math.round(u * d.value)
+      }
     }
     amount = Math.min(amount, base)
     const cap =
@@ -254,7 +260,7 @@ export const useDiscountStore = defineStore('discount', () => {
       randomSnapshot: d.random ? { ...d.random } : undefined,
       triggerChanceSnapshot: d.triggerChance,
       couponCodeSnapshot: d.couponCode,
-      exclusiveGroupId: d.exclusiveGroupId ?? null,
+      exclusiveGroupIds: d.exclusiveGroupIds ? [...d.exclusiveGroupIds] : [],
       limitGroups: d.limitGroups ? [...d.limitGroups] : [],
       capturedRandom: capturedRandom,
     }
@@ -309,7 +315,7 @@ export const useDiscountStore = defineStore('discount', () => {
   }
   async function update(id: string, patch: Partial<Discount>) {
     // 已用次数为统计字段，默认只读；仅作弊模式可改写
-    if (patch.usedCount !== undefined && !useUiStore().advancedMode) {
+    if (patch.usedCount !== undefined && !useUiStore().labMode) {
       throw new Error('已用次数为统计字段，需开启作弊模式才能修改')
     }
     const idx = discounts.value.findIndex((x) => x.id === id)
@@ -332,7 +338,7 @@ export const useDiscountStore = defineStore('discount', () => {
   // - force：内部级联（如删除会员时连带删除其专属优惠）跳过引用校验，直接递归删除
   async function remove(id: string, opts: { force?: boolean } = {}): Promise<void> {
     const relatedOrders = ordersUsing(id)
-    if (relatedOrders.length && !opts.force && !useUiStore().advancedMode) {
+    if (relatedOrders.length && !opts.force && !useUiStore().labMode) {
       throw new Error(`优惠已被 ${relatedOrders.length} 笔订单引用，需开启作弊模式后递归删除`)
     }
     if (relatedOrders.length) {

@@ -103,16 +103,29 @@ function updateGroup(id: string, f: FormShape) {
 </script>
 
 <template>
-  <ItemManageModal title="上限组管理" :items="store.groups" :load="load" :empty-form="() => ({
-    name: '',
-    limitType: 'amount',
-    limit: 0,
-    scope: 'all',
-    itemIds: [],
-    categoryIds: [],
-  })
-    " :to-form="toForm" :row-text="rowText" :validate="validate" :create="createGroup" :update="updateGroup"
-    :remove="(id) => store.remove(id)" :close="close" confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？">
+  <ItemManageModal
+    title="上限组管理"
+    :items="store.groups"
+    :load="load"
+    :empty-form="
+      () => ({
+        name: '',
+        limitType: 'amount',
+        limit: 0,
+        scope: 'all',
+        itemIds: [],
+        categoryIds: [],
+      })
+    "
+    :to-form="toForm"
+    :row-text="rowText"
+    :validate="validate"
+    :create="createGroup"
+    :update="updateGroup"
+    :remove="(id) => store.remove(id)"
+    :close="close"
+    confirm-text="删除后将从所有优惠中移除该上限组归属，确认删除？"
+  >
     <template #form-extra="{ form }">
       <NGi>
         <NText depth="3" class="small-label">计算范围</NText>
@@ -120,7 +133,13 @@ function updateGroup(id: string, f: FormShape) {
       </NGi>
       <NGi v-if="form.scope === 'items'">
         <NText depth="3" class="small-label">参与计算的单品</NText>
-        <NSelect v-model:value="form.itemIds" :options="itemOptions" multiple filterable placeholder="选择单品" />
+        <NSelect
+          v-model:value="form.itemIds"
+          :options="itemOptions"
+          multiple
+          filterable
+          placeholder="选择单品"
+        />
       </NGi>
       <NGi v-if="form.scope === 'categories'">
         <NText depth="3" class="small-label">参与计算的分类</NText>
@@ -134,8 +153,12 @@ function updateGroup(id: string, f: FormShape) {
         <NText depth="3" class="small-label">
           组上限（{{ form.limitType === 'amount' ? '元' : '%' }}）
         </NText>
-        <NInputNumber v-model:value="form.limit" :min="0" :precision="form.limitType === 'amount' ? 2 : 0"
-          style="width: 100%" />
+        <NInputNumber
+          v-model:value="form.limit"
+          :min="0"
+          :precision="form.limitType === 'amount' ? 2 : 0"
+          style="width: 100%"
+        />
       </NGi>
     </template>
   </ItemManageModal>
