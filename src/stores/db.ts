@@ -9,6 +9,7 @@
  */
 
 import { version } from '@/../package.json'
+import { ruleTypeLabel, orderStatusLabel, isValidCouponCode } from './types'
 
 const DB_NAME = 'hobby-earn-db'
 const DB_VERSION = 1
@@ -161,20 +162,26 @@ function deepEqual(a: unknown, b: unknown): boolean {
 export interface MergeConflict {
   store: string
   id: string
+  builtin: Record<string, unknown>
+  imported: Record<string, unknown>
 }
 
-/** 检测导入数据与当前库之间的冲突（不写入）。返回所有冲突项。 */
+/** 检测导入数据与当前库之间的冲突（不写入）。返回所有冲突项及两侧快照。 */
 export async function detectMergeConflicts(data: BackupData): Promise<MergeConflict[]> {
   if (data?.app !== 'hobby-earn' || !data.stores) throw new Error('备份文件格式不支持')
   const conflicts: MergeConflict[] = []
   for (const s of STORES) {
     const importedById = new Map(
-      ((data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>).map((it) => [it.id, it]),
+      ((data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>).map((it) => [
+        it.id,
+        it,
+      ]),
     )
     const builtinItems = await getAll<Record<string, unknown> & { id: string }>(s)
     for (const b of builtinItems) {
       const imp = importedById.get(b.id)
-      if (imp && !deepEqual(b, imp)) conflicts.push({ store: s, id: b.id })
+      if (imp && !deepEqual(b, imp))
+        conflicts.push({ store: s, id: b.id, builtin: b, imported: imp })
     }
   }
   return conflicts
@@ -216,5 +223,167 @@ export async function mergeAll(data: BackupData, opts: MergeOptions): Promise<vo
       }
     }
     // 内置独有项无需处理，保持保留
+  }
+}
+
+// ============================================================
+// 数据校验
+// ============================================================
+const RULE_TYPES = Object.keys(ruleTypeLabel) as string[]
+const ORDER_STATUSES = Object.keys(orderStatusLabel) as string[]
+const PRICING_MODES = ['hourly', 'perPiece']
+const LIMIT_TYPES = ['amount', 'ratio']
+const LIMIT_SCOPES = ['all', 'items', 'categories']
+
+interface FieldRule {
+  required?: boolean
+  type?: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  enum?: readonly string[]
+}
+
+const SCHEMAS: Record<string, Record<string, FieldRule>> = {
+  members: { id: { required: true, type: 'string' }, name: { required: true, type: 'string' } },
+  memberTypes: { id: { required: true, type: 'string' }, name: { required: true, type: 'string' } },
+  categories: { id: { required: true, type: 'string' }, name: { required: true, type: 'string' } },
+  prices: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    isActive: { required: true, type: 'boolean' },
+    pricingMode: { required: true, type: 'string', enum: PRICING_MODES },
+    basePrice: { required: true, type: 'number' },
+    categoryIds: { type: 'array' },
+  },
+  discounts: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    isActive: { required: true, type: 'boolean' },
+    ruleType: { required: true, type: 'string', enum: RULE_TYPES },
+    value: { required: true, type: 'number' },
+    minAmount: { required: true, type: 'number' },
+    usedCount: { required: true, type: 'number' },
+    createdAt: { required: true, type: 'number' },
+    couponCode: { type: 'string' },
+  },
+  exclusiveGroups: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    discountIds: { type: 'array' },
+  },
+  limitGroups: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    limitType: { required: true, type: 'string', enum: LIMIT_TYPES },
+    limitValue: { required: true, type: 'number' },
+    scope: { required: true, type: 'string', enum: LIMIT_SCOPES },
+    discountIds: { type: 'array' },
+  },
+  orders: {
+    id: { required: true, type: 'string' },
+    status: { required: true, type: 'string', enum: ORDER_STATUSES },
+    items: { required: true, type: 'array' },
+    subtotal: { type: 'number' },
+    discountAmount: { type: 'number' },
+    finalAmount: { type: 'number' },
+  },
+}
+
+function typeMatches(v: unknown, t: FieldRule['type']): boolean {
+  if (t === 'array') return Array.isArray(v)
+  if (t === 'object') return typeof v === 'object' && !Array.isArray(v)
+  if (t === 'number') return typeof v === 'number' && !Number.isNaN(v)
+  return typeof v === t
+}
+
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
+/** 校验备份文件结构及各条记录的必填/类型/枚举约束。返回错误清单（空=通过）。 */
+export function validateBackup(data: BackupData): ValidationResult {
+  const errors: string[] = []
+  if (!data || typeof data !== 'object' || data.app !== 'hobby-earn')
+    return { valid: false, errors: ['文件不是 hobby-earn 备份（app 字段不匹配或文件损坏）'] }
+  if (!data.stores || typeof data.stores !== 'object')
+    return { valid: false, errors: ['文件结构损坏：缺少 stores 字段'] }
+  for (const s of STORES) {
+    const items = (data.stores[s] ?? []) as unknown[]
+    if (!Array.isArray(items)) {
+      errors.push(`${s}: 应为数组`)
+      continue
+    }
+    const seen = new Set<string>()
+    items.forEach((raw, i) => {
+      if (!raw || typeof raw !== 'object') {
+        errors.push(`${s}[${i}]: 不是对象`)
+        return
+      }
+      const it = raw as Record<string, unknown>
+      const id = it.id
+      if (typeof id !== 'string' || !id) {
+        errors.push(`${s}[${i}]: 缺少合法 id`)
+        return
+      }
+      if (seen.has(id)) errors.push(`${s}: id 重复 "${id}"`)
+      seen.add(id)
+      const schema = SCHEMAS[s]
+      if (!schema) return
+      for (const [k, rule] of Object.entries(schema)) {
+        const v = it[k]
+        if (rule.required && (v === undefined || v === null))
+          errors.push(`${s}[${id}].${k}: 必填字段缺失`)
+        if (v === undefined || v === null) continue
+        if (rule.type && !typeMatches(v, rule.type))
+          errors.push(`${s}[${id}].${k}: 类型应为 ${rule.type}`)
+        if (rule.enum && (typeof v !== 'string' || !rule.enum.includes(v)))
+          errors.push(`${s}[${id}].${k}: 非法值 "${String(v)}"`)
+      }
+      if (
+        s === 'discounts' &&
+        typeof it.couponCode === 'string' &&
+        it.couponCode &&
+        !isValidCouponCode(it.couponCode)
+      )
+        errors.push(`${s}[${id}].couponCode: 券码格式非法（需 6 位字母数字）`)
+    })
+  }
+  return { valid: errors.length === 0, errors }
+}
+
+// ============================================================
+// 手动合并（类 Git conflict solver）
+// ============================================================
+export type MergeDecision = 'builtin' | 'imported' | Record<string, unknown>
+
+/**
+ * 逐冲突项合并：conflicts 由 detectMergeConflicts 给出；decisions 键为 `${store}::${id}`。
+ * 值 'builtin'=保留当前、'imported'=采用导入、对象=手动编辑后的最终版本。
+ * 无冲突的导入项自动并入，内置独有项保留。
+ */
+export async function mergeManual(
+  data: BackupData,
+  decisions: Record<string, MergeDecision>,
+): Promise<void> {
+  if (data?.app !== 'hobby-earn' || !data.stores) throw new Error('备份文件格式不支持')
+  for (const s of STORES) {
+    const importedItems = (data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>
+    const importedById = new Map(importedItems.map((it) => [it.id, it]))
+    const builtinItems = await getAll<Record<string, unknown> & { id: string }>(s)
+    const builtinById = new Map(builtinItems.map((it) => [it.id, it]))
+    for (const [id, imp] of importedById) {
+      const built = builtinById.get(id)
+      const isConflict = built !== undefined && !deepEqual(built, imp)
+      if (isConflict) {
+        const d = decisions[`${s}::${id}`]
+        if (d === undefined || d === 'builtin') continue
+        if (d === 'imported') {
+          await put(s, imp)
+          continue
+        }
+        await put(s, d) // 手动编辑结果
+      } else {
+        await put(s, imp) // 无冲突：合并
+      }
+    }
   }
 }

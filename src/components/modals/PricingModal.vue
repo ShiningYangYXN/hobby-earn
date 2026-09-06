@@ -424,4 +424,16 @@ function closePricing() {
 .qty-display:hover {
   background-color: rgba(128, 128, 128, 0.15);
 }
+
+/* 计价器大数字 */
+.meter-num {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-note {
+  font-size: 13px;
+}
 </style>

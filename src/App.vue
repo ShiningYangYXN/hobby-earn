@@ -92,7 +92,12 @@ const menuOptions: MenuOption[] = [
 </script>
 
 <template>
-  <NConfigProvider :theme="isDark ? darkTheme : null" :locale="zhCN" :date-locale="dateZhCN">
+  <NConfigProvider
+    :class="{ dark: isDark }"
+    :theme="isDark ? darkTheme : null"
+    :locale="zhCN"
+    :date-locale="dateZhCN"
+  >
     <NMessageProvider>
       <NDialogProvider>
         <NLayout style="height: 100dvh">

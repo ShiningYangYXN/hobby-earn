@@ -426,7 +426,8 @@ function validate(f: DiscountForm): string | null {
     f.maxDiscount < f.value
   )
     return '优惠上限不能小于优惠金额'
-  if (r === 'stepDown' && (!f.stepAmount || f.stepAmount <= 0)) return '请填写阶梯步长（每满金额，大于 0）'
+  if (r === 'stepDown' && (!f.stepAmount || f.stepAmount <= 0))
+    return '请填写阶梯步长（每满金额，大于 0）'
   if (f.maxUnits != null && f.maxUnits <= 0) return '最大执行件数/阶梯数需大于 0'
   // TimeWindow 各字段均可选：起止时间可以只填其一，也可以只配周期
   if (f.scope.enabledTime && !f.scope.validFrom && !f.scope.validUntil && !f.scope.cron.trim())
@@ -932,9 +933,7 @@ const exclusiveGroupIds = computed<string[]>({
                   >
                 </NFlex>
                 <NText depth="3" style="font-size: 12px">
-                  {{
-                    COUPON_LENGTH
-                  }}
+                  {{ COUPON_LENGTH }}
                   位字母或数字，留空将自动生成。附加券码后该优惠不得自动触发，须兑换成功且符合券面准入条件方可生效。
                 </NText>
               </template>

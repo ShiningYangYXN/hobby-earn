@@ -1,5 +1,15 @@
 {
   "files": [],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-ssr",
+    "coverage",
+    "*.tsbuildinfo",
+    "src/**/*.js",
+    "src/**/*.vue.js",
+    "src/**/*.jsx"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"
