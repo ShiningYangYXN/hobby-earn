@@ -11,6 +11,10 @@ import {
   NA,
   NUl,
   NLi,
+  NModal,
+  NRadioGroup,
+  NRadio,
+  NSpace,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -24,10 +28,18 @@ import {
   IconSkull,
   IconDownload,
   IconUpload,
+  IconGitMerge,
 } from '@tabler/icons-vue'
 import { version, license } from '@/../package.json'
 import { useUiStore } from '@/stores/useUiStore'
-import { clear, exportAll, importAll } from '@/stores/db'
+import {
+  clear,
+  exportAll,
+  importAll,
+  detectMergeConflicts,
+  mergeAll,
+  type BackupData,
+} from '@/stores/db'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
@@ -156,6 +168,89 @@ function onImportFile(e: Event) {
   }
   reader.readAsText(file)
 }
+
+// 合并数据：自动模式仅在完全无冲突时合并，否则弹窗让用户选择处理策略
+const mergeInput = ref<HTMLInputElement | null>(null)
+const mergeConflictVisible = ref(false)
+const mergeBase = ref<'builtin' | 'imported'>('builtin')
+const mergeConflictCount = ref(0)
+let pendingMergeData: BackupData | null = null
+
+async function onMergeFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(String(reader.result)) as BackupData
+      detectMergeConflicts(data)
+        .then((conflicts) => {
+          if (conflicts.length === 0) {
+            // 完全无冲突：自动合并（基底无关，半保留即可）
+            doMerge(data, { overwrite: false, base: 'imported' })
+              .then(() => msg.success('数据已合并（无冲突）'))
+              .catch(() => msg.error('合并失败'))
+          } else {
+            // 存在冲突：拒绝自动合并，弹窗让用户决策
+            pendingMergeData = data
+            mergeConflictCount.value = conflicts.length
+            mergeBase.value = 'builtin'
+            mergeConflictVisible.value = true
+          }
+        })
+        .catch(() => msg.error('文件格式不支持'))
+    } catch {
+      msg.error('文件解析失败，请检查格式')
+    }
+    input.value = ''
+  }
+  reader.readAsText(file)
+}
+
+async function doMerge(
+  data: BackupData,
+  opts: { overwrite: boolean; base: 'builtin' | 'imported' },
+) {
+  await mergeAll(data, opts)
+  await Promise.all([
+    orderStore.load(),
+    memberStore.load(),
+    memberTypeStore.load(),
+    serviceStore.load(),
+    discountStore.load(),
+    categoryStore.load(),
+    exclusiveGroupStore.load(),
+    limitGroupStore.load(),
+  ])
+}
+
+function mergeForceOverwrite() {
+  if (!pendingMergeData) return
+  mergeConflictVisible.value = false
+  doMerge(pendingMergeData, { overwrite: true, base: 'builtin' })
+    .then(() => {
+      pendingMergeData = null
+      msg.success('已完成覆盖式合并（导入完全覆盖当前数据）')
+    })
+    .catch(() => msg.error('合并失败'))
+}
+
+function mergePartial() {
+  if (!pendingMergeData) return
+  const base = mergeBase.value
+  mergeConflictVisible.value = false
+  doMerge(pendingMergeData, { overwrite: false, base })
+    .then(() => {
+      pendingMergeData = null
+      msg.success(
+        base === 'builtin'
+          ? '已半保留合并（无冲突部分已并入，冲突部分保留当前数据）'
+          : '已半保留合并（无冲突部分已并入，冲突部分采用导入数据）',
+      )
+    })
+    .catch(() => msg.error('合并失败'))
+}
 </script>
 
 <template>
@@ -196,23 +291,51 @@ function onImportFile(e: Event) {
       <NText depth="3">导出当前全部数据为备份文件；导入将覆盖现有数据，请谨慎操作。</NText>
       <NFlex :size="12">
         <NButton @click="exportData">
-          <NIcon><IconDownload /></NIcon>
+          <NIcon>
+            <IconDownload />
+          </NIcon>
           导出数据
         </NButton>
         <NButton @click="fileInput?.click()">
-          <NIcon><IconUpload /></NIcon>
+          <NIcon>
+            <IconUpload />
+          </NIcon>
           导入数据
         </NButton>
-        <input
-          ref="fileInput"
-          type="file"
-          accept="application/json,.json"
-          style="display: none"
-          @change="onImportFile"
-        />
+        <NButton @click="mergeInput?.click()">
+          <NIcon>
+            <IconGitMerge />
+          </NIcon>
+          合并数据
+        </NButton>
+        <input ref="fileInput" type="file" accept="application/json,.json" style="display: none"
+          @change="onImportFile" />
+        <input ref="mergeInput" type="file" accept="application/json,.json" style="display: none"
+          @change="onMergeFile" />
       </NFlex>
     </NFlex>
   </NCard>
+
+  <NModal v-model:show="mergeConflictVisible" preset="dialog" title="检测到数据冲突" style="max-width: 520px">
+    <template #default>
+      <NText>
+        导入数据与当前数据存在 <b>{{ mergeConflictCount }}</b> 处冲突（同一对象在两侧均被修改），无法自动合并。请选择处理方式：
+      </NText>
+      <NRadioGroup v-model:value="mergeBase" style="margin-top: 14px">
+        <NSpace vertical :size="8">
+          <NRadio value="builtin">合并基底：内置（冲突部分保留当前数据，仅并入无冲突部分）</NRadio>
+          <NRadio value="imported">合并基底：导入（冲突部分采用导入数据，仅并入无冲突部分）</NRadio>
+        </NSpace>
+      </NRadioGroup>
+    </template>
+    <template #action>
+      <NSpace>
+        <NButton @click="mergeConflictVisible = false">取消</NButton>
+        <NButton type="warning" @click="mergeForceOverwrite">强行覆盖</NButton>
+        <NButton type="primary" @click="mergePartial">半保留合并</NButton>
+      </NSpace>
+    </template>
+  </NModal>
 
   <NCard v-if="ui.labUnlocked" title="实验室" class="debug-menu">
     <NFlex vertical :size="14">
@@ -249,6 +372,7 @@ function onImportFile(e: Event) {
   max-width: 640px;
   margin: 24px auto 0;
 }
+
 .perm-list {
   margin: 0;
   padding-left: 20px;

@@ -140,3 +140,81 @@ export async function importAll(data: BackupData): Promise<void> {
     for (const it of items) await put(s, it)
   }
 }
+
+/** 稳定序列化（排序键），用于判断两条记录内容是否一致（忽略 key 顺序） */
+function stabilize(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stabilize)
+  if (v && typeof v === 'object') {
+    const o: Record<string, unknown> = {}
+    for (const k of Object.keys(v as Record<string, unknown>).sort())
+      o[k] = stabilize((v as Record<string, unknown>)[k])
+    return o
+  }
+  return v
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(stabilize(a)) === JSON.stringify(stabilize(b))
+}
+
+/** 单条冲突：同一 id 在内置库与导入数据中均存在且内容不同 */
+export interface MergeConflict {
+  store: string
+  id: string
+}
+
+/** 检测导入数据与当前库之间的冲突（不写入）。返回所有冲突项。 */
+export async function detectMergeConflicts(data: BackupData): Promise<MergeConflict[]> {
+  if (data?.app !== 'hobby-earn' || !data.stores) throw new Error('备份文件格式不支持')
+  const conflicts: MergeConflict[] = []
+  for (const s of STORES) {
+    const importedById = new Map(
+      ((data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>).map((it) => [it.id, it]),
+    )
+    const builtinItems = await getAll<Record<string, unknown> & { id: string }>(s)
+    for (const b of builtinItems) {
+      const imp = importedById.get(b.id)
+      if (imp && !deepEqual(b, imp)) conflicts.push({ store: s, id: b.id })
+    }
+  }
+  return conflicts
+}
+
+export interface MergeOptions {
+  /** true=完全覆盖（清空后写入导入，等同旧导入行为）；false=半保留合并 */
+  overwrite: boolean
+  /** 半保留合并时，冲突项以哪侧为准：'builtin' 跳过导入冲突项；'imported' 用导入覆盖 */
+  base: 'builtin' | 'imported'
+}
+
+/**
+ * 合并导入数据到当前库。
+ * - overwrite：清空每个 store 后写入导入，丢弃内置独有数据（强行覆盖）。
+ * - 半保留合并：遍历导入项，无冲突（内置无此 id 或内容相同）的项写入；冲突项按 base 决定保留哪侧；
+ *   内置独有项始终保留（不删除）。
+ */
+export async function mergeAll(data: BackupData, opts: MergeOptions): Promise<void> {
+  if (data?.app !== 'hobby-earn' || !data.stores) throw new Error('备份文件格式不支持')
+  for (const s of STORES) {
+    const importedItems = (data.stores[s] ?? []) as Array<Record<string, unknown> & { id: string }>
+    if (opts.overwrite) {
+      await clearStore(s)
+      for (const it of importedItems) await put(s, it)
+      continue
+    }
+    const importedById = new Map(importedItems.map((it) => [it.id, it]))
+    const builtinItems = await getAll<Record<string, unknown> & { id: string }>(s)
+    const builtinById = new Map(builtinItems.map((it) => [it.id, it]))
+    for (const [id, imp] of importedById) {
+      const built = builtinById.get(id)
+      const isConflict = built !== undefined && !deepEqual(built, imp)
+      if (isConflict) {
+        if (opts.base === 'imported') await put(s, imp)
+        // base === 'builtin'：保留内置，跳过导入冲突项（不写入）
+      } else {
+        await put(s, imp) // 新增或无变化项，合并进来
+      }
+    }
+    // 内置独有项无需处理，保持保留
+  }
+}
