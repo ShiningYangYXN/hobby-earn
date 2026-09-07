@@ -14,6 +14,8 @@ import ExclusiveGroupModal from '@/components/modals/ExclusiveGroupModal.vue'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
 import ServiceModal from '@/components/modals/ServiceModal.vue'
+import ServiceExclusiveGroupModal from '@/components/modals/ServiceExclusiveGroupModal.vue'
+import ServiceLimitGroupModal from '@/components/modals/ServiceLimitGroupModal.vue'
 import CategoryManagerModal from '@/components/modals/CategoryManagerModal.vue'
 import LimitGroupModal from '@/components/modals/LimitGroupModal.vue'
 
@@ -56,8 +58,19 @@ const router = createRouter({
       component: ServicesView,
       children: [
         { path: 'new', name: 'service-new', component: ServiceModal },
-        { path: ':id', name: 'service-edit', component: ServiceModal, props: true },
+        // 静态路径置于 :id 之前，避免被动态参数段抢先匹配
         { path: 'categories', name: 'categories', component: CategoryManagerModal },
+        {
+          path: 'exclusive-groups',
+          name: 'service-exclusive-groups',
+          component: ServiceExclusiveGroupModal,
+        },
+        {
+          path: 'limit-groups',
+          name: 'service-limit-groups',
+          component: ServiceLimitGroupModal,
+        },
+        { path: ':id', name: 'service-edit', component: ServiceModal, props: true },
       ],
     },
     {

@@ -136,33 +136,33 @@ onMounted(() => {
 </script>
 
 <template>
-  <NFlex vertical>
+  <NFlex vertical :size="16">
     <NH2 prefix="bar">优惠管理</NH2>
     <NCard>
-      <NFlex vertical>
+      <NFlex vertical :size="16">
         <NFlex align="center" justify="space-between" wrap>
           <NFlex align="center" wrap>
             <NInput
               v-model:value="keyword"
               placeholder="搜索名称 / 券码"
               clearable
-              style="width: 200px"
+              class="filter-control"
             />
-            <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 150px" />
-            <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 130px" />
+            <NSelect v-model:value="filterRule" :options="ruleOptions" class="filter-control" />
+            <NSelect v-model:value="filterStatus" :options="statusOptions" class="filter-control" />
           </NFlex>
           <NFlex align="center" wrap>
             <NButton @click="openExclusiveGroups">
               <NIcon>
                 <IconLayersIntersect />
               </NIcon>
-              互斥组管理
+              管理互斥组
             </NButton>
             <NButton @click="openLimitGroups">
               <NIcon>
                 <IconTransitionTop />
               </NIcon>
-              上限组管理
+              管理上限组
             </NButton>
             <NButton type="primary" @click="openCreate">
               <NIcon>

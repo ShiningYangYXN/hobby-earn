@@ -289,7 +289,8 @@ function capTitle(d: DiscountDraft): string | undefined {
   if (!isOverflow(d)) return undefined
   const single = d.record.discountAmount
   const actual = amountOf(d)
-  if (actual === 0) return `券溢出：订单可减金额已被其他优惠占满，本券实减 ¥0（单算 ${fmt(single)}）`
+  if (actual === 0)
+    return `券溢出：订单可减金额已被其他优惠占满，本券实减 ¥0（单算 ${fmt(single)}）`
   return `券被裁剪：订单容量不足或受上限组限制，实减 ${fmt(actual)}，少于单算 ${fmt(single)}`
 }
 const overflowCount = computed(() => sortedDrafts.value.filter((d) => isOverflow(d)).length)
@@ -477,12 +478,7 @@ defineExpose({
             </NFlex>
           </NCheckbox>
 
-          <NButton
-            v-if="inactiveDrafts.length"
-            text
-            size="tiny"
-            @click="expanded = !expanded"
-          >
+          <NButton v-if="inactiveDrafts.length" text size="tiny" @click="expanded = !expanded">
             {{ expanded ? '收起未选优惠' : `展开未选优惠（${hiddenCount} 项）` }}
           </NButton>
         </NFlex>

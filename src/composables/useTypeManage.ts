@@ -3,6 +3,8 @@
 import { computed, type ComputedRef } from 'vue'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useServiceExclusiveGroupStore } from '@/stores/useServiceExclusiveGroupStore'
+import { useServiceLimitGroupStore } from '@/stores/useServiceLimitGroupStore'
 
 /**
  * TypeSelect 的就地管理数据源。
@@ -52,5 +54,55 @@ export function useMemberTypeManage(): ComputedRef<TypeManageSource> {
       memberTypeStore.update(id, { name: String(f.name ?? '').trim() }),
     remove: (id: string) => memberTypeStore.remove(id),
     confirmText: '删除后关联的会员将清空种类，优惠中的种类限制也将移除，确认删除？',
+  }))
+}
+
+/** 服务互斥组（同组服务不可在同一订单中共存） */
+export function useServiceExclusiveGroupManage(): ComputedRef<TypeManageSource> {
+  const store = useServiceExclusiveGroupStore()
+  return computed(() => ({
+    title: '服务互斥组管理',
+    items: store.groups,
+    load: () => store.load(),
+    create: (f: Record<string, any>) => {
+      void store.create(String(f.name ?? '').trim())
+    },
+    update: (id: string, f: Record<string, any>) =>
+      store.update(id, { name: String(f.name ?? '').trim() }),
+    remove: (id: string) => store.remove(id),
+    confirmText: '删除后归属该组的服务将自动解除互斥关系，确认删除？',
+  }))
+}
+
+/** 服务限购组（附加字段：组内合计限购数量，由调用方在 #form-extra 渲染） */
+export function useServiceLimitGroupManage(): ComputedRef<TypeManageSource> {
+  const store = useServiceLimitGroupStore()
+  return computed(() => ({
+    title: '服务限购组管理',
+    items: store.groups,
+    load: () => store.load(),
+    emptyForm: () => ({ name: '', limitValue: 1 }),
+    toForm: (item: any) => ({ name: item.name ?? '', limitValue: item.limitValue ?? 1 }),
+    rowText: (item: any) => `${item.name}（合计限 ${item.limitValue}）`,
+    validate: (f: Record<string, any>) => {
+      if (!String(f.name ?? '').trim()) return '请填写名称'
+      const v = Number(f.limitValue)
+      if (!Number.isFinite(v) || v <= 0) return '限购数量需大于 0'
+      return null
+    },
+    create: (f: Record<string, any>) => {
+      void store.create({
+        name: String(f.name ?? '').trim(),
+        limitValue: Number(f.limitValue) || 1,
+        serviceIds: [],
+      })
+    },
+    update: (id: string, f: Record<string, any>) =>
+      store.update(id, {
+        name: String(f.name ?? '').trim(),
+        limitValue: Number(f.limitValue) || 1,
+      }),
+    remove: (id: string) => store.remove(id),
+    confirmText: '删除后归属该组的服务将自动解除分组限购，确认删除？',
   }))
 }

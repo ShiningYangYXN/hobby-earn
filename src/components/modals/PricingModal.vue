@@ -42,7 +42,10 @@ import {
   type DiscountRecord,
 } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
-import { useMemberServiceOptions } from '@/composables/useMemberServices'
+import {
+  useMemberServiceOptions,
+  useServiceRestrictionCheck,
+} from '@/composables/useMemberServices'
 
 const props = defineProps<{ show: boolean; orderId: string | null }>()
 const emit = defineEmits<{
@@ -191,6 +194,7 @@ function stopEdit(idx: number) {
 }
 // 仅列出该订单会员可添加的服务（专属服务按会员 / 会员类型过滤）
 const { options: priceOptions } = useMemberServiceOptions(() => order.value?.memberId ?? null)
+const restrictionCheck = useServiceRestrictionCheck()
 
 // 计价项命中的服务为「专属服务」时打标，便于现场确认该项目受限
 function isExclusiveItem(it: OrderItem): boolean {
@@ -236,6 +240,12 @@ async function finish(m: PaymentMethod) {
   stopTimer()
   discountPanel.value?.finalizeRandom?.() // 固化随机触发资格
   const recs = discountPanel.value?.getRecords?.() ?? []
+  // 提交前拦截互斥 / 限购 / 分组限购违规
+  const problems = restrictionCheck.check(items.value)
+  if (problems.length) {
+    msg.error(problems[0]!)
+    return
+  }
   try {
     await discountPanel.value?.commitUsage(recs)
     await orderStore.finalize(

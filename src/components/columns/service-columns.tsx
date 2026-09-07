@@ -1,6 +1,17 @@
 import { NTag, NFlex, NButton, NEllipsis, NText } from 'naive-ui'
-import { fmt, isExclusiveService, type ServiceEntry } from '@/stores/types'
+import { fmt, isExclusiveService, type ServiceEntry, type TimeWindow } from '@/stores/types'
 import { useCategoryStore } from '@/stores/useCategoryStore'
+import { useMemberStore } from '@/stores/useMemberStore'
+import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
+import { useServiceLimitGroupStore } from '@/stores/useServiceLimitGroupStore'
+import { useServiceExclusiveGroupStore } from '@/stores/useServiceExclusiveGroupStore'
+
+/** 时段描述（validFrom/validUntil + cron 组合），与优惠作用域的展示保持一致 */
+function timeWindowLabel(tw: TimeWindow): string {
+  const f = (s?: string) => (s ? s.slice(0, 10) : '')
+  const range = tw.validFrom || tw.validUntil ? `${f(tw.validFrom)} ~ ${f(tw.validUntil)}` : '永久'
+  return tw.cron ? `${tw.cron}（${range}）` : range
+}
 
 export interface ServiceColumn {
   title: string
@@ -21,7 +32,16 @@ export function buildServiceColumns(opts: {
 }): ServiceColumn[] {
   const canDelete = opts.canDelete ?? (() => true)
   const categoryStore = useCategoryStore()
+  const memberStore = useMemberStore()
+  const memberTypeStore = useMemberTypeStore()
+  const limitGroupStore = useServiceLimitGroupStore()
+  const exclusiveGroupStore = useServiceExclusiveGroupStore()
   const catName = (id: string) => categoryStore.categories.find((c) => c.id === id)?.name ?? id
+  const memberName = (id: string) => memberStore.members.find((m) => m.id === id)?.name ?? id
+  const typeName = (id: string) => memberTypeStore.types.find((t) => t.id === id)?.name ?? id
+  const limitGroupName = (id: string) => limitGroupStore.groups.find((g) => g.id === id)?.name ?? id
+  const exclusiveGroupName = (id: string) =>
+    exclusiveGroupStore.groups.find((g) => g.id === id)?.name ?? id
   return [
     {
       title: '服务号',
@@ -72,17 +92,62 @@ export function buildServiceColumns(opts: {
       ),
     },
     {
-      title: '专属',
-      key: 'exclusive',
-      width: 90,
-      render: (row: ServiceEntry) =>
-        isExclusiveService(row) ? (
-          <NTag type="warning" size="tiny" bordered={false}>
-            专属
-          </NTag>
-        ) : (
-          <NText depth="3">-</NText>
-        ),
+      title: '可用限制',
+      key: 'restrictions',
+      width: 280,
+      render: (row: ServiceEntry) => {
+        const tags: import('vue').VNode[] = []
+        if (row.memberTypeIds?.length)
+          tags.push(
+            <NTag size="tiny" type="info">
+              种类：{row.memberTypeIds.map(typeName).join('、')}
+            </NTag>,
+          )
+        if (row.memberIds?.length)
+          tags.push(
+            <NTag size="tiny" type="info">
+              会员：{row.memberIds.map(memberName).join('、')}
+            </NTag>,
+          )
+        if (row.timeWindow)
+          tags.push(
+            <NTag size="tiny" type="warning">
+              时段：{timeWindowLabel(row.timeWindow)}
+            </NTag>,
+          )
+        if ((row.purchaseLimit ?? 0) > 0)
+          tags.push(
+            <NTag size="tiny" type="warning">
+              限购 {row.purchaseLimit}
+              {row.pricingMode === 'hourly' ? '小时' : '件'}
+            </NTag>,
+          )
+        for (const gid of row.limitGroupIds ?? [])
+          tags.push(
+            <NTag size="tiny" type="error">
+              分组限购：{limitGroupName(gid)}
+            </NTag>,
+          )
+        for (const gid of row.exclusiveGroupIds ?? [])
+          tags.push(
+            <NTag size="tiny" type="default">
+              互斥：{exclusiveGroupName(gid)}
+            </NTag>,
+          )
+        if (!tags.length)
+          return isExclusiveService(row) ? (
+            <NTag size="tiny" type="info">
+              专属
+            </NTag>
+          ) : (
+            <NText depth="3">无限制</NText>
+          )
+        return (
+          <NFlex size={4} wrap={true}>
+            {tags}
+          </NFlex>
+        )
+      },
     },
     {
       title: '操作',

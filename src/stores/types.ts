@@ -45,6 +45,12 @@ export interface ServiceEntry {
   // —— 专属服务：限定可添加的会员 / 会员类型；两者皆空＝不限（散客亦可添加） ——
   memberIds?: string[] // 仅这些会员可添加
   memberTypeIds?: string[] // 仅这些会员类型下的会员可添加
+
+  // —— 可用性限制（与优惠的作用域 / 限量 / 互斥对齐）——
+  timeWindow?: TimeWindow // 指定时段可添加（含周期 cron），未配置＝不限
+  purchaseLimit?: number // 限购：单笔订单内该服务最多可添加数量（按件＝件数，工时＝小时数）
+  limitGroupIds?: string[] // 分组限购：归属的 ServiceLimitGroup.id
+  exclusiveGroupIds?: string[] // 互斥：归属的 ServiceExclusiveGroup.id
 }
 
 /** 服务是否为「专属服务」（限定了会员或会员类型） */
@@ -67,6 +73,27 @@ export function canMemberUseService(
   if ((s.memberIds ?? []).includes(memberId)) return true
   const typeIds = s.memberTypeIds ?? []
   return typeIds.length ? typeIds.some((t) => memberTypeIds.includes(t)) : false
+}
+
+// ============================================================
+// 服务互斥组 / 服务限购组（与优惠的互斥组、上限组对应）
+// ============================================================
+
+/** 服务互斥组：同组服务不可在同一笔订单中共存 */
+export interface ServiceExclusiveGroup {
+  id: string
+  name: string
+  serviceIds: string[]
+  remark?: string
+}
+
+/** 服务限购组：组内服务合计可购数量受同一额度约束 */
+export interface ServiceLimitGroup {
+  id: string
+  name: string
+  limitValue: number // 组内服务合计可购数量上限（按件＝件数，工时＝小时数）
+  serviceIds: string[]
+  remark?: string
 }
 
 // ============================================================

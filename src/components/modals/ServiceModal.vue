@@ -11,17 +11,24 @@ import {
   NSwitch,
   NScrollbar,
   NButton,
+  NDatePicker,
   useMessage,
   NFlex,
   NIcon,
   NText,
+  NGi,
 } from 'naive-ui'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { type PricingMode } from '@/stores/types'
 import TypeSelect from '@/components/TypeSelect.vue'
-import { useCategoryManage, useMemberTypeManage } from '@/composables/useTypeManage'
+import {
+  useCategoryManage,
+  useMemberTypeManage,
+  useServiceExclusiveGroupManage,
+  useServiceLimitGroupManage,
+} from '@/composables/useTypeManage'
 import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
@@ -33,6 +40,8 @@ const categoryStore = useCategoryStore()
 const editing = computed(() => !!props.id)
 const categoryManage = useCategoryManage()
 const memberTypeManage = useMemberTypeManage()
+const exclusiveManage = useServiceExclusiveGroupManage()
+const limitGroupManage = useServiceLimitGroupManage()
 const memberStore = useMemberStore()
 
 // 专属服务：候选会员（停用的会员不参与）
@@ -64,6 +73,15 @@ function emptyForm() {
     // 专属开关（仅用于表单展示，不落库）：关闭＝不限制
     enabledMembers: false,
     enabledMemberTypes: false,
+    // 时段 / 限购（开关与时间戳均为表单专用，落库时转换）
+    enabledTime: false,
+    validFrom: null as number | null,
+    validUntil: null as number | null,
+    cron: '',
+    enabledPurchaseLimit: false,
+    purchaseLimit: 1,
+    limitGroupIds: [] as string[],
+    exclusiveGroupIds: [] as string[],
   }
 }
 const form = ref(emptyForm())
@@ -87,6 +105,14 @@ watch(
           memberTypeIds: [...(p.memberTypeIds ?? [])],
           enabledMembers: (p.memberIds?.length ?? 0) > 0,
           enabledMemberTypes: (p.memberTypeIds?.length ?? 0) > 0,
+          enabledTime: !!p.timeWindow,
+          validFrom: p.timeWindow?.validFrom ? Date.parse(p.timeWindow.validFrom) || null : null,
+          validUntil: p.timeWindow?.validUntil ? Date.parse(p.timeWindow.validUntil) || null : null,
+          cron: p.timeWindow?.cron ?? '',
+          enabledPurchaseLimit: (p.purchaseLimit ?? 0) > 0,
+          purchaseLimit: p.purchaseLimit ?? 1,
+          limitGroupIds: [...(p.limitGroupIds ?? [])],
+          exclusiveGroupIds: [...(p.exclusiveGroupIds ?? [])],
         }
       : emptyForm()
   },
@@ -105,11 +131,29 @@ async function save() {
       // 开关关闭＝不限制，落库为空数组
       memberIds: form.value.enabledMembers ? form.value.memberIds : [],
       memberTypeIds: form.value.enabledMemberTypes ? form.value.memberTypeIds : [],
+      // 时段：开关关闭＝不限；开启后按时间戳转 ISO，cron 留空即不限周期
+      timeWindow: form.value.enabledTime
+        ? {
+            validFrom: form.value.validFrom
+              ? new Date(form.value.validFrom).toISOString()
+              : undefined,
+            validUntil: form.value.validUntil
+              ? new Date(form.value.validUntil).toISOString()
+              : undefined,
+            cron: form.value.cron.trim() || undefined,
+          }
+        : undefined,
+      purchaseLimit: form.value.enabledPurchaseLimit ? form.value.purchaseLimit : undefined,
     }
     const plain = payload as Record<string, unknown>
     delete plain.basePriceYuan
     delete plain.enabledMembers
     delete plain.enabledMemberTypes
+    delete plain.enabledTime
+    delete plain.validFrom
+    delete plain.validUntil
+    delete plain.cron
+    delete plain.enabledPurchaseLimit
     if (editing.value && props.id) {
       await serviceStore.update(props.id, payload)
       msg.success('服务已更新')
@@ -201,6 +245,76 @@ function close() {
             </NFlex>
           </NFlex>
         </NFormItem>
+        <NFormItem label="指定时段可用">
+          <NFlex vertical :size="8" style="width: 100%">
+            <NFlex align="center" :size="10">
+              <NSwitch v-model:value="form.enabledTime" />
+              <NText v-if="!form.enabledTime" depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+            <template v-if="form.enabledTime">
+              <NFlex :size="8" align="center">
+                <NDatePicker
+                  :value="form.validFrom"
+                  @update:value="(v: number | null) => (form.validFrom = v)"
+                  type="datetime"
+                  clearable
+                  placeholder="开始时间"
+                  style="flex: 1"
+                />
+                <NText>~</NText>
+                <NDatePicker
+                  :value="form.validUntil"
+                  @update:value="(v: number | null) => (form.validUntil = v)"
+                  type="datetime"
+                  clearable
+                  placeholder="结束时间"
+                  style="flex: 1"
+                />
+              </NFlex>
+              <NInput
+                v-model:value="form.cron"
+                placeholder="周期表达式（分 时 日 月 周），留空＝不限"
+              />
+            </template>
+          </NFlex>
+        </NFormItem>
+
+        <NFormItem label="限购">
+          <NFlex align="center" :size="10" style="width: 100%">
+            <NSwitch v-model:value="form.enabledPurchaseLimit" />
+            <NInputNumber
+              v-if="form.enabledPurchaseLimit"
+              v-model:value="form.purchaseLimit"
+              :min="1"
+              :precision="0"
+              style="width: 140px"
+            />
+            <NText v-if="form.enabledPurchaseLimit" depth="3" style="font-size: 12px">
+              {{ form.pricingMode === 'hourly' ? '小时 / 单' : '件 / 单' }}
+            </NText>
+            <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+          </NFlex>
+        </NFormItem>
+
+        <NFormItem label="分组限购">
+          <TypeSelect v-model="form.limitGroupIds" :manage="limitGroupManage" placeholder="不加入">
+            <template #form-extra="{ form: lf }">
+              <NGi>
+                <NText depth="3" class="small-label">组内合计限购数量</NText>
+                <NInputNumber v-model:value="lf.limitValue" :min="1" :precision="0" />
+              </NGi>
+            </template>
+          </TypeSelect>
+        </NFormItem>
+
+        <NFormItem label="互斥组">
+          <TypeSelect
+            v-model="form.exclusiveGroupIds"
+            :manage="exclusiveManage"
+            placeholder="不加入"
+          />
+        </NFormItem>
+
         <NFormItem label="启用">
           <NSwitch v-model:value="form.isActive" />
         </NFormItem>

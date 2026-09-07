@@ -290,8 +290,6 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return chosen
   }
 
-
-
   // 上限组封顶
   function applyLimitGroups(
     records: DiscountRecord[],

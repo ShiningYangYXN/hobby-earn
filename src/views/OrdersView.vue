@@ -145,31 +145,31 @@ onMounted(() => {
 </script>
 
 <template>
-  <NFlex vertical>
+  <NFlex vertical :size="16">
     <NH2 prefix="bar">订单管理</NH2>
     <NCard>
-      <NFlex vertical>
+      <NFlex vertical :size="16">
         <NFlex align="center" justify="space-between" wrap>
           <NFlex align="center" wrap>
             <NInput
               v-model:value="keyword"
               placeholder="搜索会员 / 订单号"
               clearable
-              style="width: 200px"
+              class="filter-control"
             />
-            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 160px" />
-            <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 160px" />
+            <NSelect v-model:value="statusFilter" :options="statusOptions" class="filter-control" />
+            <NSelect v-model:value="memberFilter" :options="memberOptions" class="filter-control" />
             <NSelect
               v-model:value="discountFilter"
               :options="discountOptions"
-              style="width: 140px"
+              class="filter-control"
             />
             <NDatePicker
               v-model:value="dateRange"
               type="daterange"
               clearable
               placeholder="下单日期"
-              style="width: 240px"
+              class="filter-control--date"
             />
           </NFlex>
           <NFlex align="center" :size="12" wrap>

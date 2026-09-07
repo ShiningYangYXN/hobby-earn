@@ -144,17 +144,17 @@ watch(
     <NH2 prefix="bar">会员管理</NH2>
 
     <NCard>
-      <NFlex vertical>
+      <NFlex vertical :size="16">
         <NFlex align="center" justify="space-between" wrap>
           <NFlex align="center" wrap>
             <NInput
               v-model:value="keyword"
               placeholder="搜索姓名 / 手机"
               clearable
-              style="width: 200px"
+              class="filter-control"
             />
-            <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 160px" />
-            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 140px" />
+            <NSelect v-model:value="typeFilter" :options="typeOptions" class="filter-control" />
+            <NSelect v-model:value="statusFilter" :options="statusOptions" class="filter-control" />
           </NFlex>
           <NFlex align="center" wrap>
             <NButton @click="openTypeManagement">

@@ -15,11 +15,13 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { IconPlus, IconTags } from '@tabler/icons-vue'
+import { IconPlus, IconTags, IconLayersIntersect, IconTransitionTop } from '@tabler/icons-vue'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useUiStore } from '@/stores/useUiStore'
+import { useServiceLimitGroupStore } from '@/stores/useServiceLimitGroupStore'
+import { useServiceExclusiveGroupStore } from '@/stores/useServiceExclusiveGroupStore'
 import { buildServiceColumns } from '@/components/columns/service-columns'
 import { tableScrollX } from '@/stores/types'
 import { type ServiceEntry } from '@/stores/types'
@@ -31,6 +33,8 @@ const serviceStore = useServiceStore()
 const categoryStore = useCategoryStore()
 const orderStore = useOrderStore()
 const uiStore = useUiStore()
+const limitGroupStore = useServiceLimitGroupStore()
+const exclusiveGroupStore = useServiceExclusiveGroupStore()
 
 const keyword = ref('')
 const filterCategory = ref('')
@@ -118,6 +122,9 @@ onMounted(() => {
   if (!categoryStore.categories.length) categoryStore.load()
   // 订单是「是否被引用」的判定依据，必须加载后再允许删除
   if (!orderStore.orders.length) orderStore.load()
+  // 分组表用于「可用限制」列把组 id 解析成名称
+  if (!limitGroupStore.groups.length) limitGroupStore.load()
+  if (!exclusiveGroupStore.groups.length) exclusiveGroupStore.load()
 })
 </script>
 
@@ -132,15 +139,15 @@ onMounted(() => {
               v-model:value="keyword"
               placeholder="搜索名称 / 分类"
               clearable
-              style="width: 200px"
+              class="filter-control"
             />
             <NSelect
               v-model:value="filterCategory"
               :options="categoryOptions"
-              style="width: 150px"
+              class="filter-control"
             />
-            <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 160px" />
-            <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 130px" />
+            <NSelect v-model:value="filterMode" :options="modeOptions" class="filter-control" />
+            <NSelect v-model:value="filterActive" :options="activeOptions" class="filter-control" />
           </NFlex>
           <NFlex align="center" :size="12" wrap>
             <NButton @click="router.push({ name: 'categories' })">
@@ -148,6 +155,18 @@ onMounted(() => {
                 <IconTags />
               </NIcon>
               管理分类
+            </NButton>
+            <NButton @click="router.push({ name: 'service-exclusive-groups' })">
+              <NIcon :size="16">
+                <IconLayersIntersect />
+              </NIcon>
+              管理互斥组
+            </NButton>
+            <NButton @click="router.push({ name: 'service-limit-groups' })">
+              <NIcon :size="16">
+                <IconTransitionTop />
+              </NIcon>
+              管理限购组
             </NButton>
             <NButton type="primary" @click="openCreate">
               <NIcon :size="16">

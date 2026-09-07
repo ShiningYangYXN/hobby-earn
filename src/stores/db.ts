@@ -12,7 +12,10 @@ import { version } from '@/../package.json'
 import { ruleTypeLabel, orderStatusLabel, isValidCouponCode } from './types'
 
 const DB_NAME = 'hobby-earn-db'
-const DB_VERSION = 1
+// 新增 object store 必须提升版本号，否则已存在的数据库不会触发 onupgradeneeded，
+// 缺失的 store 在写入时 objectStore() 会抛 NotFoundError（表现为功能「无法写入」）。
+// 注意：dbPromise 在模块级缓存，只要重新打开页面即会按新版本升级。
+const DB_VERSION = 2
 const STORES = [
   'members',
   'orders',
@@ -22,6 +25,8 @@ const STORES = [
   'exclusiveGroups',
   'categories',
   'limitGroups',
+  'serviceExclusiveGroups',
+  'serviceLimitGroups',
 ] as const
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -276,6 +281,17 @@ const SCHEMAS: Record<string, Record<string, FieldRule>> = {
     limitValue: { required: true, type: 'number' },
     scope: { required: true, type: 'string', enum: LIMIT_SCOPES },
     discountIds: { type: 'array' },
+  },
+  serviceExclusiveGroups: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    serviceIds: { type: 'array' },
+  },
+  serviceLimitGroups: {
+    id: { required: true, type: 'string' },
+    name: { required: true, type: 'string' },
+    limitValue: { required: true, type: 'number' },
+    serviceIds: { type: 'array' },
   },
   orders: {
     id: { required: true, type: 'string' },

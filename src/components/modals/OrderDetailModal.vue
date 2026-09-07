@@ -166,18 +166,22 @@ const readColumns = [
     title: '服务',
     key: 'serviceName',
     render: (row: OrderItem) =>
-      h(NFlex, { size: 4, align: 'center' }, {
-        default: () => [
-          h(NText, null, { default: () => row.serviceName }),
-          isExclusiveItem(row)
-            ? h(
-                NTag,
-                { size: 'tiny', type: 'warning', bordered: false },
-                { default: () => '专属' },
-              )
-            : null,
-        ],
-      }),
+      h(
+        NFlex,
+        { size: 4, align: 'center' },
+        {
+          default: () => [
+            h(NText, null, { default: () => row.serviceName }),
+            isExclusiveItem(row)
+              ? h(
+                  NTag,
+                  { size: 'tiny', type: 'warning', bordered: false },
+                  { default: () => '专属' },
+                )
+              : null,
+          ],
+        },
+      ),
   },
   { title: '单价', key: 'unitPrice', render: (row: OrderItem) => fmt(row.unitPrice) },
   {

@@ -23,7 +23,10 @@ import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { type OrderItem, type DiscountRecord } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
-import { useMemberServiceOptions } from '@/composables/useMemberServices'
+import {
+  useMemberServiceOptions,
+  useServiceRestrictionCheck,
+} from '@/composables/useMemberServices'
 
 const router = useRouter()
 const msg = useMessage()
@@ -46,6 +49,7 @@ const memberOptions = computed(() =>
 )
 // 仅列出该会员可添加的服务（专属服务按会员 / 会员类型过滤）
 const { options: priceOptions } = useMemberServiceOptions(() => newMember.value)
+const restrictionCheck = useServiceRestrictionCheck()
 function rowPrice(priceId: string) {
   return serviceStore.services.find((p) => p.id === priceId)
 }
@@ -97,6 +101,12 @@ async function doCreate() {
   const items = currentItems.value
   if (!items.length) {
     msg.warning('请至少添加一个服务项')
+    return
+  }
+  // 提交前拦截互斥 / 限购 / 分组限购违规
+  const problems = restrictionCheck.check(items)
+  if (problems.length) {
+    msg.error(problems[0]!)
     return
   }
   // 下单时固化随机触发资格与数额（无计价器，此处一次性抽取）
