@@ -19,9 +19,10 @@
     // Specified here to keep it out of the root directory.
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
-    // JSX: preserve so @vitejs/plugin-vue-jsx handles transformation at build time
+    // JSX: preserve so @vitejs/plugin-vue-jsx handles transformation at build time.
+    // Point the JSX namespace at Vue (vue/jsx declares the global `JSX.IntrinsicElements`),
+    // otherwise tsc falls back to React's global JSX and errors with TS7026.
     "jsx": "preserve",
-    "jsxFactory": "h",
-    "jsxFragmentFactory": "Fragment"
+    "jsxImportSource": "vue"
   }
 }
