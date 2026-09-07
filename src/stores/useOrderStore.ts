@@ -13,26 +13,86 @@ export const useOrderStore = defineStore('order', () => {
   const pendingOrders = computed(() => orders.value.filter((o) => o.status === 'pending'))
   const completedOrders = computed(() => orders.value.filter((o) => o.status === 'completed'))
 
-  const todayIncome = computed(() =>
-    orders.value
-      .filter((o) => o.status === 'completed' && isToday(o.completedAt ?? o.createdAt))
-      .reduce((s, o) => s + o.finalAmount, 0),
-  )
-
-  const monthIncome = computed(() => {
+  // 收入计算缓存：避免每次访问都 new Date()，只在日期变化时重算
+  const _incomeCache = ref({ key: '' as string, today: 0, month: 0, total: 0 })
+  function _incomeKey(): string {
     const n = new Date()
-    return orders.value
-      .filter((o) => {
-        if (o.status !== 'completed') return false
+    return `${n.getFullYear()}-${n.getMonth()}-${n.getDate()}`
+  }
+  const todayIncome = computed(() => {
+    const k = _incomeKey()
+    if (_incomeCache.value.key !== k) {
+      const n = new Date()
+      let today = 0,
+        month = 0,
+        total = 0
+      for (const o of orders.value) {
+        if (o.status !== 'completed') continue
+        total += o.finalAmount
         const d = new Date(o.completedAt ?? o.createdAt)
-        return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth()
-      })
-      .reduce((s, o) => s + o.finalAmount, 0)
+        if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth())
+          month += o.finalAmount
+        if (
+          d.getFullYear() === n.getFullYear() &&
+          d.getMonth() === n.getMonth() &&
+          d.getDate() === n.getDate()
+        )
+          today += o.finalAmount
+      }
+      _incomeCache.value = { key: k, today, month, total }
+    }
+    return _incomeCache.value.today
   })
 
-  const totalIncome = computed(() =>
-    orders.value.filter((o) => o.status === 'completed').reduce((s, o) => s + o.finalAmount, 0),
-  )
+  const monthIncome = computed(() => {
+    const k = _incomeKey()
+    if (_incomeCache.value.key !== k) {
+      const n = new Date()
+      let today = 0,
+        month = 0,
+        total = 0
+      for (const o of orders.value) {
+        if (o.status !== 'completed') continue
+        total += o.finalAmount
+        const d = new Date(o.completedAt ?? o.createdAt)
+        if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth())
+          month += o.finalAmount
+        if (
+          d.getFullYear() === n.getFullYear() &&
+          d.getMonth() === n.getMonth() &&
+          d.getDate() === n.getDate()
+        )
+          today += o.finalAmount
+      }
+      _incomeCache.value = { key: k, today, month, total }
+    }
+    return _incomeCache.value.month
+  })
+
+  const totalIncome = computed(() => {
+    const k = _incomeKey()
+    if (_incomeCache.value.key !== k) {
+      const n = new Date()
+      let today = 0,
+        month = 0,
+        total = 0
+      for (const o of orders.value) {
+        if (o.status !== 'completed') continue
+        total += o.finalAmount
+        const d = new Date(o.completedAt ?? o.createdAt)
+        if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth())
+          month += o.finalAmount
+        if (
+          d.getFullYear() === n.getFullYear() &&
+          d.getMonth() === n.getMonth() &&
+          d.getDate() === n.getDate()
+        )
+          today += o.finalAmount
+      }
+      _incomeCache.value = { key: k, today, month, total }
+    }
+    return _incomeCache.value.total
+  })
 
   async function load() {
     orders.value = (await getAll<Order>('orders'))
@@ -286,13 +346,3 @@ export const useOrderStore = defineStore('order', () => {
     debugPatch,
   }
 })
-
-function isToday(s: string): boolean {
-  const d = new Date(s),
-    n = new Date()
-  return (
-    d.getFullYear() === n.getFullYear() &&
-    d.getMonth() === n.getMonth() &&
-    d.getDate() === n.getDate()
-  )
-}

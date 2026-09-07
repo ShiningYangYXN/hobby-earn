@@ -116,6 +116,7 @@ export function scopeKeyLabelOf(k: ScopeKey): string {
  */
 export function formatZhe(value: number): string {
   if (value >= 100) return '不打折'
+  if (value === 0) return '免单'
   const zhe = value / 10
   const s = Number.isInteger(zhe) ? String(zhe) : zhe.toFixed(1)
   return `${s}折`

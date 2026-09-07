@@ -146,13 +146,20 @@ export const useDiscountStore = defineStore('discount', () => {
   }
 
   // —— 状态判定 ——
+  // 缓存当前时间戳：autoCandidates 遍历所有优惠时共用同一个 now，避免 N 次 new Date()
+  let _cachedNow = 0
+  function cachedNow(): number {
+    const now = Date.now()
+    if (now - _cachedNow > 60_000) _cachedNow = now
+    return _cachedNow
+  }
   function discountStatus(d: Discount, memberId: string | null = null): DiscountStatus {
     if (!d.isActive) return 'disabled'
-    const now = new Date()
+    const now = cachedNow()
     const from = d.scope?.timeWindow?.validFrom
     const until = d.scope?.timeWindow?.validUntil
-    if (from && now < new Date(from)) return 'upcoming'
-    if (until && now > new Date(until)) return 'expired'
+    if (from && now < new Date(from).getTime()) return 'upcoming'
+    if (until && now > new Date(until).getTime()) return 'expired'
     if (d.usageLimit && d.usedCount >= d.usageLimit) return 'exhausted'
     if (memberId && d.memberLimit && (d.memberUsed?.[memberId] ?? 0) >= d.memberLimit)
       return 'exhausted'
@@ -175,7 +182,7 @@ export const useDiscountStore = defineStore('discount', () => {
     return discounts.value.filter((d) => {
       if (d.couponCode) return false // 带券码=需手动兑换，不得自动触发
       if (!isUsable(d, ctx.memberId)) return false
-      if (!scopeEligible(d.scope, ctx)) return false
+      if (!scopeEligible(d.scope, { ...ctx, now: new Date(cachedNow()) })) return false
       return true
     })
   }

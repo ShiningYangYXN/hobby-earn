@@ -97,8 +97,15 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   // 已被历史订单计入用量的优惠 id（hydrate 时填充，commitUsage 时跳过）
   const countedIds = ref<Set<string>>(new Set())
 
+  // 预建 priceEntryId -> categoryIds 的 map，避免 scopeBaseAmount/scopeUnits 里重复 O(n) 查找
+  const categoryIdsMap = computed(() => {
+    const m = new Map<string, string[]>()
+    for (const p of serviceStore.services) m.set(p.id, p.categoryIds ?? [])
+    return m
+  })
+
   function categoryIdsOf(priceEntryId: string): string[] {
-    return serviceStore.services.find((p) => p.id === priceEntryId)?.categoryIds ?? []
+    return categoryIdsMap.value.get(priceEntryId) ?? []
   }
 
   const memberTypeId = computed(() => {
@@ -208,31 +215,24 @@ export function useDiscountApply(ctx: () => ApplyContext) {
 
   // 下单固化：补全抽取结果，并决定随机触发类的资格（固化的是优惠资格，而非金额）
   function finalizeRandom() {
-    const c = ctx()
-    const cands = discountStore.autoCandidates({
-      memberId: c.memberId,
-      memberTypeId: memberTypeId.value,
-      items: c.items,
-      categoryIdsOf: (id) => categoryIdsOf(id),
-    })
     const next: Record<string, DrawResult> = { ...drawnRandom.value }
-    for (const d of cands) {
-      if (!isRandom(d)) continue
-      if (!next[d.id]) {
-        const captured = d.random ? discountStore.captureRandom(d.random) : 0
-        next[d.id] = {
+    for (const d of drafts.value) {
+      if (!isRandom(d.discount)) continue
+      if (!next[d.discount.id]) {
+        const captured = d.discount.random ? discountStore.captureRandom(d.discount.random) : 0
+        next[d.discount.id] = {
           captured,
-          decided: d.triggerChance == null,
-          triggered: d.triggerChance == null ? true : null,
+          decided: d.discount.triggerChance == null,
+          triggered: d.discount.triggerChance == null ? true : null,
         }
       }
     }
     // 决定待定资格（随机触发类在下单时一次性固化）
-    for (const d of cands) {
-      if (d.triggerChance == null) continue
-      const e = next[d.id]
+    for (const d of drafts.value) {
+      if (d.discount.triggerChance == null) continue
+      const e = next[d.discount.id]
       if (e && e.triggered === null) {
-        e.triggered = Math.random() * 100 < d.triggerChance
+        e.triggered = Math.random() * 100 < d.discount.triggerChance
         e.decided = true
       }
     }

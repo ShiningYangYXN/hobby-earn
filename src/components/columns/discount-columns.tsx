@@ -81,6 +81,7 @@ export function buildDiscountColumns(opts: {
       key: 'value',
       width: 200,
       render: (row: Discount) => {
+        if (row.random) return '随机'
         if (row.ruleType === 'percentage') return `${row.value}% (${formatZhe(row.value)})`
         if (row.ruleType === 'perItem')
           return `${row.minAmount > 0 ? `满${fmt(row.minAmount)}可用 · ` : ''}每件立减 ${fmt(row.value)}${row.maxUnits ? `（≤${row.maxUnits}件）` : ''}`
@@ -159,14 +160,18 @@ export function buildDiscountColumns(opts: {
       render: (row: Discount) => {
         if (isCouponRequired(row))
           return (
-            <NTag size="tiny" type="error">
+            <NTag size="tiny" type="warning">
               券码兑换
             </NTag>
           )
         const parts = ['自动']
         if (row.triggerChance != null && row.triggerChance < 100)
           parts.push(`${row.triggerChance}%概率`)
-        return parts.join(' · ')
+        return (
+          <NTag size="tiny" type="success">
+            {parts.join(' · ')}
+          </NTag>
+        )
       },
     },
     {
