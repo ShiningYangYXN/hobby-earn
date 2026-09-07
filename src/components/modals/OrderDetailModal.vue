@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
@@ -28,6 +28,7 @@ import {
   itemAmount,
   ruleTypeLabel,
   formatZhe,
+  isExclusiveService,
   type Order,
   type OrderItem,
   type OrderStatus,
@@ -41,6 +42,7 @@ import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
+import { useMemberServiceOptions } from '@/composables/useMemberServices'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -126,16 +128,8 @@ const draftDirty = computed(() => {
     !recordsEqual(editDiscountRecords.value, o.discountRecords)
   )
 })
-const priceOptions = computed(() =>
-  serviceStore.services
-    .filter((p) => p.isActive)
-    .map((p) => ({
-      label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
-        p.basePrice / 100
-      ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
-      value: p.id,
-    })),
-)
+// 仅列出该订单会员可添加的服务（专属服务按会员 / 会员类型过滤）
+const { options: priceOptions } = useMemberServiceOptions(() => order.value?.memberId ?? null)
 function rowPrice(priceId: string) {
   return serviceStore.services.find((p) => p.id === priceId)
 }
@@ -162,8 +156,29 @@ function onItemPriceChange(i: number) {
 }
 const memberId = computed(() => order.value?.memberId ?? null)
 
+// 只读态订单项：命中的服务为专属服务时打标
+function isExclusiveItem(it: OrderItem): boolean {
+  const p = serviceStore.services.find((s) => s.id === it.priceEntryId)
+  return p ? isExclusiveService(p) : false
+}
 const readColumns = [
-  { title: '服务', key: 'serviceName' },
+  {
+    title: '服务',
+    key: 'serviceName',
+    render: (row: OrderItem) =>
+      h(NFlex, { size: 4, align: 'center' }, {
+        default: () => [
+          h(NText, null, { default: () => row.serviceName }),
+          isExclusiveItem(row)
+            ? h(
+                NTag,
+                { size: 'tiny', type: 'warning', bordered: false },
+                { default: () => '专属' },
+              )
+            : null,
+        ],
+      }),
+  },
   { title: '单价', key: 'unitPrice', render: (row: OrderItem) => fmt(row.unitPrice) },
   {
     title: '数量',

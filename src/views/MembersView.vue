@@ -68,19 +68,18 @@ const typeFilter = ref('')
 const statusFilter = ref('')
 const keyword = ref('')
 
-const list = computed(() =>
-  memberStore.members.filter((m) => {
+const list = computed(() => {
+  // 关键词在循环外计算一次，避免逐条会员重复 trim/toLowerCase
+  const kw = keyword.value.trim().toLowerCase()
+  return memberStore.members.filter((m) => {
     if (typeFilter.value && !(m.typeIds ?? []).includes(typeFilter.value)) return false
     if (statusFilter.value === 'active' && m.isActive === false) return false
     if (statusFilter.value === 'inactive' && m.isActive !== false) return false
-    if (keyword.value.trim()) {
-      const k = keyword.value.trim().toLowerCase()
-      if (!(m.name.toLowerCase().includes(k) || (m.phone ?? '').toLowerCase().includes(k)))
-        return false
-    }
+    if (kw && !(m.name.toLowerCase().includes(kw) || (m.phone ?? '').toLowerCase().includes(kw)))
+      return false
     return true
-  }),
-)
+  })
+})
 
 function openNew() {
   router.push({ name: 'member-new' })

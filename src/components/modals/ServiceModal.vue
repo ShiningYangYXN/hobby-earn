@@ -18,9 +18,10 @@ import {
 } from 'naive-ui'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
+import { useMemberStore } from '@/stores/useMemberStore'
 import { type PricingMode } from '@/stores/types'
 import TypeSelect from '@/components/TypeSelect.vue'
-import { useCategoryManage } from '@/composables/useTypeManage'
+import { useCategoryManage, useMemberTypeManage } from '@/composables/useTypeManage'
 import { IconDeviceFloppy, IconX } from '@tabler/icons-vue'
 
 const props = defineProps<{ id?: string }>()
@@ -31,6 +32,15 @@ const categoryStore = useCategoryStore()
 
 const editing = computed(() => !!props.id)
 const categoryManage = useCategoryManage()
+const memberTypeManage = useMemberTypeManage()
+const memberStore = useMemberStore()
+
+// 专属服务：候选会员（停用的会员不参与）
+const memberOptions = computed(() =>
+  memberStore.members
+    .filter((m) => m.isActive !== false)
+    .map((m) => ({ label: m.name, value: m.id })),
+)
 const serviceIdDisplay = computed(() => {
   if (!props.id) return ''
   return serviceStore.services.find((x) => x.id === props.id)?.id ?? ''
@@ -40,49 +50,45 @@ const modeOptions: { label: string; value: PricingMode }[] = [
   { label: '按件', value: 'perPiece' },
 ]
 
-const form = ref({
-  name: '',
-  categoryIds: [] as string[],
-  pricingMode: 'hourly' as PricingMode,
-  basePriceYuan: 0,
-  description: '',
-  isActive: true,
-})
+// 空表单工厂：新建、编辑未命中、重置三处共用，避免重复字面量
+function emptyForm() {
+  return {
+    name: '',
+    categoryIds: [] as string[],
+    pricingMode: 'hourly' as PricingMode,
+    basePriceYuan: 0,
+    description: '',
+    isActive: true,
+    memberIds: [] as string[],
+    memberTypeIds: [] as string[],
+    // 专属开关（仅用于表单展示，不落库）：关闭＝不限制
+    enabledMembers: false,
+    enabledMemberTypes: false,
+  }
+}
+const form = ref(emptyForm())
 
 watch(
   () => props.id,
   async (id) => {
     if (!categoryStore.categories.length) await categoryStore.load()
-    if (id) {
-      const p = serviceStore.services.find((x) => x.id === id)
-      if (p)
-        form.value = {
+    if (!memberStore.members.length) await memberStore.load()
+    const p = id ? serviceStore.services.find((x) => x.id === id) : undefined
+    form.value = p
+      ? {
+          ...emptyForm(),
           name: p.name,
           categoryIds: [...(p.categoryIds ?? [])],
           pricingMode: p.pricingMode,
           basePriceYuan: p.basePrice / 100,
           description: p.description ?? '',
           isActive: p.isActive,
+          memberIds: [...(p.memberIds ?? [])],
+          memberTypeIds: [...(p.memberTypeIds ?? [])],
+          enabledMembers: (p.memberIds?.length ?? 0) > 0,
+          enabledMemberTypes: (p.memberTypeIds?.length ?? 0) > 0,
         }
-      else
-        form.value = {
-          name: '',
-          categoryIds: [],
-          pricingMode: 'hourly',
-          basePriceYuan: 0,
-          description: '',
-          isActive: true,
-        }
-    } else {
-      form.value = {
-        name: '',
-        categoryIds: [],
-        pricingMode: 'hourly',
-        basePriceYuan: 0,
-        description: '',
-        isActive: true,
-      }
-    }
+      : emptyForm()
   },
   { immediate: true },
 )
@@ -96,8 +102,14 @@ async function save() {
     const payload = {
       ...form.value,
       basePrice: Math.round((form.value.basePriceYuan || 0) * 100),
+      // 开关关闭＝不限制，落库为空数组
+      memberIds: form.value.enabledMembers ? form.value.memberIds : [],
+      memberTypeIds: form.value.enabledMemberTypes ? form.value.memberTypeIds : [],
     }
-    delete (payload as Record<string, unknown>).basePriceYuan
+    const plain = payload as Record<string, unknown>
+    delete plain.basePriceYuan
+    delete plain.enabledMembers
+    delete plain.enabledMemberTypes
     if (editing.value && props.id) {
       await serviceStore.update(props.id, payload)
       msg.success('服务已更新')
@@ -155,6 +167,39 @@ function close() {
             placeholder="备注（可选）"
             :autosize="{ minRows: 2, maxRows: 4 }"
           />
+        </NFormItem>
+        <NFormItem label="专属服务（可组合）">
+          <NFlex vertical :size="10" style="width: 100%">
+            <NText depth="3" style="font-size: 12px">
+              关闭＝所有会员及散客均可添加；开启后仅命中的会员可添加，散客不可添加。
+            </NText>
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NText style="width: 84px">会员种类</NText>
+              <NSwitch v-model:value="form.enabledMemberTypes" />
+              <TypeSelect
+                v-if="form.enabledMemberTypes"
+                v-model="form.memberTypeIds"
+                :manage="memberTypeManage"
+                placeholder="选择会员种类（命中任一即可）"
+                style="flex: 1"
+              />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+            <NFlex align="center" :size="10" style="width: 100%">
+              <NText style="width: 84px">指定会员</NText>
+              <NSwitch v-model:value="form.enabledMembers" />
+              <NSelect
+                v-if="form.enabledMembers"
+                v-model:value="form.memberIds"
+                :options="memberOptions"
+                multiple
+                filterable
+                placeholder="选择会员"
+                style="flex: 1"
+              />
+              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+            </NFlex>
+          </NFlex>
         </NFormItem>
         <NFormItem label="启用">
           <NSwitch v-model:value="form.isActive" />

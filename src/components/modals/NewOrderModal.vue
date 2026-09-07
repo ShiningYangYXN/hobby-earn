@@ -23,6 +23,7 @@ import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { type OrderItem, type DiscountRecord } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
+import { useMemberServiceOptions } from '@/composables/useMemberServices'
 
 const router = useRouter()
 const msg = useMessage()
@@ -43,16 +44,8 @@ const finalAmount = ref(0)
 const memberOptions = computed(() =>
   memberStore.members.map((m) => ({ label: m.name, value: m.id })),
 )
-const priceOptions = computed(() =>
-  serviceStore.services
-    .filter((p) => p.isActive)
-    .map((p) => ({
-      label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
-        p.basePrice / 100
-      ).toFixed(2)}${p.pricingMode === 'hourly' ? '/h' : '/件'}）`,
-      value: p.id,
-    })),
-)
+// 仅列出该会员可添加的服务（专属服务按会员 / 会员类型过滤）
+const { options: priceOptions } = useMemberServiceOptions(() => newMember.value)
 function rowPrice(priceId: string) {
   return serviceStore.services.find((p) => p.id === priceId)
 }

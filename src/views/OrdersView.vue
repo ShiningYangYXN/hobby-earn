@@ -56,24 +56,24 @@ const memberOptions = computed(() => [
     .map((m) => ({ label: m.name, value: m.id })),
 ])
 
-const list = computed(() =>
-  orderStore.orders.filter((o) => {
+const list = computed(() => {
+  // 关键词与日期区间在循环外计算一次，避免逐条订单重复 trim/toLowerCase/解构
+  const kw = keyword.value.trim().toLowerCase()
+  const range = dateRange.value
+  return orderStore.orders.filter((o) => {
     if (statusFilter.value !== 'all' && o.status !== statusFilter.value) return false
     if (memberFilter.value && o.memberId !== memberFilter.value) return false
     if (discountFilter.value === 'has' && o.discountRecords.length === 0) return false
     if (discountFilter.value === 'none' && o.discountRecords.length > 0) return false
-    if (dateRange.value) {
-      const [start, end] = dateRange.value
+    if (range) {
       const t = new Date(o.createdAt).getTime()
-      if (t < start || t > end + 86400000 - 1) return false
+      if (t < range[0] || t > range[1] + 86400000 - 1) return false
     }
-    if (keyword.value.trim()) {
-      const k = keyword.value.trim().toLowerCase()
-      if (!(o.memberName.toLowerCase().includes(k) || o.id.toLowerCase().includes(k))) return false
-    }
+    if (kw && !(o.memberName.toLowerCase().includes(kw) || o.id.toLowerCase().includes(kw)))
+      return false
     return true
-  }),
-)
+  })
+})
 
 function openCreate() {
   router.push({ name: 'order-new' })

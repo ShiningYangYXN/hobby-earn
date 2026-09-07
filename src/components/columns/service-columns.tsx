@@ -1,5 +1,5 @@
 import { NTag, NFlex, NButton, NEllipsis, NText } from 'naive-ui'
-import { fmt, type ServiceEntry } from '@/stores/types'
+import { fmt, isExclusiveService, type ServiceEntry } from '@/stores/types'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 
 export interface ServiceColumn {
@@ -70,6 +70,19 @@ export function buildServiceColumns(opts: {
           {row.isActive ? '启用' : '禁用'}
         </NTag>
       ),
+    },
+    {
+      title: '专属',
+      key: 'exclusive',
+      width: 90,
+      render: (row: ServiceEntry) =>
+        isExclusiveService(row) ? (
+          <NTag type="warning" size="tiny" bordered={false}>
+            专属
+          </NTag>
+        ) : (
+          <NText depth="3">-</NText>
+        ),
     },
     {
       title: '操作',

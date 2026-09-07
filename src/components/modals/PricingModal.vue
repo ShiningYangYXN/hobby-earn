@@ -34,6 +34,7 @@ import {
   fmtElapsed,
   subtotalOf,
   itemAmount,
+  isExclusiveService,
   type Order,
   type OrderItem,
   type OrderStatus,
@@ -41,6 +42,7 @@ import {
   type DiscountRecord,
 } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
+import { useMemberServiceOptions } from '@/composables/useMemberServices'
 
 const props = defineProps<{ show: boolean; orderId: string | null }>()
 const emit = defineEmits<{
@@ -187,14 +189,14 @@ function startEdit(idx: number) {
 function stopEdit(idx: number) {
   editing[idx] = false
 }
-const priceOptions = computed(() =>
-  serviceStore.services.map((p) => ({
-    label: `${p.name}（${p.pricingMode === 'hourly' ? '工时' : '按件'} ¥${(
-      p.basePrice / 100
-    ).toFixed(2)}${p.pricingMode === 'hourly' ? '/小时' : '/件'}）`,
-    value: p.id,
-  })),
-)
+// 仅列出该订单会员可添加的服务（专属服务按会员 / 会员类型过滤）
+const { options: priceOptions } = useMemberServiceOptions(() => order.value?.memberId ?? null)
+
+// 计价项命中的服务为「专属服务」时打标，便于现场确认该项目受限
+function isExclusiveItem(it: OrderItem): boolean {
+  const p = serviceStore.services.find((s) => s.id === it.priceEntryId)
+  return p ? isExclusiveService(p) : false
+}
 function addService() {
   if (!newServiceId.value) return
   const p = serviceStore.services.find((x) => x.id === newServiceId.value)
@@ -278,7 +280,12 @@ function closePricing() {
           <NEmpty v-if="!items.length" description="该订单无计价项目" />
           <NCard v-for="(it, idx) in items" :key="idx" size="small">
             <NFlex vertical :size="6">
-              <NText strong>{{ it.serviceName }}</NText>
+              <NFlex align="center" :size="6">
+                <NText strong>{{ it.serviceName }}</NText>
+                <NTag v-if="isExclusiveItem(it)" size="tiny" type="warning" :bordered="false"
+                  >专属</NTag
+                >
+              </NFlex>
               <NText class="meter-num" style="font-size: 18px">{{ fmt(itemAmount(it)) }}</NText>
               <NFlex align="center" justify="space-between">
                 <NText depth="3">{{ it.pricingMode === 'hourly' ? '已计时长' : '数量' }}</NText>

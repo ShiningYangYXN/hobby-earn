@@ -1,5 +1,13 @@
 import { NTag, NFlex, NButton, NText, NEllipsis } from 'naive-ui'
-import { fmt, fmtElapsed, type Order, type OrderItem, type OrderStatus } from '@/stores/types'
+import {
+  fmt,
+  fmtElapsed,
+  isExclusiveService,
+  type Order,
+  type OrderItem,
+  type OrderStatus,
+} from '@/stores/types'
+import { useServiceStore } from '@/stores/useServiceStore'
 
 export type OrderCellRenderer = (row: Order) => string | import('vue').VNode
 
@@ -32,6 +40,11 @@ export interface OrderColumnsOpts {
 }
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
+  const serviceStore = useServiceStore()
+  const isExclusive = (id: string) => {
+    const p = serviceStore.services.find((s) => s.id === id)
+    return p ? isExclusiveService(p) : false
+  }
   return [
     {
       title: '订单号',
@@ -44,15 +57,24 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       title: '项目',
       key: 'items',
       width: 240,
-      render: (row: Order) =>
-        row.items
-          .map((i: OrderItem) => {
-            if (i.pricingMode === 'hourly' && i.elapsed) {
-              return `${i.serviceName} ${fmtElapsed(i.elapsed)}`
-            }
-            return `${i.serviceName}×${i.quantity}`
-          })
-          .join(', '),
+      render: (row: Order) => (
+        <NFlex size={6} vertical>
+          {row.items.map((i: OrderItem, idx: number) => (
+            <NFlex key={idx} size={4} align="center" wrap>
+              <NText>
+                {i.pricingMode === 'hourly' && i.elapsed
+                  ? `${i.serviceName} ${fmtElapsed(i.elapsed)}`
+                  : `${i.serviceName}×${i.quantity}`}
+              </NText>
+              {isExclusive(i.priceEntryId) && (
+                <NTag size="tiny" type="warning" bordered={false}>
+                  专属
+                </NTag>
+              )}
+            </NFlex>
+          ))}
+        </NFlex>
+      ),
     },
     { title: '小计', key: 'subtotal', width: 90, render: (row: Order) => fmt(row.subtotal) },
     {

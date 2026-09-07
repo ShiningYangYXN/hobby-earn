@@ -42,6 +42,31 @@ export interface ServiceEntry {
   pricingMode: PricingMode
   basePrice: number
   categoryIds: string[]
+  // —— 专属服务：限定可添加的会员 / 会员类型；两者皆空＝不限（散客亦可添加） ——
+  memberIds?: string[] // 仅这些会员可添加
+  memberTypeIds?: string[] // 仅这些会员类型下的会员可添加
+}
+
+/** 服务是否为「专属服务」（限定了会员或会员类型） */
+export function isExclusiveService(s: ServiceEntry): boolean {
+  return (s.memberIds?.length ?? 0) > 0 || (s.memberTypeIds?.length ?? 0) > 0
+}
+
+/**
+ * 判断某会员能否添加该服务：
+ * - 非专属服务（会员与会员类型皆空）：任何人（含散客）可添加；
+ * - 专属服务：散客一律不可；命中指定会员，或其所属会员类型命中，即可添加。
+ */
+export function canMemberUseService(
+  s: ServiceEntry,
+  memberId: string | null,
+  memberTypeIds: string[] = [],
+): boolean {
+  if (!isExclusiveService(s)) return true
+  if (!memberId) return false
+  if ((s.memberIds ?? []).includes(memberId)) return true
+  const typeIds = s.memberTypeIds ?? []
+  return typeIds.length ? typeIds.some((t) => memberTypeIds.includes(t)) : false
 }
 
 // ============================================================

@@ -272,22 +272,25 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   }
 
   /**
-   * 互斥组裁决：优惠可归属多个组，须同时满足每个所属组的规则——
+   * 互斥组裁决（返回草稿）：优惠可归属多个组，须同时满足每个所属组的规则——
    * 即在所属的每个组里都得是当前减免最大者，任一组已被更优者占位即淘汰。
    * 按减免降序遍历，保证每组保留的确实是该组最大者。
+   * 返回草稿（而非记录），便于后续按「先打折后立减」重新实算 share。
    */
-  function pickDiscounts(drafts: DiscountDraft[]): DiscountRecord[] {
-    const chosen: DiscountRecord[] = []
+  function pickDrafts(drafts: DiscountDraft[]): DiscountDraft[] {
+    const chosen: DiscountDraft[] = []
     const usedGroups = new Set<string>()
     const sorted = [...drafts].sort((a, b) => b.record.discountAmount - a.record.discountAmount)
     for (const dr of sorted) {
       const gids = dr.discount.exclusiveGroupIds ?? []
       if (gids.some((g) => usedGroups.has(g))) continue
       for (const g of gids) usedGroups.add(g)
-      chosen.push(dr.record)
+      chosen.push(dr)
     }
     return chosen
   }
+
+
 
   // 上限组封顶
   function applyLimitGroups(
@@ -331,6 +334,91 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return result
   }
 
+  /**
+   * 按「先打折 → 后立减」规则计算各优惠的实际分摊额（share）。
+   *
+   * 1. percentage（打折）先计算：以「作用域基数 × 剩余容量比例」为当前运行基数，
+   *    减免额完整计入并显示（第一次计算值），不被后续立减裁剪；
+   * 2. 立减类（fixed / stepDown / perItem，含花式立减）后计算，贪心「大券优先」——
+   *    每轮取「以当前剩余可减金额为准」实际能减最多的券先行应用，故大小的判定
+   *    依据是 min(计算额, 当前剩余容量)，而非券面额；
+   * 3. 容量（剩余应付金额）耗尽后，剩余立减券被裁剪，减免额为 0。
+   */
+  function computeShares(drafts: DiscountDraft[], items: OrderItem[]): DiscountRecord[] {
+    if (!drafts.length) return []
+    const originalSubtotal = subtotalOfItems(items)
+    let running = originalSubtotal // 剩余容量＝当前运行价格（折后应付）
+    if (running <= 0) return drafts.map((d) => ({ ...d.record, discountAmount: 0 }))
+
+    // 打折类 / 立减类（含花式立减）分离
+    const percentDrafts: DiscountDraft[] = []
+    const deductDrafts: DiscountDraft[] = []
+    for (const d of drafts) {
+      if (d.discount.ruleType === 'percentage') percentDrafts.push(d)
+      else deductDrafts.push(d)
+    }
+
+    // 预算各券的作用域基数与件数：贪心每轮都要用到，避免重复 O(items) 遍历
+    const meta = new Map<string, { scopeBase: number; units: number }>()
+    for (const d of drafts) {
+      meta.set(d.discount.id, {
+        scopeBase: scopeBaseAmount(d.discount, items),
+        units: d.discount.ruleType === 'perItem' ? scopeUnits(d.discount, items) : 0,
+      })
+    }
+
+    const shares = new Map<string, number>()
+
+    // 作用域基数随剩余容量等比缩放：打折后应付金额下降，后续立减的门槛与
+    // 计算基数同步下降——这正是「先打折后立减」的实质。
+    const scaledBase = (d: Discount): number => {
+      const m = meta.get(d.id)
+      return m ? Math.round((m.scopeBase * running) / originalSubtotal) : 0
+    }
+
+    // 1) 先打折：力度（单算减免额）大的先打，减免额完整计入
+    const percentSorted = [...percentDrafts].sort(
+      (a, b) => b.record.discountAmount - a.record.discountAmount,
+    )
+    for (const d of percentSorted) {
+      const amt = discountStore.calcDiscount(d.discount, scaledBase(d.discount), d.capturedRandom)
+      const actual = Math.max(0, Math.min(amt, running))
+      shares.set(d.discount.id, actual)
+      running -= actual
+    }
+
+    // 2) 后立减：贪心「大券优先」，大小以当前剩余容量为准
+    const pending = new Set<DiscountDraft>(deductDrafts)
+    while (pending.size > 0 && running > 0) {
+      let best: DiscountDraft | null = null
+      let bestEffective = 0
+      for (const d of pending) {
+        const m = meta.get(d.discount.id)
+        const units = d.discount.ruleType === 'perItem' ? (m?.units ?? 0) : undefined
+        const amt = discountStore.calcDiscount(
+          d.discount,
+          scaledBase(d.discount),
+          d.capturedRandom,
+          units,
+        )
+        // 大小判定：当前订单还能减多少，而非券面额
+        const effective = Math.max(0, Math.min(amt, running))
+        if (effective > bestEffective) {
+          bestEffective = effective
+          best = d
+        }
+      }
+      if (!best) break
+      shares.set(best.discount.id, bestEffective)
+      running -= bestEffective
+      pending.delete(best)
+    }
+    // 容量耗尽：剩余立减券减免额为 0
+    for (const d of pending) shares.set(d.discount.id, 0)
+
+    return drafts.map((d) => ({ ...d.record, discountAmount: shares.get(d.discount.id) ?? 0 }))
+  }
+
   // 给定记录的实际减免（已固化，直接返回；兼容旧逻辑兜底）
   function amountOf(rec: DiscountRecord): number {
     return rec.discountAmount
@@ -339,18 +427,19 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   // —— 最优用券方案 ——
   // 优先级：实际优惠额最大 > 用券数最少 > 优先消耗稀有券 > 优先消耗临期券
   // 互斥组（同组至多一个）在搜索阶段约束，上限组封顶在 planTotal 内计入。
-  // 说明：各优惠的减免额互不依赖（均按各自作用域基数独立计算），上限组只做「超额等比压缩」，
-  // 因此总额对候选集合单调不减，可用「上界剪枝 + 节点预算」的深度搜索求最优。
+  // 说明：share 实算存在「先打折后立减」的先后依赖（打折后的剩余容量决定后续立减额），
+  // 故 suffixMax 上界为近似值；实际打分一律走 computeShares 实算，
+  // 配合节点预算保证极端组合数下界面不卡顿（推荐方案与最终展示金额完全一致）。
 
   function subtotalOfItems(items: OrderItem[]): number {
     return items.reduce((s, it) => s + itemAmount(it), 0)
   }
 
-  /** 按规则实算一组草稿的总减免：互斥组择一 → 上限组封顶 → 不超过小计 */
+  /** 按规则实算一组草稿的总减免：互斥组择一 → 先打折后立减算 share → 上限组封顶 → 不超过小计 */
   function planTotal(list: DiscountDraft[], items: OrderItem[]): number {
     if (!list.length) return 0
     const base = subtotalOfItems(items)
-    const recs = applyLimitGroups(pickDiscounts(list), base, items)
+    const recs = applyLimitGroups(computeShares(pickDrafts(list), items), base, items)
     return Math.min(
       recs.reduce((s, r) => s + r.discountAmount, 0),
       base,
@@ -481,9 +570,9 @@ export function useDiscountApply(ctx: () => ApplyContext) {
 
   function autoRecords(): DiscountRecord[] {
     const c = ctx()
-    const picked = pickDiscounts(drafts.value)
+    const shared = computeShares(pickDrafts(drafts.value), c.items)
     const totalBase = c.items.reduce((s, it) => s + itemAmount(it), 0)
-    return applyLimitGroups(picked, totalBase, c.items)
+    return applyLimitGroups(shared, totalBase, c.items)
   }
 
   /**
@@ -553,8 +642,9 @@ export function useDiscountApply(ctx: () => ApplyContext) {
 
   return {
     drafts,
-    pickDiscounts,
+    pickDrafts,
     applyLimitGroups,
+    computeShares,
     planTotal,
     bestPlan,
     amountOf,

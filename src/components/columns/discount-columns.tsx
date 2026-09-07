@@ -160,7 +160,7 @@ export function buildDiscountColumns(opts: {
       render: (row: Discount) => {
         if (isCouponRequired(row))
           return (
-            <NTag size="tiny" type="warning">
+            <NTag size="tiny" type="info">
               券码兑换
             </NTag>
           )

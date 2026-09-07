@@ -18,6 +18,8 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import {
   useDiscountApply,
   randomRangeLabel,
+  couponScarcity,
+  expiryUrgency,
   type DiscountDraft,
 } from '@/composables/useDiscountApply'
 import {
@@ -71,13 +73,37 @@ const autoDrafts = computed(() => apply.drafts.value)
 
 const allDrafts = computed<DiscountDraft[]>(() => [...autoDrafts.value, ...redeemed.value])
 
-// 折叠态只展示前若干项，展开后显示全部
-const COLLAPSED_COUNT = 3
-const collapsed = computed(() => !expanded.value && allDrafts.value.length > COLLAPSED_COUNT)
-const visibleDrafts = computed<DiscountDraft[]>(() =>
-  collapsed.value ? allDrafts.value.slice(0, COLLAPSED_COUNT) : allDrafts.value,
+/**
+ * 按系统打分优先级排序：实际减免额降序 → 稀缺度降序（优先消耗稀有券）→ 临期紧急度降序。
+ * 与 bestPlan 的 isBetter 取舍维度一致，保证列表顺序即推荐优先级。
+ */
+const sortedDrafts = computed<DiscountDraft[]>(() => {
+  // 先一次性算出排序键再排，避免比较器里重复计算稀缺度/临期度（每次比较都 new Date）
+  const keyed = allDrafts.value.map((d) => ({
+    d,
+    amount: d.record.discountAmount,
+    scarcity: couponScarcity(d.discount),
+    urgency: expiryUrgency(d.discount),
+  }))
+  keyed.sort((a, b) => {
+    if (a.amount !== b.amount) return b.amount - a.amount
+    if (a.scarcity !== b.scarcity) return b.scarcity - a.scarcity
+    return b.urgency - a.urgency
+  })
+  return keyed.map((x) => x.d)
+})
+
+// 折叠策略：已激活（勾选）的优惠一律展示，与数量无关；未勾选的才置入折叠区
+const activeDrafts = computed<DiscountDraft[]>(() =>
+  sortedDrafts.value.filter((d) => checked.value.has(d.discount.id)),
 )
-const hiddenCount = computed(() => allDrafts.value.length - visibleDrafts.value.length)
+const inactiveDrafts = computed<DiscountDraft[]>(() =>
+  sortedDrafts.value.filter((d) => !checked.value.has(d.discount.id)),
+)
+const visibleDrafts = computed<DiscountDraft[]>(() =>
+  expanded.value ? sortedDrafts.value : activeDrafts.value,
+)
+const hiddenCount = computed(() => inactiveDrafts.value.length)
 
 const subtotal = computed(() => subtotalOf(props.items ?? []))
 
@@ -224,12 +250,12 @@ watch(
   { immediate: true },
 )
 
-// 勾选变化时按规则重算（上限组封顶会随入选集合变化，故每次都实算而非取缓存值）
+// 勾选变化时按规则重算：互斥组择一 →「先打折后立减」实算 share → 上限组封顶。
+// share 实算已保证各券分摊额之和 ≤ 小计（容量耗尽的小券被裁剪至 0），无需再额外压缩。
 const discountedRecords = computed<DiscountRecord[]>(() => {
-  const chosen = apply.pickDiscounts(
-    allDrafts.value.filter((d) => checked.value.has(d.discount.id)),
-  )
-  return apply.applyLimitGroups(chosen, subtotal.value, props.items ?? [])
+  const picked = apply.pickDrafts(allDrafts.value.filter((d) => checked.value.has(d.discount.id)))
+  const shared = apply.computeShares(picked, props.items ?? [])
+  return apply.applyLimitGroups(shared, subtotal.value, props.items ?? [])
 })
 
 const discountAmount = computed(() =>
@@ -247,13 +273,29 @@ const effectiveAmounts = computed(() => {
 function amountOf(d: DiscountDraft): number {
   return effectiveAmounts.value.get(d.discount.id) ?? d.record.discountAmount
 }
-// 受上限组压缩：实际减免少于单算
-function isCapped(d: DiscountDraft): boolean {
+/**
+ * 券溢出：本券实算减免被裁剪（实算 < 单算）——成因是订单容量被前面的大券占满，
+ * 或受上限组压缩。包含「完全归零」与「部分裁剪」两种程度，均需给出提示。
+ */
+function isOverflow(d: DiscountDraft): boolean {
   return checked.value.has(d.discount.id) && amountOf(d) < d.record.discountAmount
 }
+/** 完全溢出：实算减免被裁剪到 0（单算仍有金额，即一分未减到） */
+function isFullyOverflow(d: DiscountDraft): boolean {
+  return isOverflow(d) && amountOf(d) === 0
+}
+/** 裁剪原因提示：区分「完全溢出」与「部分裁剪」 */
+function capTitle(d: DiscountDraft): string | undefined {
+  if (!isOverflow(d)) return undefined
+  const single = d.record.discountAmount
+  const actual = amountOf(d)
+  if (actual === 0) return `券溢出：订单可减金额已被其他优惠占满，本券实减 ¥0（单算 ${fmt(single)}）`
+  return `券被裁剪：订单容量不足或受上限组限制，实减 ${fmt(actual)}，少于单算 ${fmt(single)}`
+}
+const overflowCount = computed(() => sortedDrafts.value.filter((d) => isOverflow(d)).length)
 
-// 当前方案与推荐方案的差额（超额部分不计，故与小计取 min）
-const currentTotal = computed(() => Math.min(discountAmount.value, subtotal.value))
+// 当前方案与推荐方案的差额
+const currentTotal = computed(() => discountAmount.value)
 const recommendExtra = computed(() => Math.max(0, best.value.total - currentTotal.value))
 
 /** 带货币单位的减免额：正数前加负号，零值不显示符号 */
@@ -261,6 +303,7 @@ function amountText(cents: number): string {
   return cents > 0 ? `-${fmt(cents)}` : fmt(cents)
 }
 
+// 对外暴露的 records：share 实算后的版本，sum ≤ subtotal
 const records = computed<DiscountRecord[]>(() => discountedRecords.value)
 
 // 把当前生效记录交给应用层，供 commitUsage 读取，并向上同步
@@ -410,14 +453,24 @@ defineExpose({
                 <NTag v-if="bestIds.has(d.discount.id)" size="tiny" type="success" :bordered="false"
                   >推荐</NTag
                 >
+                <NTag
+                  v-if="isOverflow(d)"
+                  size="tiny"
+                  :type="isFullyOverflow(d) ? 'error' : 'warning'"
+                  :bordered="false"
+                  :title="capTitle(d)"
+                  >{{ isFullyOverflow(d) ? '溢出' : '被裁剪' }}</NTag
+                >
               </NFlex>
               <NFlex align="center" :size="8" class="draft-meta">
                 <NText depth="3" class="rule-text">{{ ruleTextOf(d) }}</NText>
                 <NText
                   class="amount-cell"
-                  :type="checked.has(d.discount.id) ? 'error' : 'default'"
+                  :type="
+                    isOverflow(d) ? 'warning' : checked.has(d.discount.id) ? 'error' : 'default'
+                  "
                   depth="3"
-                  :title="isCapped(d) ? '受上限组限制，实际减免少于单算' : undefined"
+                  :title="capTitle(d)"
                   >{{ amountText(amountOf(d)) }}</NText
                 >
               </NFlex>
@@ -425,12 +478,12 @@ defineExpose({
           </NCheckbox>
 
           <NButton
-            v-if="allDrafts.length > COLLAPSED_COUNT"
+            v-if="inactiveDrafts.length"
             text
             size="tiny"
             @click="expanded = !expanded"
           >
-            {{ expanded ? '收起' : `展开全部（还有 ${hiddenCount} 项）` }}
+            {{ expanded ? '收起未选优惠' : `展开未选优惠（${hiddenCount} 项）` }}
           </NButton>
         </NFlex>
       </NCard>
@@ -445,6 +498,9 @@ defineExpose({
           </NText>
           <NText v-if="recommendExtra > 0" depth="3" style="font-size: 12px">
             推荐多减 {{ fmt(recommendExtra) }}
+          </NText>
+          <NText v-if="overflowCount > 0" type="warning" depth="3" style="font-size: 12px">
+            {{ overflowCount }} 张券未全额生效
           </NText>
         </NFlex>
         <NFlex align="center" :size="4" style="flex-shrink: 0">
