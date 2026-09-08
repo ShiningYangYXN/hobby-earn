@@ -6,6 +6,8 @@ import {
   NDataTable,
   NButton,
   NFlex,
+  NGrid,
+  NGridItem,
   NEmpty,
   NCard,
   NInput,
@@ -46,8 +48,8 @@ const categoryOptions = computed(() => [
   ...categoryStore.categories.map((c) => ({ label: c.name, value: c.id })),
 ])
 const modeOptions = [
-  { label: '全部计价方式', value: '' },
-  { label: '工时', value: 'hourly' },
+  { label: '全部计价', value: '' },
+  { label: '按工时', value: 'hourly' },
   { label: '按件', value: 'perPiece' },
 ]
 const activeOptions = [
@@ -133,50 +135,62 @@ onMounted(() => {
     <NH2 prefix="bar">服务管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
-        <NFlex align="center" justify="space-between" :size="12" wrap>
-          <NFlex align="center" :size="12" wrap>
+        <NGrid cols="12" :x-gap="12" :y-gap="12" align="center">
+          <NGridItem :span="2">
             <NInput
               v-model:value="keyword"
               placeholder="搜索名称 / 分类"
               clearable
-              class="filter-control"
+              style="width: 100%"
             />
+          </NGridItem>
+          <NGridItem>
             <NSelect
               v-model:value="filterCategory"
               :options="categoryOptions"
-              class="filter-control"
+              style="width: 100%"
             />
-            <NSelect v-model:value="filterMode" :options="modeOptions" class="filter-control" />
-            <NSelect v-model:value="filterActive" :options="activeOptions" class="filter-control" />
-          </NFlex>
-          <NFlex align="center" :size="12" wrap>
-            <NButton @click="router.push({ name: 'categories' })">
-              <NIcon :size="16">
+          </NGridItem>
+          <NGridItem>
+            <NSelect v-model:value="filterMode" :options="modeOptions" style="width: 100%" />
+          </NGridItem>
+          <NGridItem>
+            <NSelect v-model:value="filterActive" :options="activeOptions" style="width: 100%" />
+          </NGridItem>
+          <NGridItem :span="3" />
+          <NGridItem>
+            <NButton @click="router.push({ name: 'categories' })" style="width: 100%">
+              <NIcon>
                 <IconTags />
               </NIcon>
               管理分类
             </NButton>
-            <NButton @click="router.push({ name: 'service-exclusive-groups' })">
-              <NIcon :size="16">
+          </NGridItem>
+          <NGridItem>
+            <NButton @click="router.push({ name: 'service-exclusive-groups' })" style="width: 100%">
+              <NIcon>
                 <IconLayersIntersect />
               </NIcon>
               管理互斥组
             </NButton>
-            <NButton @click="router.push({ name: 'service-limit-groups' })">
-              <NIcon :size="16">
+          </NGridItem>
+          <NGridItem>
+            <NButton @click="router.push({ name: 'service-limit-groups' })" style="width: 100%">
+              <NIcon>
                 <IconTransitionTop />
               </NIcon>
               管理限购组
             </NButton>
-            <NButton type="primary" @click="openCreate">
-              <NIcon :size="16">
+          </NGridItem>
+          <NGridItem>
+            <NButton type="primary" @click="openCreate" style="width: 100%">
+              <NIcon>
                 <IconPlus />
               </NIcon>
               新建服务
             </NButton>
-          </NFlex>
-        </NFlex>
-
+          </NGridItem>
+        </NGrid>
         <NDataTable
           v-if="filtered.length"
           :columns="columns"
@@ -191,3 +205,5 @@ onMounted(() => {
     </NCard>
   </NFlex>
 </template>
+
+<style scoped></style>

@@ -6,6 +6,8 @@ import {
   NDataTable,
   NButton,
   NFlex,
+  NGrid,
+  NGridItem,
   NEmpty,
   NCard,
   NSelect,
@@ -148,39 +150,48 @@ onMounted(() => {
   <NFlex vertical :size="16">
     <NH2 prefix="bar">订单管理</NH2>
     <NCard>
-      <NFlex vertical :size="16">
-        <NFlex align="center" justify="space-between" wrap>
-          <NFlex align="center" wrap>
+      <NFlex vertical :size="12">
+        <NGrid cols="12" :x-gap="12" :y-gap="12" align="center">
+          <NGridItem :span="2">
             <NInput
               v-model:value="keyword"
               placeholder="搜索会员 / 订单号"
               clearable
-              class="filter-control"
+              style="width: 100%"
             />
-            <NSelect v-model:value="statusFilter" :options="statusOptions" class="filter-control" />
-            <NSelect v-model:value="memberFilter" :options="memberOptions" class="filter-control" />
+          </NGridItem>
+          <NGridItem>
+            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 100%" />
+          </NGridItem>
+          <NGridItem>
+            <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 100%" />
+          </NGridItem>
+          <NGridItem>
             <NSelect
               v-model:value="discountFilter"
               :options="discountOptions"
-              class="filter-control"
+              style="width: 100%"
             />
+          </NGridItem>
+          <NGridItem :span="3">
             <NDatePicker
               v-model:value="dateRange"
               type="daterange"
               clearable
               placeholder="下单日期"
-              class="filter-control--date"
+              style="width: 100%"
             />
-          </NFlex>
-          <NFlex align="center" :size="12" wrap>
-            <NButton type="primary" @click="openCreate">
+          </NGridItem>
+          <NGridItem :span="3" />
+          <NGridItem>
+            <NButton type="primary" @click="openCreate" style="width: 100%">
               <NIcon>
                 <IconPlus />
               </NIcon>
               新建订单
             </NButton>
-          </NFlex>
-        </NFlex>
+          </NGridItem>
+        </NGrid>
         <NDataTable
           v-if="list.length"
           :columns="columns"
