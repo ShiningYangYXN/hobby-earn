@@ -6,8 +6,6 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NGrid,
-  NGridItem,
   NEmpty,
   NCard,
   NInput,
@@ -142,47 +140,36 @@ onMounted(() => {
     <NH2 prefix="bar">优惠管理</NH2>
     <NCard>
       <NFlex vertical :size="16">
-        <NGrid cols="12" :x-gap="12" :y-gap="12" align="center">
-          <NGridItem :span="2">
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索名称 / 券码"
-              clearable
-              style="width: 100%"
-            />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="filterRule" :options="ruleOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="filterStatus" :options="statusOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem :span="5" />
-          <NGridItem>
-            <NButton style="width: 100%" @click="openExclusiveGroups">
+        <NFlex align="center" :size="12" wrap>
+          <NInput
+            v-model:value="keyword"
+            class="toolbar__field toolbar__field--grow"
+            placeholder="搜索名称 / 券码"
+            clearable
+          />
+          <NSelect v-model:value="filterRule" :options="ruleOptions" class="toolbar__field" />
+          <NSelect v-model:value="filterStatus" :options="statusOptions" class="toolbar__field" />
+          <NFlex class="toolbar__actions" :size="12">
+            <NButton @click="openExclusiveGroups">
               <NIcon>
                 <IconLayersIntersect />
               </NIcon>
               管理互斥组
             </NButton>
-          </NGridItem>
-          <NGridItem>
-            <NButton style="width: 100%" @click="openLimitGroups">
+            <NButton @click="openLimitGroups">
               <NIcon>
                 <IconTransitionTop />
               </NIcon>
               管理上限组
             </NButton>
-          </NGridItem>
-          <NGridItem>
-            <NButton type="primary" style="width: 100%" @click="openCreate">
+            <NButton type="primary" @click="openCreate">
               <NIcon>
                 <IconPlus />
               </NIcon>
               新建优惠
             </NButton>
-          </NGridItem>
-        </NGrid>
+          </NFlex>
+        </NFlex>
 
         <NDataTable
           v-if="filtered.length"

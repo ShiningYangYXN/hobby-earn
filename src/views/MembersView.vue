@@ -5,8 +5,6 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NGrid,
-  NGridItem,
   NCard,
   NSelect,
   NInput,
@@ -147,39 +145,30 @@ watch(
 
     <NCard>
       <NFlex vertical :size="12">
-        <NGrid cols="12" :x-gap="12" :y-gap="12" align="center">
-          <NGridItem :span="2">
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索姓名 / 手机"
-              clearable
-              style="width: 100%"
-            />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="typeFilter" :options="typeOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem :span="6" />
-          <NGridItem>
-            <NButton @click="openTypeManagement" style="width: 100%">
+        <NFlex align="center" :size="12" wrap>
+          <NInput
+            v-model:value="keyword"
+            class="toolbar__field toolbar__field--grow"
+            placeholder="搜索姓名 / 手机"
+            clearable
+          />
+          <NSelect v-model:value="typeFilter" :options="typeOptions" class="toolbar__field" />
+          <NSelect v-model:value="statusFilter" :options="statusOptions" class="toolbar__field" />
+          <NFlex class="toolbar__actions" :size="12">
+            <NButton @click="openTypeManagement">
               <NIcon>
                 <IconTags />
               </NIcon>
               管理种类
             </NButton>
-          </NGridItem>
-          <NGridItem>
-            <NButton type="primary" @click="openNew" style="width: 100%">
+            <NButton type="primary" @click="openNew">
               <NIcon>
                 <IconPlus />
               </NIcon>
               新建会员
             </NButton>
-          </NGridItem>
-        </NGrid>
+          </NFlex>
+        </NFlex>
         <NDataTable
           v-if="list.length"
           :columns="columns"

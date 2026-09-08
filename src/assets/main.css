@@ -40,3 +40,36 @@ body {
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
+
+/* 列表页表头控件栏（配合 NFlex，默认 wrap）：控件按基准宽度自动换行，
+   取代固定 12 列 NGrid —— 后者在窄屏会把每列压到十几像素、完全不可用。
+   .toolbar__field：筛选控件，可伸缩；--grow 让搜索框占双倍；--wide 给日期区间等宽控件。
+   .toolbar__actions：按钮组，宽屏靠右；≤700px 独占一行、按钮等分；
+   ≤480px 每个筛选控件独占一行，保证触控宽度。 */
+.toolbar__field {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.toolbar__field--grow {
+  flex-grow: 2;
+}
+.toolbar__field--wide {
+  flex-basis: 260px;
+}
+.toolbar__actions {
+  margin-left: auto;
+}
+@media (max-width: 700px) {
+  .toolbar__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .toolbar__actions > * {
+    flex: 1 1 140px;
+  }
+}
+@media (max-width: 480px) {
+  .toolbar__field {
+    flex-basis: 100%;
+  }
+}

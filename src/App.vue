@@ -101,25 +101,36 @@ const menuOptions: MenuOption[] = [
     <NMessageProvider>
       <NDialogProvider>
         <NLayout style="height: 100dvh">
-          <NLayoutHeader bordered>
-            <NPageHeader style="height: 64px; font-size: 32px">
+          <NLayoutHeader bordered class="app-header">
+            <NPageHeader class="app-header__bar">
               <template #avatar>
-                <NButton @click="$router.push('/')" text>
-                  <NIcon size="64px">
-                    <IconMoodDollar style="height: 48px" />
-                  </NIcon>
+                <NButton
+                  quaternary
+                  circle
+                  class="app-header__btn"
+                  title="回到首页"
+                  aria-label="回到首页"
+                  @click="$router.push('/')"
+                >
+                  <NIcon :size="28" :component="IconMoodDollar" />
                 </NButton>
               </template>
               <template #title>
-                <NText style="font-size: 24px">HobbyEarn</NText>
+                <NText class="app-header__title">HobbyEarn</NText>
               </template>
-              <template #subtitle> 玩赚·商家端 </template>
+              <template #subtitle>
+                <NText depth="3" class="app-header__subtitle">玩赚·商家端</NText>
+              </template>
               <template #extra>
-                <NButton @click="toggleDark()" text>
-                  <NIcon size="48px">
-                    <IconSun v-if="isDark" style="height: 24px" />
-                    <IconMoon v-else style="height: 24px" />
-                  </NIcon>
+                <NButton
+                  quaternary
+                  circle
+                  class="app-header__btn"
+                  :title="isDark ? '切换为浅色主题' : '切换为深色主题'"
+                  :aria-label="isDark ? '切换为浅色主题' : '切换为深色主题'"
+                  @click="toggleDark()"
+                >
+                  <NIcon :size="22" :component="isDark ? IconSun : IconMoon" />
                 </NButton>
               </template>
             </NPageHeader>
@@ -155,4 +166,37 @@ const menuOptions: MenuOption[] = [
   </NConfigProvider>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* 头部：NLayoutHeader 自带 0 内边距，这里统一为 20px，与 .app-content 左右留白对齐；
+   高度放在 header 上并用 flex 垂直居中，避免 NPageHeader 外层 wrapper 撑满、
+   内层 flex 行居顶导致的图标偏上。 */
+.app-header {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 20px;
+}
+.app-header__bar {
+  flex: 1;
+  min-width: 0;
+}
+/* 固定 40x40 后，NIcon 在按钮内被 flex 双向居中，不再受 svg 基线对齐影响 */
+.app-header__btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+.app-header__title {
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0 12px;
+  }
+  .app-header__subtitle {
+    display: none;
+  }
+}
+</style>

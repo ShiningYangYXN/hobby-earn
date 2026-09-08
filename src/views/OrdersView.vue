@@ -6,8 +6,6 @@ import {
   NDataTable,
   NButton,
   NFlex,
-  NGrid,
-  NGridItem,
   NEmpty,
   NCard,
   NSelect,
@@ -151,47 +149,36 @@ onMounted(() => {
     <NH2 prefix="bar">订单管理</NH2>
     <NCard>
       <NFlex vertical :size="12">
-        <NGrid cols="12" :x-gap="12" :y-gap="12" align="center">
-          <NGridItem :span="2">
-            <NInput
-              v-model:value="keyword"
-              placeholder="搜索会员 / 订单号"
-              clearable
-              style="width: 100%"
-            />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="statusFilter" :options="statusOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem>
-            <NSelect v-model:value="memberFilter" :options="memberOptions" style="width: 100%" />
-          </NGridItem>
-          <NGridItem>
-            <NSelect
-              v-model:value="discountFilter"
-              :options="discountOptions"
-              style="width: 100%"
-            />
-          </NGridItem>
-          <NGridItem :span="3">
-            <NDatePicker
-              v-model:value="dateRange"
-              type="daterange"
-              clearable
-              placeholder="下单日期"
-              style="width: 100%"
-            />
-          </NGridItem>
-          <NGridItem :span="3" />
-          <NGridItem>
-            <NButton type="primary" @click="openCreate" style="width: 100%">
+        <NFlex align="center" :size="12" wrap>
+          <NInput
+            v-model:value="keyword"
+            class="toolbar__field toolbar__field--grow"
+            placeholder="搜索会员 / 订单号"
+            clearable
+          />
+          <NSelect v-model:value="statusFilter" :options="statusOptions" class="toolbar__field" />
+          <NSelect v-model:value="memberFilter" :options="memberOptions" class="toolbar__field" />
+          <NSelect
+            v-model:value="discountFilter"
+            :options="discountOptions"
+            class="toolbar__field"
+          />
+          <NDatePicker
+            v-model:value="dateRange"
+            type="daterange"
+            clearable
+            placeholder="下单日期"
+            class="toolbar__field toolbar__field--wide"
+          />
+          <NFlex class="toolbar__actions" :size="12">
+            <NButton type="primary" @click="openCreate">
               <NIcon>
                 <IconPlus />
               </NIcon>
               新建订单
             </NButton>
-          </NGridItem>
-        </NGrid>
+          </NFlex>
+        </NFlex>
         <NDataTable
           v-if="list.length"
           :columns="columns"
