@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onUnmounted } from 'vue'
+import { ref, computed, reactive, watch, onUnmounted, nextTick } from 'vue'
 import {
   NModal,
   NCard,
@@ -11,7 +11,6 @@ import {
   NRadioButton,
   NTag,
   NFormItem,
-  NScrollbar,
   NSelect,
   NInputNumber,
   NIcon,
@@ -124,7 +123,11 @@ async function load() {
   Object.keys(running).forEach((k) => delete running[Number(k)])
   payMethod.value = o.paymentMethod ?? 'cash'
   newServiceId.value = null
-  discountPanel.value?.hydrate(o.discountRecords)
+  // 模态内容为懒渲染（display-directive="if" + teleport），必须等一帧让面板挂载，
+  // 否则 discountPanel 仍为 null，hydrate / finalizeRandom 静默失效、勾选状态不同步
+  await nextTick()
+  if (!discountPanel.value) await nextTick()
+  discountPanel.value?.hydrate(o.discountRecords ?? [])
   // 初始即为一个计费节点：补全随机优惠的资格与数额，避免展示未计优惠的金额
   discountPanel.value?.finalizeRandom?.()
 }
@@ -275,139 +278,134 @@ function closePricing() {
     preset="card"
     :maskClosable="false"
     @update:show="(v: boolean) => emit('update:show', v)"
+    content-scrollable
+    :segmented="{ content: true, footer: true }"
   >
-    <NScrollbar class="modal-scroll">
-      <template v-if="order">
-        <NFlex vertical :size="10">
-          <NFlex align="center" :size="8">
-            <NTag type="info" size="small">{{ order.memberName }}</NTag>
-            <NTag size="small" class="mono">单号 {{ order.id }}</NTag>
-            <NTag size="small" :type="statusType(order.status)">{{
-              statusLabel(order.status)
-            }}</NTag>
-          </NFlex>
+    <template v-if="order">
+      <NFlex vertical :size="10">
+        <NFlex align="center" :size="8">
+          <NTag type="info" size="small">{{ order.memberName }}</NTag>
+          <NTag size="small" class="mono">单号 {{ order.id }}</NTag>
+          <NTag size="small" :type="statusType(order.status)">{{ statusLabel(order.status) }}</NTag>
+        </NFlex>
 
-          <NEmpty v-if="!items.length" description="该订单无计价项目" />
-          <NCard v-for="(it, idx) in items" :key="idx" size="small">
-            <NFlex vertical :size="6">
-              <NFlex align="center" :size="6">
-                <NText strong>{{ it.serviceName }}</NText>
-                <NTag v-if="isExclusiveItem(it)" size="tiny" type="warning" :bordered="false"
-                  >专属</NTag
-                >
-              </NFlex>
-              <NText class="meter-num" style="font-size: 18px">{{ fmt(itemAmount(it)) }}</NText>
-              <NFlex align="center" justify="space-between">
-                <NText depth="3">{{ it.pricingMode === 'hourly' ? '已计时长' : '数量' }}</NText>
-                <NFlex align="center" :size="10">
-                  <NText v-if="it.pricingMode === 'hourly'" class="meter-num">{{
-                    fmtElapsed(it.elapsed ?? 0)
-                  }}</NText>
-                  <template v-if="it.pricingMode === 'hourly'">
-                    <NButton
-                      size="small"
-                      circle
-                      :type="running[idx] ? 'warning' : 'primary'"
-                      @click="toggle(idx)"
-                    >
-                      <NIcon v-if="!running[idx]">
-                        <IconPlayerPlay />
-                      </NIcon>
-                      <NIcon v-else>
-                        <IconPlayerPause />
-                      </NIcon>
-                    </NButton>
-                    <NButton size="small" circle @click="resetItem(idx)">
-                      <NIcon>
-                        <IconReload />
-                      </NIcon>
-                    </NButton>
-                  </template>
-                  <template v-else>
-                    <NText
-                      v-if="!editing[idx]"
-                      class="meter-num qty-display"
-                      @click="startEdit(idx)"
-                      >{{ it.quantity }}
-                    </NText>
-                    <NInputNumber
-                      v-else
-                      v-model:value="it.quantity"
-                      :min="1"
-                      size="small"
-                      style="width: 90px"
-                      v-focus
-                      @blur="stopEdit(idx)"
-                      @keyup.enter="stopEdit(idx)"
-                    />
-                  </template>
-                  <NButton size="small" circle quaternary type="error" @click="removeItem(idx)">
-                    <NIcon>
-                      <IconTrash />
+        <NEmpty v-if="!items.length" description="该订单无计价项目" />
+        <NCard v-for="(it, idx) in items" :key="idx" size="small">
+          <NFlex vertical :size="6">
+            <NFlex align="center" :size="6">
+              <NText strong>{{ it.serviceName }}</NText>
+              <NTag v-if="isExclusiveItem(it)" size="tiny" type="warning" :bordered="false"
+                >专属</NTag
+              >
+            </NFlex>
+            <NText class="meter-num" style="font-size: 18px">{{ fmt(itemAmount(it)) }}</NText>
+            <NFlex align="center" justify="space-between">
+              <NText depth="3">{{ it.pricingMode === 'hourly' ? '已计时长' : '数量' }}</NText>
+              <NFlex align="center" :size="10">
+                <NText v-if="it.pricingMode === 'hourly'" class="meter-num">{{
+                  fmtElapsed(it.elapsed ?? 0)
+                }}</NText>
+                <template v-if="it.pricingMode === 'hourly'">
+                  <NButton
+                    size="small"
+                    circle
+                    :type="running[idx] ? 'warning' : 'primary'"
+                    @click="toggle(idx)"
+                  >
+                    <NIcon v-if="!running[idx]">
+                      <IconPlayerPlay />
+                    </NIcon>
+                    <NIcon v-else>
+                      <IconPlayerPause />
                     </NIcon>
                   </NButton>
-                </NFlex>
+                  <NButton size="small" circle @click="resetItem(idx)">
+                    <NIcon>
+                      <IconReload />
+                    </NIcon>
+                  </NButton>
+                </template>
+                <template v-else>
+                  <NText v-if="!editing[idx]" class="meter-num qty-display" @click="startEdit(idx)"
+                    >{{ it.quantity }}
+                  </NText>
+                  <NInputNumber
+                    v-else
+                    v-model:value="it.quantity"
+                    :min="1"
+                    size="small"
+                    style="width: 90px"
+                    v-focus
+                    @blur="stopEdit(idx)"
+                    @keyup.enter="stopEdit(idx)"
+                  />
+                </template>
+                <NButton size="small" circle quaternary type="error" @click="removeItem(idx)">
+                  <NIcon>
+                    <IconTrash />
+                  </NIcon>
+                </NButton>
               </NFlex>
             </NFlex>
-          </NCard>
+          </NFlex>
+        </NCard>
 
-          <NCard size="small">
+        <NCard size="small">
+          <NFlex justify="space-between" align="center">
+            <NText depth="3">补充服务项目</NText>
+            <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
+              <NSelect
+                v-model:value="newServiceId"
+                :options="priceOptions"
+                placeholder="选择要追加的服务"
+                clearable
+                filterable
+                style="flex: 1; min-width: 0"
+              />
+              <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService"
+                >添加</NButton
+              >
+            </NFlex>
+          </NFlex>
+        </NCard>
+
+        <DiscountApplyPanel
+          ref="discountPanel"
+          :member-id="order?.memberId ?? null"
+          :items="items"
+          @change="(_recs: DiscountRecord[], amt: number) => (discountAmount = amt)"
+        />
+
+        <NCard size="small">
+          <NFlex vertical :size="6">
             <NFlex justify="space-between" align="center">
-              <NText depth="3">补充服务项目</NText>
-              <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
-                <NSelect
-                  v-model:value="newServiceId"
-                  :options="priceOptions"
-                  placeholder="选择要追加的服务"
-                  clearable
-                  filterable
-                  style="flex: 1; min-width: 0"
-                />
-                <NButton size="small" type="primary" :disabled="!newServiceId" @click="addService"
-                  >添加</NButton
-                >
-              </NFlex>
+              <NText depth="3">小计</NText>
+              <NText>{{ fmt(liveSubtotal) }}</NText>
             </NFlex>
-          </NCard>
-
-          <DiscountApplyPanel
-            ref="discountPanel"
-            :member-id="order?.memberId ?? null"
-            :items="items"
-            @change="(_recs: DiscountRecord[], amt: number) => (discountAmount = amt)"
-          />
-
-          <NCard size="small">
-            <NFlex vertical :size="6">
-              <NFlex justify="space-between" align="center">
-                <NText depth="3">小计</NText>
-                <NText>{{ fmt(liveSubtotal) }}</NText>
-              </NFlex>
-              <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
-                <NText depth="3">优惠合计</NText>
-                <NText type="error">-{{ fmt(discountAmount) }}</NText>
-              </NFlex>
-              <NFlex justify="space-between" align="center">
-                <NText strong>金额</NText>
-                <NText type="warning" class="meter-num" style="font-size: 20px">{{
-                  fmt(payable)
-                }}</NText>
-              </NFlex>
+            <NFlex v-if="discountAmount > 0" justify="space-between" align="center">
+              <NText depth="3">优惠合计</NText>
+              <NText type="error">-{{ fmt(discountAmount) }}</NText>
             </NFlex>
-          </NCard>
+            <NFlex justify="space-between" align="center">
+              <NText strong>金额</NText>
+              <NText type="warning" class="meter-num" style="font-size: 20px">{{
+                fmt(payable)
+              }}</NText>
+            </NFlex>
+          </NFlex>
+        </NCard>
 
-          <NFormItem label="支付方式">
-            <NRadioGroup v-model:value="payMethod">
-              <NRadioButton v-for="p in payOpts" :key="p.value" :value="p.value">{{
-                p.label
-              }}</NRadioButton>
-            </NRadioGroup>
-          </NFormItem>
+        <NFormItem label="支付方式">
+          <NRadioGroup v-model:value="payMethod">
+            <NRadioButton v-for="p in payOpts" :key="p.value" :value="p.value">{{
+              p.label
+            }}</NRadioButton>
+          </NRadioGroup>
+        </NFormItem>
 
-          <NText v-if="order.notes" depth="3" class="detail-note">备注：{{ order.notes }}</NText>
-        </NFlex>
-      </template>
-    </NScrollbar>
+        <NText v-if="order.notes" depth="3" class="detail-note">备注：{{ order.notes }}</NText>
+      </NFlex>
+    </template>
     <template #footer>
       <NFlex justify="end">
         <NButton @click="closePricing">

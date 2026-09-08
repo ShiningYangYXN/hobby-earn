@@ -519,12 +519,7 @@ async function applyManualMerge() {
     </template>
   </NModal>
 
-  <NModal
-    v-model:show="manualSolveVisible"
-    title="手动合并（冲突求解）"
-    style="max-width: 880px"
-    preset="card"
-  >
+  <NModal v-model:show="manualSolveVisible" title="手动合并" style="max-width: 880px" preset="card">
     <template #default>
       <NText depth="3">
         共
@@ -713,40 +708,49 @@ async function applyManualMerge() {
   color: var(--lite-hl-comment);
   font-style: italic;
 }
+
 .json-box :deep(.hljs-string),
 .json-editor__hl :deep(.hljs-string) {
   color: var(--lite-hl-string);
 }
+
 .json-box :deep(.hljs-number),
 .json-editor__hl :deep(.hljs-number) {
   color: var(--lite-hl-number);
 }
+
 .json-box :deep(.hljs-keyword),
 .json-editor__hl :deep(.hljs-keyword) {
   color: var(--lite-hl-keyword);
   font-weight: 600;
 }
+
 .json-box :deep(.hljs-literal),
 .json-editor__hl :deep(.hljs-literal) {
   color: var(--lite-hl-literal);
   font-weight: 600;
 }
+
 .json-box :deep(.hljs-title.function_),
 .json-editor__hl :deep(.hljs-title.function_) {
   color: var(--lite-hl-function);
 }
+
 .json-box :deep(.hljs-variable),
 .json-editor__hl :deep(.hljs-variable) {
   color: var(--lite-hl-variable);
 }
+
 .json-box :deep(.hljs-attr),
 .json-editor__hl :deep(.hljs-attr) {
   color: var(--lite-hl-attr);
 }
+
 .json-box :deep(.hljs-operator),
 .json-editor__hl :deep(.hljs-operator) {
   color: var(--lite-hl-operator);
 }
+
 .json-box :deep(.hljs-punctuation),
 .json-editor__hl :deep(.hljs-punctuation) {
   color: var(--lite-hl-punctuation);

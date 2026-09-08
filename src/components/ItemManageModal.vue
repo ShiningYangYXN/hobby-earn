@@ -10,7 +10,6 @@ import {
   NButton,
   NIcon,
   NText,
-  NScrollbar,
   NDivider,
   useMessage,
   NPopconfirm,
@@ -113,60 +112,69 @@ async function removeRow(id: string) {
     :style="{ width: width ? (typeof width === 'number' ? width + 'px' : width) : '520px' }"
     :bordered="false"
     @update:show="close"
+    content-scrollable
+    :segmented="{ content: true, footer: true }"
   >
-    <NScrollbar class="modal-scroll">
-      <NFlex vertical :size="16">
-        <NFlex vertical :size="12">
-          <NGrid cols="2" xGap="12" itemResponsive>
-            <NGi>
-              <NText depth="3" class="small-label">名称</NText>
-              <NInput v-model:value="form.name" placeholder="名称" @keyup.enter="save" />
-            </NGi>
-            <slot name="form-extra" :form="form" />
-          </NGrid>
-          <NFlex :size="8">
-            <NButton type="primary" @click="save">
-              <NIcon>
-                <IconPlus v-if="!editingId" />
-                <IconDeviceFloppy v-else />
-              </NIcon>
-              {{ editingId ? '保存' : '添加' }}
-            </NButton>
-            <NButton v-if="editingId" @click="reset">
-              <NIcon><IconX /></NIcon> 取消
-            </NButton>
-          </NFlex>
+    <NFlex vertical :size="16">
+      <NFlex vertical :size="12">
+        <NGrid cols="2" xGap="12" itemResponsive>
+          <NGi>
+            <NText depth="3" class="small-label">名称</NText>
+            <NInput v-model:value="form.name" placeholder="名称" @keyup.enter="save" />
+          </NGi>
+          <slot name="form-extra" :form="form" />
+        </NGrid>
+        <NFlex :size="8">
+          <NButton type="primary" @click="save">
+            <NIcon>
+              <IconPlus v-if="!editingId" />
+              <IconDeviceFloppy v-else />
+            </NIcon>
+            {{ editingId ? '保存' : '添加' }}
+          </NButton>
+          <NButton v-if="editingId" @click="reset">
+            <NIcon>
+              <IconX />
+            </NIcon>
+            取消
+          </NButton>
         </NFlex>
+      </NFlex>
 
-        <NDivider />
+      <NDivider />
 
-        <NText v-if="!items.length" depth="3">暂无数据，请在上方添加。</NText>
-        <NFlex v-else vertical :size="6">
-          <NFlex
-            v-for="item in items"
-            :key="item.id"
-            align="center"
-            justify="space-between"
-            class="eg-row"
-          >
-            <NText>{{ rowLabel(item) }}</NText>
-            <NFlex :size="4">
-              <NButton size="tiny" @click="editRow(item)">
-                <NIcon><IconPencil /></NIcon> 编辑
-              </NButton>
-              <NPopconfirm @positive-click="removeRow(item.id)">
-                <template #trigger>
-                  <NButton size="tiny" type="error">
-                    <NIcon><IconTrash /></NIcon> 删除
-                  </NButton>
-                </template>
-                {{ confirmText ?? '确认删除？' }}
-              </NPopconfirm>
-            </NFlex>
+      <NText v-if="!items.length" depth="3">暂无数据，请在上方添加。</NText>
+      <NFlex v-else vertical :size="6">
+        <NFlex
+          v-for="item in items"
+          :key="item.id"
+          align="center"
+          justify="space-between"
+          class="eg-row"
+        >
+          <NText>{{ rowLabel(item) }}</NText>
+          <NFlex :size="4">
+            <NButton size="tiny" @click="editRow(item)">
+              <NIcon>
+                <IconPencil />
+              </NIcon>
+              编辑
+            </NButton>
+            <NPopconfirm @positive-click="removeRow(item.id)">
+              <template #trigger>
+                <NButton size="tiny" type="error">
+                  <NIcon>
+                    <IconTrash />
+                  </NIcon>
+                  删除
+                </NButton>
+              </template>
+              {{ confirmText ?? '确认删除？' }}
+            </NPopconfirm>
           </NFlex>
         </NFlex>
       </NFlex>
-    </NScrollbar>
+    </NFlex>
 
     <template #footer>
       <NFlex justify="end">
@@ -182,6 +190,7 @@ async function removeRow(id: string) {
   border: 1px solid var(--n-border-color);
   border-radius: 6px;
 }
+
 .small-label {
   display: block;
   margin-bottom: 4px;

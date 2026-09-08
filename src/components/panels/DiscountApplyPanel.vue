@@ -252,9 +252,19 @@ watch(
 
 // 勾选变化时按规则重算：互斥组择一 →「先打折后立减」实算 share → 上限组封顶。
 // share 实算已保证各券分摊额之和 ≤ 小计（容量耗尽的小券被裁剪至 0），无需再额外压缩。
+const checkedDrafts = computed<DiscountDraft[]>(() =>
+  allDrafts.value.filter((d) => checked.value.has(d.discount.id)),
+)
+// 互斥组裁决后真正参与实算的券；被淘汰者仍处于勾选态，须显式提示「未生效」
+const pickedDrafts = computed<DiscountDraft[]>(() => apply.pickDrafts(checkedDrafts.value))
+const excludedIds = computed(() => {
+  const picked = new Set(pickedDrafts.value.map((d) => d.discount.id))
+  return new Set(
+    checkedDrafts.value.filter((d) => !picked.has(d.discount.id)).map((d) => d.discount.id),
+  )
+})
 const discountedRecords = computed<DiscountRecord[]>(() => {
-  const picked = apply.pickDrafts(allDrafts.value.filter((d) => checked.value.has(d.discount.id)))
-  const shared = apply.computeShares(picked, props.items ?? [])
+  const shared = apply.computeShares(pickedDrafts.value, props.items ?? [])
   return apply.applyLimitGroups(shared, subtotal.value, props.items ?? [])
 })
 
@@ -264,36 +274,111 @@ const discountAmount = computed(() =>
 
 const finalAmount = computed(() => Math.max(0, subtotal.value - discountAmount.value))
 
-// 每行展示「当前选中集合下实算得到的减免」，而非该券单算的缓存值
+// 每行展示「当前选中集合下实算得到的减免」，而非该券单算的缓存值。
+// 被互斥组淘汰的券不产生实算记录，显式记为 0，避免沿用单算额造成金额与提示失真。
 const effectiveAmounts = computed(() => {
   const m = new Map<string, number>()
+  for (const d of checkedDrafts.value) m.set(d.discount.id, 0)
   for (const r of discountedRecords.value) m.set(r.discountId, r.discountAmount)
   return m
 })
 function amountOf(d: DiscountDraft): number {
   return effectiveAmounts.value.get(d.discount.id) ?? d.record.discountAmount
 }
+
 /**
- * 券溢出：本券实算减免被裁剪（实算 < 单算）——成因是订单容量被前面的大券占满，
- * 或受上限组压缩。包含「完全归零」与「部分裁剪」两种程度，均需给出提示。
+ * 券的生效状态：凡是「勾上了却没按面额生效」的券都必须给出可见提示，
+ * 覆盖未达门槛 / 互斥淘汰 / 容量耗尽（溢出）/ 部分裁剪 / 面额未用满五种情形。
  */
-function isOverflow(d: DiscountDraft): boolean {
-  return checked.value.has(d.discount.id) && amountOf(d) < d.record.discountAmount
+type CapState = 'ok' | 'threshold' | 'excluded' | 'overflow' | 'clipped' | 'waste'
+interface DraftCap {
+  state: CapState
+  label: string // 空串＝不显示标签
+  type: 'default' | 'warning' | 'error'
+  title: string // 空串＝不显示提示
 }
-/** 完全溢出：实算减免被裁剪到 0（单算仍有金额，即一分未减到） */
-function isFullyOverflow(d: DiscountDraft): boolean {
-  return isOverflow(d) && amountOf(d) === 0
+const NO_CAP: DraftCap = { state: 'ok', label: '', type: 'default', title: '' }
+
+/**
+ * 券面额：未受保底消费 / 封顶 / 订单容量影响的理论减免额。
+ * 阶梯与件数类随订单结构浮动，无稳定的「面额」可言，故不参与「未用满」判定。
+ */
+function nominalOf(d: DiscountDraft, items: OrderItem[]): number | null {
+  const disc = d.discount
+  if (disc.ruleType === 'fixed') {
+    return disc.random?.kind === 'amount' && d.capturedRandom != null
+      ? d.capturedRandom
+      : disc.value
+  }
+  if (disc.ruleType === 'percentage') {
+    const r =
+      disc.random?.kind === 'ratio' && d.capturedRandom != null ? d.capturedRandom : disc.value
+    return Math.round((apply.scopeBaseAmount(disc, items) * (100 - r)) / 100)
+  }
+  return null
 }
-/** 裁剪原因提示：区分「完全溢出」与「部分裁剪」 */
-function capTitle(d: DiscountDraft): string | undefined {
-  if (!isOverflow(d)) return undefined
-  const single = d.record.discountAmount
-  const actual = amountOf(d)
-  if (actual === 0)
-    return `券溢出：订单可减金额已被其他优惠占满，本券实减 ¥0（单算 ${fmt(single)}）`
-  return `券被裁剪：订单容量不足或受上限组限制，实减 ${fmt(actual)}，少于单算 ${fmt(single)}`
+
+function buildCap(d: DiscountDraft, items: OrderItem[], excluded: Set<string>): DraftCap {
+  if (!checked.value.has(d.discount.id)) return NO_CAP
+  const single = d.record.discountAmount // 单算额（不受组合影响）
+  const actual = amountOf(d) // 当前选中集合下的实算额
+  const min = d.discount.minAmount ?? 0
+  if (apply.scopeBaseAmount(d.discount, items) < min) {
+    return {
+      state: 'threshold',
+      label: '未达门槛',
+      type: 'warning',
+      title: `未达保底消费 ${fmt(min)}，本券本单不生效`,
+    }
+  }
+  if (excluded.has(d.discount.id)) {
+    return {
+      state: 'excluded',
+      label: '互斥未生效',
+      type: 'warning',
+      title: `与已选的更优优惠同属互斥组（同组只能用一张），本券本单不生效`,
+    }
+  }
+  if (actual < single) {
+    return actual === 0
+      ? {
+          state: 'overflow',
+          label: '溢出',
+          type: 'error',
+          title: `券溢出：订单可减金额已被其他优惠占满，本券实减 ¥0.00（单算 ${fmt(single)}）`,
+        }
+      : {
+          state: 'clipped',
+          label: '被裁剪',
+          type: 'warning',
+          title: `券被裁剪：订单容量不足或受上限组限制，实减 ${fmt(actual)}，少于单算 ${fmt(single)}`,
+        }
+  }
+  const nominal = nominalOf(d, items)
+  if (nominal != null && actual < nominal) {
+    return {
+      state: 'waste',
+      label: '未用满',
+      type: 'warning',
+      title: `券面额 ${fmt(nominal)}，实减仅 ${fmt(actual)}：差额受订单可减金额或优惠上限限制，本次不结转`,
+    }
+  }
+  return NO_CAP
 }
-const overflowCount = computed(() => sortedDrafts.value.filter((d) => isOverflow(d)).length)
+
+// 逐券状态预计算：模板每行直接读取结果，避免重复遍历订单项
+const caps = computed(() => {
+  const items = props.items ?? []
+  const excluded = excludedIds.value
+  const m = new Map<string, DraftCap>()
+  for (const d of allDrafts.value) m.set(d.discount.id, buildCap(d, items, excluded))
+  return m
+})
+function capOf(d: DiscountDraft): DraftCap {
+  return caps.value.get(d.discount.id) ?? NO_CAP
+}
+/** 未全额生效的券数量（含完全未生效与额度未用满） */
+const cappedCount = computed(() => sortedDrafts.value.filter((d) => capOf(d).state !== 'ok').length)
 
 // 当前方案与推荐方案的差额
 const currentTotal = computed(() => discountAmount.value)
@@ -366,9 +451,14 @@ defineExpose({
     // 能识别的优惠默认恢复勾选；有历史选择即视为用户选择，不再自动套用最优方案
     let restored = 0
     for (const id of ids) {
-      if (discountStore.discounts.some((d) => d.id === id)) {
-        checked.value.add(id)
-        restored++
+      const d = discountStore.discounts.find((x) => x.id === id)
+      if (!d) continue
+      checked.value.add(id)
+      restored++
+      // 券码类优惠不在自动候选里，须按历史记录重建草稿，否则计价/编辑时该券凭空消失
+      if (d.couponCode && !redeemed.value.some((r) => r.discount.id === id)) {
+        const draft = apply.buildDraft(d)
+        if (draft) redeemed.value.push(draft)
       }
     }
     if (restored) manual.value = true
@@ -415,7 +505,7 @@ defineExpose({
           >
             <NFlex justify="space-between" class="draft-row">
               <NFlex align="center" :size="6" class="draft-name">
-                <NText class="name-text">{{ d.discount.name }}</NText>
+                <NText class="name-text" :title="d.discount.name">{{ d.discount.name }}</NText>
                 <NTag v-if="d.discount.couponCode" size="tiny" type="info" :bordered="false"
                   >券码</NTag
                 >
@@ -454,24 +544,31 @@ defineExpose({
                 <NTag v-if="bestIds.has(d.discount.id)" size="tiny" type="success" :bordered="false"
                   >推荐</NTag
                 >
-                <NTag
-                  v-if="isOverflow(d)"
-                  size="tiny"
-                  :type="isFullyOverflow(d) ? 'error' : 'warning'"
-                  :bordered="false"
-                  :title="capTitle(d)"
-                  >{{ isFullyOverflow(d) ? '溢出' : '被裁剪' }}</NTag
-                >
               </NFlex>
+              <!-- 状态标签放在右侧金额列之前：名称区会被省略号压缩，标签留那里容易被截断 -->
               <NFlex align="center" :size="8" class="draft-meta">
-                <NText depth="3" class="rule-text">{{ ruleTextOf(d) }}</NText>
+                <NText depth="3" class="rule-text" :title="ruleTextOf(d)">{{
+                  ruleTextOf(d)
+                }}</NText>
+                <NTag
+                  v-if="capOf(d).label"
+                  size="tiny"
+                  :type="capOf(d).type"
+                  :bordered="false"
+                  :title="capOf(d).title"
+                  >{{ capOf(d).label }}</NTag
+                >
                 <NText
                   class="amount-cell"
                   :type="
-                    isOverflow(d) ? 'warning' : checked.has(d.discount.id) ? 'error' : 'default'
+                    capOf(d).state !== 'ok'
+                      ? 'warning'
+                      : checked.has(d.discount.id)
+                        ? 'error'
+                        : 'default'
                   "
                   depth="3"
-                  :title="capTitle(d)"
+                  :title="capOf(d).title || undefined"
                   >{{ amountText(amountOf(d)) }}</NText
                 >
               </NFlex>
@@ -495,8 +592,8 @@ defineExpose({
           <NText v-if="recommendExtra > 0" depth="3" style="font-size: 12px">
             推荐多减 {{ fmt(recommendExtra) }}
           </NText>
-          <NText v-if="overflowCount > 0" type="warning" depth="3" style="font-size: 12px">
-            {{ overflowCount }} 张券未全额生效
+          <NText v-if="cappedCount > 0" type="warning" depth="3" style="font-size: 12px">
+            {{ cappedCount }} 张券未全额生效
           </NText>
         </NFlex>
         <NFlex align="center" :size="4" style="flex-shrink: 0">
@@ -528,6 +625,14 @@ defineExpose({
 .draft-name {
   flex-shrink: 1;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* 标签一律不参与压缩：NTag 自带 overflow:hidden，可被压成 0 宽而整条提示消失，
+   故显式禁止收缩，把压缩额度全部留给可省略的名称与规则文本 */
+.draft-name :deep(.n-tag),
+.draft-meta :deep(.n-tag) {
+  flex-shrink: 0;
 }
 
 .name-text {
@@ -538,7 +643,6 @@ defineExpose({
 
 /* 右侧区占满剩余宽度并靠右，使各行金额右边缘严格对齐同一条线 */
 .draft-meta {
-  flex: 1;
   min-width: 0;
   justify-content: flex-end;
 }

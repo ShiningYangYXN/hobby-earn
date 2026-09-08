@@ -7,7 +7,6 @@ import {
   NFormItem,
   NInput,
   NSelect,
-  NScrollbar,
   NButton,
   NSwitch,
   NFlex,
@@ -120,53 +119,48 @@ function close() {
     preset="card"
     :autoFocus="false"
     @update:show="close"
+    content-scrollable
+    :segmented="{ content: true, footer: true }"
   >
-    <NScrollbar class="modal-scroll">
-      <NForm labelPlacement="top">
-        <NFormItem label="会员号">
-          <NText class="mono" :depth="editing ? undefined : 3">{{
-            editing ? memberIdDisplay : '保存后自动生成'
-          }}</NText>
-        </NFormItem>
-        <NFormItem v-if="editing && ui.labMode" label="入会时间（作弊模式）">
-          <NDatePicker
-            v-model:value="form.joinDate"
-            type="datetime"
-            clearable
-            style="width: 100%"
+    <NForm labelPlacement="top">
+      <NFormItem label="会员号">
+        <NText class="mono" :depth="editing ? undefined : 3">{{
+          editing ? memberIdDisplay : '保存后自动生成'
+        }}</NText>
+      </NFormItem>
+      <NFormItem v-if="editing && ui.labMode" label="入会时间（作弊模式）">
+        <NDatePicker v-model:value="form.joinDate" type="datetime" clearable style="width: 100%" />
+      </NFormItem>
+      <NFormItem label="名称" required>
+        <NInput v-model:value="form.name" placeholder="会员名称" />
+      </NFormItem>
+      <NFormItem label="电话">
+        <NInput v-model:value="form.phone" placeholder="可选" />
+      </NFormItem>
+      <NFormItem label="会员种类">
+        <NFlex vertical style="width: 100%">
+          <NSelect
+            v-model:value="form.typeIds"
+            :options="typeOptions"
+            multiple
+            placeholder="选择会员种类（可多选，留空表示不限）"
+            filterable
           />
-        </NFormItem>
-        <NFormItem label="名称" required>
-          <NInput v-model:value="form.name" placeholder="会员名称" />
-        </NFormItem>
-        <NFormItem label="电话">
-          <NInput v-model:value="form.phone" placeholder="可选" />
-        </NFormItem>
-        <NFormItem label="会员种类">
-          <NFlex vertical style="width: 100%">
-            <NSelect
-              v-model:value="form.typeIds"
-              :options="typeOptions"
-              multiple
-              placeholder="选择会员种类（可多选，留空表示不限）"
-              filterable
-            />
-            <NText depth="3"> 会员可同时属于多个种类，优惠按种类限定时命中任一即可。 </NText>
-          </NFlex>
-        </NFormItem>
-        <NFormItem label="备注">
-          <NInput
-            v-model:value="form.notes"
-            type="textarea"
-            placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
-        </NFormItem>
-        <NFormItem label="启用">
-          <NSwitch v-model:value="form.isActive" />
-        </NFormItem>
-      </NForm>
-    </NScrollbar>
+          <NText depth="3"> 会员可同时属于多个种类，优惠按种类限定时命中任一即可。 </NText>
+        </NFlex>
+      </NFormItem>
+      <NFormItem label="备注">
+        <NInput
+          v-model:value="form.notes"
+          type="textarea"
+          placeholder="备注（可选）"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+        />
+      </NFormItem>
+      <NFormItem label="启用">
+        <NSwitch v-model:value="form.isActive" />
+      </NFormItem>
+    </NForm>
     <template #footer>
       <NFlex justify="end">
         <NButton @click="close">

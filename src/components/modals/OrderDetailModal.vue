@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch, h } from 'vue'
+import { computed, ref, watch, h, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
-  NScrollbar,
   NFlex,
   NText,
   NTag,
@@ -77,7 +76,7 @@ const editDiscountRecords = ref<DiscountRecord[]>([])
 const editDiscountAmount = ref(0)
 const editFinalAmount = ref(0)
 
-function loadDraft() {
+async function loadDraft() {
   const o = order.value
   if (!o) return
   editNotes.value = o.notes ?? ''
@@ -85,7 +84,10 @@ function loadDraft() {
   editDiscountRecords.value = o.discountRecords.map((r) => ({ ...r }))
   editDiscountAmount.value = o.discountAmount
   editFinalAmount.value = o.finalAmount
-  discountPanel.value?.hydrate(o.discountRecords)
+  // 首次打开时（watcher immediate）面板尚未挂载，需等一帧才能拿到 ref，
+  // 否则 hydrate 静默失效、原有优惠的勾选状态不会被还原
+  if (!discountPanel.value) await nextTick()
+  discountPanel.value?.hydrate(o.discountRecords ?? [])
 }
 function itemsEqual(a: OrderItem[], b: OrderItem[]): boolean {
   if (a.length !== b.length) return false
@@ -252,7 +254,7 @@ watch(
   () => props.id,
   async () => {
     if (!discountStore.discounts.length) await discountStore.load()
-    if (editable.value) loadDraft()
+    if (editable.value) await loadDraft()
   },
   { immediate: true },
 )
@@ -427,8 +429,16 @@ async function saveDebug() {
 </script>
 
 <template>
-  <NModal :show="!!order" title="订单详情" preset="card" :autoFocus="false" @update:show="close">
-    <NScrollbar v-if="order" class="modal-scroll">
+  <NModal
+    :show="!!order"
+    title="订单详情"
+    preset="card"
+    :autoFocus="false"
+    @update:show="close"
+    content-scrollable
+    :segmented="{ content: true, footer: true }"
+  >
+    <template v-if="order">
       <NDescriptions :column="2" bordered size="small">
         <NDescriptionsItem label="订单号">{{ order.id }}</NDescriptionsItem>
         <NDescriptionsItem label="状态">
@@ -644,7 +654,7 @@ async function saveDebug() {
           </NText>
         </NFlex>
       </NCard>
-    </NScrollbar>
+    </template>
 
     <template #footer>
       <NFlex justify="end">

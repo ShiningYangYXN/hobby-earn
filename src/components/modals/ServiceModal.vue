@@ -9,7 +9,6 @@ import {
   NInputNumber,
   NSelect,
   NSwitch,
-  NScrollbar,
   NButton,
   NDatePicker,
   useMessage,
@@ -179,147 +178,147 @@ function close() {
     preset="card"
     :autoFocus="false"
     @update:show="close"
+    content-scrollable
+    :segmented="{ content: true, footer: true }"
   >
-    <NScrollbar class="modal-scroll">
-      <NForm labelPlacement="top">
-        <NFormItem label="服务号">
-          <NText class="mono" :depth="editing ? undefined : 3">{{
-            editing ? serviceIdDisplay : '保存后自动生成'
-          }}</NText>
-        </NFormItem>
-        <NFormItem label="名称" required>
-          <NInput v-model:value="form.name" placeholder="如：修电脑" />
-        </NFormItem>
-        <NFormItem label="分类（可多选）">
-          <TypeSelect v-model="form.categoryIds" :manage="categoryManage" />
-        </NFormItem>
-        <NFormItem label="计价方式">
-          <NSelect v-model:value="form.pricingMode" :options="modeOptions" />
-        </NFormItem>
-        <NFormItem :label="form.pricingMode === 'hourly' ? '工时单价（元/小时）' : '单价（元/件）'">
-          <NInputNumber
-            v-model:value="form.basePriceYuan"
-            :min="0"
-            :precision="2"
-            style="width: 100%"
-          />
-        </NFormItem>
-        <NFormItem label="备注 / 描述">
-          <NInput
-            v-model:value="form.description"
-            type="textarea"
-            placeholder="备注（可选）"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
-        </NFormItem>
-        <NFormItem label="专属服务（可组合）">
-          <NFlex vertical :size="10" style="width: 100%">
-            <NText depth="3" style="font-size: 12px">
-              关闭＝所有会员及散客均可添加；开启后仅命中的会员可添加，散客不可添加。
-            </NText>
-            <NFlex align="center" :size="10" style="width: 100%">
-              <NText style="width: 84px">会员种类</NText>
-              <NSwitch v-model:value="form.enabledMemberTypes" />
-              <TypeSelect
-                v-if="form.enabledMemberTypes"
-                v-model="form.memberTypeIds"
-                :manage="memberTypeManage"
-                placeholder="选择会员种类（命中任一即可）"
-                style="flex: 1"
-              />
-              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
-            </NFlex>
-            <NFlex align="center" :size="10" style="width: 100%">
-              <NText style="width: 84px">指定会员</NText>
-              <NSwitch v-model:value="form.enabledMembers" />
-              <NSelect
-                v-if="form.enabledMembers"
-                v-model:value="form.memberIds"
-                :options="memberOptions"
-                multiple
-                filterable
-                placeholder="选择会员"
-                style="flex: 1"
-              />
-              <NText v-else depth="3" style="font-size: 12px">不限制</NText>
-            </NFlex>
-          </NFlex>
-        </NFormItem>
-        <NFormItem label="指定时段可用">
-          <NFlex vertical :size="8" style="width: 100%">
-            <NFlex align="center" :size="10">
-              <NSwitch v-model:value="form.enabledTime" />
-              <NText v-if="!form.enabledTime" depth="3" style="font-size: 12px">不限制</NText>
-            </NFlex>
-            <template v-if="form.enabledTime">
-              <NFlex :size="8" align="center">
-                <NDatePicker
-                  :value="form.validFrom"
-                  @update:value="(v: number | null) => (form.validFrom = v)"
-                  type="datetime"
-                  clearable
-                  placeholder="开始时间"
-                  style="flex: 1"
-                />
-                <NText>~</NText>
-                <NDatePicker
-                  :value="form.validUntil"
-                  @update:value="(v: number | null) => (form.validUntil = v)"
-                  type="datetime"
-                  clearable
-                  placeholder="结束时间"
-                  style="flex: 1"
-                />
-              </NFlex>
-              <NInput
-                v-model:value="form.cron"
-                placeholder="周期表达式（分 时 日 月 周），留空＝不限"
-              />
-            </template>
-          </NFlex>
-        </NFormItem>
-
-        <NFormItem label="限购">
+    <NForm labelPlacement="top">
+      <NFormItem label="服务号">
+        <NText class="mono" :depth="editing ? undefined : 3">{{
+          editing ? serviceIdDisplay : '保存后自动生成'
+        }}</NText>
+      </NFormItem>
+      <NFormItem label="名称" required>
+        <NInput v-model:value="form.name" placeholder="如：修电脑" />
+      </NFormItem>
+      <NFormItem label="分类（可多选）">
+        <TypeSelect v-model="form.categoryIds" :manage="categoryManage" />
+      </NFormItem>
+      <NFormItem label="计价方式">
+        <NSelect v-model:value="form.pricingMode" :options="modeOptions" />
+      </NFormItem>
+      <NFormItem :label="form.pricingMode === 'hourly' ? '工时单价（元/小时）' : '单价（元/件）'">
+        <NInputNumber
+          v-model:value="form.basePriceYuan"
+          :min="0"
+          :precision="2"
+          style="width: 100%"
+        />
+      </NFormItem>
+      <NFormItem label="备注 / 描述">
+        <NInput
+          v-model:value="form.description"
+          type="textarea"
+          placeholder="备注（可选）"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+        />
+      </NFormItem>
+      <NFormItem label="专属服务（可组合）">
+        <NFlex vertical :size="10" style="width: 100%">
+          <NText depth="3" style="font-size: 12px">
+            关闭＝所有会员及散客均可添加；开启后仅命中的会员可添加，散客不可添加。
+          </NText>
           <NFlex align="center" :size="10" style="width: 100%">
-            <NSwitch v-model:value="form.enabledPurchaseLimit" />
-            <NInputNumber
-              v-if="form.enabledPurchaseLimit"
-              v-model:value="form.purchaseLimit"
-              :min="1"
-              :precision="0"
-              style="width: 140px"
+            <NText style="width: 84px">会员种类</NText>
+            <NSwitch v-model:value="form.enabledMemberTypes" />
+            <TypeSelect
+              v-if="form.enabledMemberTypes"
+              v-model="form.memberTypeIds"
+              :manage="memberTypeManage"
+              placeholder="选择会员种类（命中任一即可）"
+              style="flex: 1"
             />
-            <NText v-if="form.enabledPurchaseLimit" depth="3" style="font-size: 12px">
-              {{ form.pricingMode === 'hourly' ? '小时 / 单' : '件 / 单' }}
-            </NText>
             <NText v-else depth="3" style="font-size: 12px">不限制</NText>
           </NFlex>
-        </NFormItem>
+          <NFlex align="center" :size="10" style="width: 100%">
+            <NText style="width: 84px">指定会员</NText>
+            <NSwitch v-model:value="form.enabledMembers" />
+            <NSelect
+              v-if="form.enabledMembers"
+              v-model:value="form.memberIds"
+              :options="memberOptions"
+              multiple
+              filterable
+              placeholder="选择会员"
+              style="flex: 1"
+            />
+            <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+          </NFlex>
+        </NFlex>
+      </NFormItem>
+      <NFormItem label="指定时段可用">
+        <NFlex vertical :size="8" style="width: 100%">
+          <NFlex align="center" :size="10">
+            <NSwitch v-model:value="form.enabledTime" />
+            <NText v-if="!form.enabledTime" depth="3" style="font-size: 12px">不限制</NText>
+          </NFlex>
+          <template v-if="form.enabledTime">
+            <NFlex :size="8" align="center">
+              <NDatePicker
+                :value="form.validFrom"
+                @update:value="(v: number | null) => (form.validFrom = v)"
+                type="datetime"
+                clearable
+                placeholder="开始时间"
+                style="flex: 1"
+              />
+              <NText>~</NText>
+              <NDatePicker
+                :value="form.validUntil"
+                @update:value="(v: number | null) => (form.validUntil = v)"
+                type="datetime"
+                clearable
+                placeholder="结束时间"
+                style="flex: 1"
+              />
+            </NFlex>
+            <NInput
+              v-model:value="form.cron"
+              placeholder="周期表达式（分 时 日 月 周），留空＝不限"
+            />
+          </template>
+        </NFlex>
+      </NFormItem>
 
-        <NFormItem label="分组限购">
-          <TypeSelect v-model="form.limitGroupIds" :manage="limitGroupManage" placeholder="不加入">
-            <template #form-extra="{ form: lf }">
-              <NGi>
-                <NText depth="3" class="small-label">组内合计限购数量</NText>
-                <NInputNumber v-model:value="lf.limitValue" :min="1" :precision="0" />
-              </NGi>
-            </template>
-          </TypeSelect>
-        </NFormItem>
-
-        <NFormItem label="互斥组">
-          <TypeSelect
-            v-model="form.exclusiveGroupIds"
-            :manage="exclusiveManage"
-            placeholder="不加入"
+      <NFormItem label="限购">
+        <NFlex align="center" :size="10" style="width: 100%">
+          <NSwitch v-model:value="form.enabledPurchaseLimit" />
+          <NInputNumber
+            v-if="form.enabledPurchaseLimit"
+            v-model:value="form.purchaseLimit"
+            :min="1"
+            :precision="0"
+            style="width: 140px"
           />
-        </NFormItem>
+          <NText v-if="form.enabledPurchaseLimit" depth="3" style="font-size: 12px">
+            {{ form.pricingMode === 'hourly' ? '小时 / 单' : '件 / 单' }}
+          </NText>
+          <NText v-else depth="3" style="font-size: 12px">不限制</NText>
+        </NFlex>
+      </NFormItem>
 
-        <NFormItem label="启用">
-          <NSwitch v-model:value="form.isActive" />
-        </NFormItem>
-      </NForm>
-    </NScrollbar>
+      <NFormItem label="分组限购">
+        <TypeSelect v-model="form.limitGroupIds" :manage="limitGroupManage" placeholder="不加入">
+          <template #form-extra="{ form: lf }">
+            <NGi>
+              <NText depth="3" class="small-label">组内合计限购数量</NText>
+              <NInputNumber v-model:value="lf.limitValue" :min="1" :precision="0" />
+            </NGi>
+          </template>
+        </TypeSelect>
+      </NFormItem>
+
+      <NFormItem label="互斥组">
+        <TypeSelect
+          v-model="form.exclusiveGroupIds"
+          :manage="exclusiveManage"
+          placeholder="不加入"
+        />
+      </NFormItem>
+
+      <NFormItem label="启用">
+        <NSwitch v-model:value="form.isActive" />
+      </NFormItem>
+    </NForm>
     <template #footer>
       <NFlex justify="end">
         <NButton @click="close">

@@ -22,6 +22,7 @@ body {
 /* 弹窗宽度不超过页面 80%；高度由内容区 NScrollbar(.modal-scroll) 约束，标题与底部始终常驻 */
 .n-modal {
   max-width: 80vw;
+  max-height: 80vh;
 }
 .modal-md {
   width: 520px;
