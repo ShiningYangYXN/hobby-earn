@@ -14,25 +14,26 @@ import {
   NModal,
   NRadioGroup,
   NRadio,
-  NTabs,
-  NTabPane,
-  NScrollbar,
   useDialog,
   useMessage,
-  useThemeVars,
 } from 'naive-ui'
-import { ref, computed } from 'vue'
-import { highlight } from 'lite-hl'
+import { ref } from 'vue'
 import {
   IconMoodDollar,
   IconTag,
   IconCertificate,
   IconBrandGithub,
+  IconDatabase,
+  IconFlask,
   IconTrash,
   IconSkull,
   IconDownload,
   IconUpload,
-  IconGitMerge,
+  IconGitPullRequest,
+  IconGitCompare,
+  IconGitPullRequestClosed,
+  IconGitBranchDeleted,
+  IconGitBranch,
 } from '@tabler/icons-vue'
 import { version, license } from '@/../package.json'
 import { useUiStore } from '@/stores/useUiStore'
@@ -56,6 +57,7 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useCategoryStore } from '@/stores/useCategoryStore'
 import { useExclusiveGroupStore } from '@/stores/useExclusiveGroupStore'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
+import MergeConflictSolver from '@/components/modals/MergeConflictSolver.vue'
 
 const ui = useUiStore()
 const msg = useMessage()
@@ -218,75 +220,8 @@ const mergeConflictCount = ref(0)
 const conflicts = ref<MergeConflict[]>([])
 let pendingMergeData: BackupData | null = null
 
-// 手动合并 solver 状态
+// 手动合并 solver（独立组件，仅负责逐条决策与 JSON 校验）
 const manualSolveVisible = ref(false)
-const conflictChoice = ref<Record<string, 'builtin' | 'imported' | 'manual'>>({})
-const conflictManual = ref<Record<string, string>>({})
-
-function conflictKey(store: string, id: string) {
-  return `${store}::${id}`
-}
-
-function highlightText(code: string): string {
-  return highlight(code, { language: 'json' }).value
-}
-
-// 运行时根据 Naive 当前主题动态注入 lite-hl 配色（切换暗色自动跟随）
-const themeVars = useThemeVars()
-const hlVars = computed(() => ({
-  '--lite-hl-bg': 'transparent',
-  '--lite-hl-comment': themeVars.value.textColorDisabled,
-  '--lite-hl-string': themeVars.value.successColor,
-  '--lite-hl-number': themeVars.value.infoColor,
-  '--lite-hl-keyword': themeVars.value.primaryColor,
-  '--lite-hl-literal': themeVars.value.warningColor,
-  '--lite-hl-function': themeVars.value.primaryColorHover,
-  '--lite-hl-variable': themeVars.value.errorColor,
-  '--lite-hl-attr': themeVars.value.infoColor,
-  '--lite-hl-operator': themeVars.value.textColorBase,
-  '--lite-hl-punctuation': themeVars.value.textColorDisabled,
-  // 无高亮文本/光标色：NModal 内容经 teleport 挂到 body，无法继承
-  // .n-config-provider 注入的 --n-text-color-base，故由运行时显式注入；
-  // 边框改用 Naive 默认 --n-border-color（见样式）。
-  '--hl-plain': themeVars.value.textColorBase,
-}))
-
-function highlightJson(val: unknown): string {
-  return highlightText(JSON.stringify(val, null, 2))
-}
-
-function onEditorScroll(e: Event) {
-  const ta = e.target as HTMLTextAreaElement
-  const hl = ta.parentElement?.querySelector<HTMLElement>('.json-editor__hl')
-  if (hl) {
-    hl.scrollTop = ta.scrollTop
-    hl.scrollLeft = ta.scrollLeft
-  }
-}
-
-// 手动编辑器：根据内容自动撑高 / 收缩（超出上限后内部滚动）
-const resizeHandlers = new WeakMap<HTMLTextAreaElement, () => void>()
-const vAutoResize = {
-  mounted(el: HTMLTextAreaElement) {
-    const resize = () => {
-      el.style.height = 'auto'
-      el.style.height = Math.min(el.scrollHeight, 400) + 'px'
-    }
-    resize()
-    el.addEventListener('input', resize)
-    resizeHandlers.set(el, resize)
-  },
-  updated(el: HTMLTextAreaElement) {
-    resizeHandlers.get(el)?.()
-  },
-  unmounted(el: HTMLTextAreaElement) {
-    const fn = resizeHandlers.get(el)
-    if (fn) {
-      el.removeEventListener('input', fn)
-      resizeHandlers.delete(el)
-    }
-  },
-}
 
 async function onMergeFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -361,49 +296,16 @@ function mergePartial() {
     .catch(() => msg.error('合并失败'))
 }
 
-/** 打开手动合并 solver：基于已检测到的冲突列表填充两侧快照与默认选择 */
+/** 打开手动合并 solver（决策与 JSON 校验由组件内部完成） */
 function openManualSolve() {
   if (!pendingMergeData) return
-  const choice: Record<string, 'builtin' | 'imported' | 'manual'> = {}
-  const manual: Record<string, string> = {}
-  for (const c of conflicts.value) {
-    const key = conflictKey(c.store, c.id)
-    choice[key] = 'builtin' // 默认保留当前
-    manual[key] = JSON.stringify(c.imported, null, 2)
-  }
-  conflictChoice.value = choice
-  conflictManual.value = manual
   mergeConflictVisible.value = false
   manualSolveVisible.value = true
 }
 
-/** 执行手动合并：收集每条冲突的选择，调用 mergeManual */
-async function applyManualMerge() {
+/** 手动合并：组件校验通过后回调决策表，此处只负责落库与刷新 */
+async function onManualConfirm(decisions: Record<string, MergeDecision>) {
   if (!pendingMergeData) return
-  const decisions: Record<string, MergeDecision> = {}
-  for (const c of conflicts.value) {
-    const key = conflictKey(c.store, c.id)
-    const choice = conflictChoice.value[key] ?? 'builtin'
-    if (choice === 'builtin') {
-      decisions[key] = 'builtin'
-    } else if (choice === 'imported') {
-      decisions[key] = 'imported'
-    } else {
-      const text = conflictManual.value[key] ?? ''
-      let obj: unknown
-      try {
-        obj = JSON.parse(text)
-      } catch {
-        msg.error(`冲突项 ${c.id} 的手动内容不是合法 JSON`)
-        return
-      }
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-        msg.error(`冲突项 ${c.id} 的手动内容必须是 JSON 对象`)
-        return
-      }
-      decisions[key] = obj as Record<string, unknown>
-    }
-  }
   manualSolveVisible.value = false
   try {
     await mergeManual(pendingMergeData, decisions)
@@ -450,25 +352,31 @@ async function applyManualMerge() {
     </template>
   </NResult>
 
-  <NCard title="数据导入导出" class="additional-menu">
+  <NCard class="additional-menu">
+    <template #header>
+      <NIcon>
+        <IconDatabase />
+      </NIcon>
+      数据管理
+    </template>
     <NFlex vertical :size="12">
-      <NText depth="3">导出当前全部数据为备份文件；导入将覆盖现有数据，请谨慎操作。</NText>
-      <NFlex :size="12">
-        <NButton @click="exportData">
+      <NText depth="3">导出当前全部数据为备份文件，通过导入覆盖现有数据，或进行数据合并</NText>
+      <NFlex :size="12" justify="end">
+        <NButton type="success" @click="exportData">
           <NIcon>
             <IconDownload />
           </NIcon>
           导出数据
         </NButton>
-        <NButton @click="fileInput?.click()">
+        <NButton type="warning" @click="fileInput?.click()">
           <NIcon>
             <IconUpload />
           </NIcon>
           导入数据
         </NButton>
-        <NButton @click="mergeInput?.click()">
+        <NButton type="info" @click="mergeInput?.click()">
           <NIcon>
-            <IconGitMerge />
+            <IconGitPullRequest />
           </NIcon>
           合并数据
         </NButton>
@@ -494,103 +402,77 @@ async function applyManualMerge() {
     v-model:show="mergeConflictVisible"
     preset="dialog"
     title="检测到数据冲突"
-    style="max-width: 520px"
+    style="width: 720px"
   >
     <template #default>
       <NText>
         导入数据与当前数据存在
-        <b>{{ mergeConflictCount }}</b>
+        <NText type="warning" strong>{{ mergeConflictCount }}</NText>
         处冲突（同一对象在两侧均被修改），无法自动合并。请选择处理方式：
       </NText>
       <NRadioGroup v-model:value="mergeBase" style="margin-top: 14px">
         <NFlex vertical>
-          <NRadio value="builtin">合并基底：内置（冲突部分保留当前数据，仅并入无冲突部分）</NRadio>
-          <NRadio value="imported">合并基底：导入（冲突部分采用导入数据，仅并入无冲突部分）</NRadio>
+          <NRadio value="builtin"
+            >以当前数据作为合并基底（冲突部分保留当前数据，仅并入无冲突部分）</NRadio
+          >
+          <NRadio value="imported"
+            >以导入数据作为合并基底（冲突部分采用导入数据，仅并入无冲突部分）</NRadio
+          >
         </NFlex>
       </NRadioGroup>
     </template>
     <template #action>
       <NFlex :size="12">
-        <NButton @click="mergeConflictVisible = false">取消</NButton>
-        <NButton @click="openManualSolve">手动合并</NButton>
-        <NButton type="warning" @click="mergeForceOverwrite">强行覆盖</NButton>
-        <NButton type="primary" @click="mergePartial">半保留合并</NButton>
+        <NButton type="error" @click="mergeConflictVisible = false">
+          <template #icon>
+            <NIcon>
+              <IconGitPullRequestClosed />
+            </NIcon>
+          </template>
+          取消
+        </NButton>
+
+        <NButton type="warning" @click="mergeForceOverwrite">
+          <template #icon>
+            <NIcon>
+              <IconGitBranchDeleted />
+            </NIcon>
+          </template>
+          强行覆盖
+        </NButton>
+        <NButton type="info" @click="openManualSolve">
+          <template #icon>
+            <NIcon>
+              <IconGitCompare />
+            </NIcon>
+          </template>
+          手动合并
+        </NButton>
+        <NButton type="primary" @click="mergePartial">
+          <template #icon>
+            <NIcon>
+              <IconGitBranch />
+            </NIcon>
+          </template>
+          半保留合并
+        </NButton>
       </NFlex>
     </template>
   </NModal>
 
-  <NModal v-model:show="manualSolveVisible" title="手动合并" style="max-width: 880px" preset="card">
-    <template #default>
-      <NText depth="3">
-        共
-        {{ conflicts.length }}
-        处冲突，逐条选择：保留当前（内置）、采用导入，或切到「手动合并」自行编辑 JSON
-        合并结果。未选择默认保留当前数据。
-      </NText>
-      <NScrollbar style="max-height: 56vh">
-        <NFlex vertical :size="16">
-          <NFlex
-            v-for="c in conflicts"
-            :key="conflictKey(c.store, c.id)"
-            vertical
-            class="conflict-row"
-            :size="14"
-          >
-            <NFlex class="conflict-head">
-              <NTag size="small" :bordered="false" type="info">{{ c.store }}</NTag>
-              <NText code>{{ c.id }}</NText>
-            </NFlex>
-            <NTabs
-              :value="conflictChoice[conflictKey(c.store, c.id)]"
-              size="small"
-              type="line"
-              @update:value="
-                (v) =>
-                  (conflictChoice[conflictKey(c.store, c.id)] = v as
-                    'builtin' | 'imported' | 'manual')
-              "
-            >
-              <NTabPane name="builtin" tab="保留当前（内置）">
-                <NScrollbar style="max-height: 240px">
-                  <pre class="json-box" :style="hlVars" v-html="highlightJson(c.builtin)"></pre>
-                </NScrollbar>
-              </NTabPane>
-              <NTabPane name="imported" tab="采用导入">
-                <NScrollbar style="max-height: 240px">
-                  <pre class="json-box" :style="hlVars" v-html="highlightJson(c.imported)"></pre>
-                </NScrollbar>
-              </NTabPane>
-              <NTabPane name="manual" tab="手动编辑">
-                <NFlex class="json-editor">
-                  <pre
-                    class="json-editor__hl"
-                    :style="hlVars"
-                    v-html="highlightText(conflictManual[conflictKey(c.store, c.id)] ?? '')"
-                  ></pre>
-                  <textarea
-                    class="json-editor__input"
-                    v-model="conflictManual[conflictKey(c.store, c.id)]"
-                    v-auto-resize
-                    spellcheck="false"
-                    placeholder="编辑最终合并结果（JSON 对象）"
-                    @scroll="onEditorScroll"
-                  ></textarea>
-                </NFlex>
-              </NTabPane>
-            </NTabs>
-          </NFlex>
-        </NFlex>
-      </NScrollbar>
-    </template>
-    <template #footer>
-      <NFlex justify="end" :size="12">
-        <NButton @click="manualSolveVisible = false">取消</NButton>
-        <NButton type="primary" @click="applyManualMerge">执行手动合并</NButton>
-      </NFlex>
-    </template>
-  </NModal>
+  <MergeConflictSolver
+    v-model:show="manualSolveVisible"
+    :conflicts="conflicts"
+    @confirm="onManualConfirm"
+  />
 
-  <NCard v-if="ui.labUnlocked" title="实验室" class="additional-menu">
+  <NCard v-if="ui.labUnlocked" class="additional-menu">
+    <template #header>
+      <NIcon>
+        <IconFlask />
+      </NIcon>
+      实验室
+    </template>
     <NFlex vertical :size="14">
       <NFlex align="center" justify="space-between">
         <NFlex align="center" :size="10">
@@ -603,7 +485,7 @@ async function applyManualMerge() {
         <NSwitch v-model:value="ui.labMode" @update:value="onLabChange" />
       </NFlex>
       <NText strong>作弊模式权限</NText>
-      <NUl class="perm-list">
+      <NUl>
         <NLi>删除已完成订单、强制重开已关闭订单、直接改写订单应收金额</NLi>
         <NLi>删除已被订单引用的服务 / 优惠（递归删除，连同关联订单一并清除）</NLi>
         <NLi>改写订单只读字段：状态、归属会员、小计、创建时间与完成时间</NLi>
@@ -624,135 +506,5 @@ async function applyManualMerge() {
 .additional-menu {
   max-width: 640px;
   margin: 24px auto 0;
-}
-
-.conflict-row {
-  border: 1px solid var(--n-border-color, #e0e0e6);
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.conflict-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.json-box {
-  margin: 0;
-  border: 1px solid var(--n-border-color, #e0e0e6);
-  border-radius: 6px;
-  padding: 8px;
-  background: transparent;
-  color: var(--hl-plain, #333);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* 手动合并编辑器：高亮层(pre) 叠加在透明 textarea 之上，滚动同步 */
-.json-editor {
-  position: relative;
-  border: 1px solid var(--n-border-color, #e0e0e6);
-  border-radius: 6px;
-  overflow: hidden;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.json-editor__hl,
-.json-editor__input {
-  margin: 0;
-  padding: 8px;
-  border: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
-  box-sizing: border-box;
-  tab-size: 2;
-}
-
-.json-editor__hl {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: var(--lite-hl-bg, transparent);
-  color: var(--hl-plain, #333);
-}
-
-.json-editor__input {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-height: 80px;
-  max-height: 400px;
-  overflow: auto;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--hl-plain, #333);
-  outline: none;
-}
-
-/* 语法高亮（lite-hl）：配色变量由 useThemeVars() 在运行时动态注入到
-   .json-box / .json-editor__hl 的 :style（见 <script> 中 hlVars），
-   因此浅色/暗色切换时自动跟随 Naive 当前主题。高亮 HTML 经 v-html 注入、
-   无法被 scoped 命中，故 token 颜色用 :deep() 引用上述变量。 */
-.json-box :deep(.hljs-comment),
-.json-editor__hl :deep(.hljs-comment) {
-  color: var(--lite-hl-comment);
-  font-style: italic;
-}
-
-.json-box :deep(.hljs-string),
-.json-editor__hl :deep(.hljs-string) {
-  color: var(--lite-hl-string);
-}
-
-.json-box :deep(.hljs-number),
-.json-editor__hl :deep(.hljs-number) {
-  color: var(--lite-hl-number);
-}
-
-.json-box :deep(.hljs-keyword),
-.json-editor__hl :deep(.hljs-keyword) {
-  color: var(--lite-hl-keyword);
-  font-weight: 600;
-}
-
-.json-box :deep(.hljs-literal),
-.json-editor__hl :deep(.hljs-literal) {
-  color: var(--lite-hl-literal);
-  font-weight: 600;
-}
-
-.json-box :deep(.hljs-title.function_),
-.json-editor__hl :deep(.hljs-title.function_) {
-  color: var(--lite-hl-function);
-}
-
-.json-box :deep(.hljs-variable),
-.json-editor__hl :deep(.hljs-variable) {
-  color: var(--lite-hl-variable);
-}
-
-.json-box :deep(.hljs-attr),
-.json-editor__hl :deep(.hljs-attr) {
-  color: var(--lite-hl-attr);
-}
-
-.json-box :deep(.hljs-operator),
-.json-editor__hl :deep(.hljs-operator) {
-  color: var(--lite-hl-operator);
-}
-
-.json-box :deep(.hljs-punctuation),
-.json-editor__hl :deep(.hljs-punctuation) {
-  color: var(--lite-hl-punctuation);
 }
 </style>

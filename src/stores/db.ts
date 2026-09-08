@@ -15,7 +15,7 @@ const DB_NAME = 'hobby-earn-db'
 // 新增 object store 必须提升版本号，否则已存在的数据库不会触发 onupgradeneeded，
 // 缺失的 store 在写入时 objectStore() 会抛 NotFoundError（表现为功能「无法写入」）。
 // 注意：dbPromise 在模块级缓存，只要重新打开页面即会按新版本升级。
-const DB_VERSION = 2
+const DB_VERSION = 1
 const STORES = [
   'members',
   'orders',
