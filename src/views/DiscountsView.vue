@@ -20,7 +20,7 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildDiscountColumns } from '@/components/columns/discount-columns'
-import { tableScrollX } from '@/stores/types'
+import { tableScrollX, sortByNewest } from '@/stores/types'
 import { type Discount, ruleTypeLabel, isCouponRequired } from '@/stores/types'
 
 const router = useRouter()
@@ -57,14 +57,18 @@ const statusOptions = [
 
 const filtered = computed<Discount[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return discountStore.discounts.filter((d) => {
-    if (filterRule.value === 'coupon' && !isCouponRequired(d)) return false
-    if (filterRule.value && filterRule.value !== 'coupon' && d.ruleType !== filterRule.value)
-      return false
-    if (filterStatus.value && discountStore.discountStatus(d) !== filterStatus.value) return false
-    if (kw && !`${d.name}${d.couponCode ?? ''}`.toLowerCase().includes(kw)) return false
-    return true
-  })
+  // 存储层新数据追加在底部，展示时实时倒序（最新添加的排最前）
+  return sortByNewest(
+    discountStore.discounts.filter((d) => {
+      if (filterRule.value === 'coupon' && !isCouponRequired(d)) return false
+      if (filterRule.value && filterRule.value !== 'coupon' && d.ruleType !== filterRule.value)
+        return false
+      if (filterStatus.value && discountStore.discountStatus(d) !== filterStatus.value) return false
+      if (kw && !`${d.name}${d.couponCode ?? ''}`.toLowerCase().includes(kw)) return false
+      return true
+    }),
+    (d) => d.createdAt,
+  )
 })
 
 function openCreate() {

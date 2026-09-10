@@ -21,7 +21,7 @@ import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildOrderColumns } from '@/components/columns/order-columns'
-import { tableScrollX } from '@/stores/types'
+import { tableScrollX, sortByNewest, createdTsOf } from '@/stores/types'
 import { type Order, type OrderStatus } from '@/stores/types'
 
 const router = useRouter()
@@ -60,19 +60,23 @@ const list = computed(() => {
   // 关键词与日期区间在循环外计算一次，避免逐条订单重复 trim/toLowerCase/解构
   const kw = keyword.value.trim().toLowerCase()
   const range = dateRange.value
-  return orderStore.orders.filter((o) => {
-    if (statusFilter.value !== 'all' && o.status !== statusFilter.value) return false
-    if (memberFilter.value && o.memberId !== memberFilter.value) return false
-    if (discountFilter.value === 'has' && o.discountRecords.length === 0) return false
-    if (discountFilter.value === 'none' && o.discountRecords.length > 0) return false
-    if (range) {
-      const t = new Date(o.createdAt).getTime()
-      if (t < range[0] || t > range[1] + 86400000 - 1) return false
-    }
-    if (kw && !(o.memberName.toLowerCase().includes(kw) || o.id.toLowerCase().includes(kw)))
-      return false
-    return true
-  })
+  // 存储层新数据追加在底部，展示时实时倒序（最新下单的排最前）
+  return sortByNewest(
+    orderStore.orders.filter((o) => {
+      if (statusFilter.value !== 'all' && o.status !== statusFilter.value) return false
+      if (memberFilter.value && o.memberId !== memberFilter.value) return false
+      if (discountFilter.value === 'has' && o.discountRecords.length === 0) return false
+      if (discountFilter.value === 'none' && o.discountRecords.length > 0) return false
+      if (range) {
+        const t = new Date(o.createdAt).getTime()
+        if (t < range[0] || t > range[1] + 86400000 - 1) return false
+      }
+      if (kw && !(o.memberName.toLowerCase().includes(kw) || o.id.toLowerCase().includes(kw)))
+        return false
+      return true
+    }),
+    (o) => Date.parse(o.createdAt) || createdTsOf(o.id),
+  )
 })
 
 function openCreate() {

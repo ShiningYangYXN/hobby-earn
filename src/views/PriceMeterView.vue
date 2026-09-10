@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NCard, NEmpty, NFlex, NText, NH2, NDataTable } from 'naive-ui'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { buildMeterColumns } from '@/components/columns/meter-columns'
-import { tableScrollX } from '@/stores/types'
+import { tableScrollX, sortByNewest, createdTsOf } from '@/stores/types'
 import PricingModal from '@/components/modals/PricingModal.vue'
 import type { Order } from '@/stores/types'
 
@@ -38,8 +38,12 @@ watch(
   () => syncFromRoute(),
 )
 
+// 展示时实时倒序：最新下单的排最前
 const priceable = computed(() =>
-  orderStore.orders.filter((o) => ['pending', 'in_progress'].includes(o.status)),
+  sortByNewest(
+    orderStore.orders.filter((o) => ['pending', 'in_progress'].includes(o.status)),
+    (o) => Date.parse(o.createdAt) || createdTsOf(o.id),
+  ),
 )
 const orderColumns = computed(() => buildMeterColumns({ openOrder }))
 </script>

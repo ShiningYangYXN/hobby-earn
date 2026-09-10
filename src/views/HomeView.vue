@@ -16,6 +16,7 @@ import { useOrderStore } from '@/stores/useOrderStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 
 import { homeViewColumns, homeScrollX } from '@/components/columns/home-columns'
+import { sortByNewest, createdTsOf } from '@/stores/types'
 
 const orderStore = useOrderStore()
 const memberStore = useMemberStore()
@@ -27,7 +28,10 @@ const todayYuan = computed(() => orderStore.todayIncome / 100)
 const monthYuan = computed(() => orderStore.monthIncome / 100)
 const totalYuan = computed(() => orderStore.totalIncome / 100)
 const done = computed(() => orderStore.completedOrders.length)
-const recent = computed(() => orderStore.orders.slice(0, 8))
+// 展示时实时倒序：最新下单的排最前
+const recent = computed(() =>
+  sortByNewest(orderStore.orders, (o) => Date.parse(o.createdAt) || createdTsOf(o.id)).slice(0, 8),
+)
 
 let prevToday = todayYuan.value,
   prevMonth = monthYuan.value,

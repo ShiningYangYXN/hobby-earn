@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any -- 通用动态表单壳，form 值类型为动态 */
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import {
   NModal,
   NInput,
@@ -15,6 +15,7 @@ import {
   NPopconfirm,
 } from 'naive-ui'
 import { IconPlus, IconDeviceFloppy, IconX, IconTrash, IconPencil } from '@tabler/icons-vue'
+import { sortByNewest } from '@/stores/types'
 
 interface RowItem {
   id: string
@@ -47,6 +48,8 @@ const props = defineProps<{
 const msg = useMessage()
 const editingId = ref<string | null>(null)
 const form = reactive<FormShape>(props.emptyForm())
+// 存储层新数据追加在底部，展示时实时倒序（最新添加的排最前）
+const sortedItems = computed(() => sortByNewest(props.items))
 
 onMounted(async () => {
   if (props.load) await props.load()
@@ -146,7 +149,7 @@ async function removeRow(id: string) {
       <NText v-if="!items.length" depth="3">暂无数据，请在上方添加。</NText>
       <NFlex v-else vertical :size="6">
         <NFlex
-          v-for="item in items"
+          v-for="item in sortedItems"
           :key="item.id"
           align="center"
           justify="space-between"

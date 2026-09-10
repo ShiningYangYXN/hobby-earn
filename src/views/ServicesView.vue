@@ -23,7 +23,7 @@ import { useUiStore } from '@/stores/useUiStore'
 import { useServiceLimitGroupStore } from '@/stores/useServiceLimitGroupStore'
 import { useServiceExclusiveGroupStore } from '@/stores/useServiceExclusiveGroupStore'
 import { buildServiceColumns } from '@/components/columns/service-columns'
-import { tableScrollX } from '@/stores/types'
+import { tableScrollX, sortByNewest } from '@/stores/types'
 import { type ServiceEntry } from '@/stores/types'
 
 const router = useRouter()
@@ -58,14 +58,19 @@ const activeOptions = [
 
 const filtered = computed<ServiceEntry[]>(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return serviceStore.services.filter((p) => {
-    if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value)) return false
-    if (filterMode.value && p.pricingMode !== filterMode.value) return false
-    if (filterActive.value === 'active' && !p.isActive) return false
-    if (filterActive.value === 'inactive' && p.isActive) return false
-    if (kw && !`${p.name}${(p.categoryIds ?? []).join('')}`.toLowerCase().includes(kw)) return false
-    return true
-  })
+  // 存储层新数据追加在底部，展示时实时倒序（最新添加的排最前）
+  return sortByNewest(
+    serviceStore.services.filter((p) => {
+      if (filterCategory.value && !(p.categoryIds ?? []).includes(filterCategory.value))
+        return false
+      if (filterMode.value && p.pricingMode !== filterMode.value) return false
+      if (filterActive.value === 'active' && !p.isActive) return false
+      if (filterActive.value === 'inactive' && p.isActive) return false
+      if (kw && !`${p.name}${(p.categoryIds ?? []).join('')}`.toLowerCase().includes(kw))
+        return false
+      return true
+    }),
+  )
 })
 
 function openCreate() {

@@ -95,9 +95,8 @@ export const useOrderStore = defineStore('order', () => {
   })
 
   async function load() {
-    orders.value = (await getAll<Order>('orders'))
-      .map(normalizeOrder)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    // 存储顺序即 IndexedDB 的主键顺序（旧的在前、新加的在后）；置顶展示交给视图层 sortByNewest
+    orders.value = (await getAll<Order>('orders')).map(normalizeOrder)
   }
 
   // 归一化历史订单：补齐缺失字段，避免 cancel/reopen/updateDraft 迭代

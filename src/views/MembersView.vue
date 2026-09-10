@@ -21,7 +21,7 @@ import { useOrderStore } from '@/stores/useOrderStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { buildMemberColumns } from '@/components/columns/member-columns'
-import { tableScrollX } from '@/stores/types'
+import { tableScrollX, sortByNewest, createdTsOf } from '@/stores/types'
 import type { Member } from '@/stores/types'
 import MemberModal from '@/components/modals/MemberModal.vue'
 import MemberTypeModal from '@/components/modals/MemberTypeModal.vue'
@@ -71,14 +71,18 @@ const keyword = ref('')
 const list = computed(() => {
   // 关键词在循环外计算一次，避免逐条会员重复 trim/toLowerCase
   const kw = keyword.value.trim().toLowerCase()
-  return memberStore.members.filter((m) => {
-    if (typeFilter.value && !(m.typeIds ?? []).includes(typeFilter.value)) return false
-    if (statusFilter.value === 'active' && m.isActive === false) return false
-    if (statusFilter.value === 'inactive' && m.isActive !== false) return false
-    if (kw && !(m.name.toLowerCase().includes(kw) || (m.phone ?? '').toLowerCase().includes(kw)))
-      return false
-    return true
-  })
+  // 存储层新数据追加在底部，展示时实时倒序；无入会时间（旧数据）则回退 id 时间戳
+  return sortByNewest(
+    memberStore.members.filter((m) => {
+      if (typeFilter.value && !(m.typeIds ?? []).includes(typeFilter.value)) return false
+      if (statusFilter.value === 'active' && m.isActive === false) return false
+      if (statusFilter.value === 'inactive' && m.isActive !== false) return false
+      if (kw && !(m.name.toLowerCase().includes(kw) || (m.phone ?? '').toLowerCase().includes(kw)))
+        return false
+      return true
+    }),
+    (m) => (m.joinDate ? Date.parse(m.joinDate) : 0) || createdTsOf(m.id),
+  )
 })
 
 function openNew() {

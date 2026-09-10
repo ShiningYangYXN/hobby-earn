@@ -471,6 +471,33 @@ export function genCouponCode(): string {
 }
 
 /**
+ * 从 id 还原创建时间戳：号码格式统一为 `前缀-{Date.now().toString(36)}-{随机串}`，
+ * 第二段即 base36 时间戳。无法解析（旧格式）时返回 0。
+ */
+export function createdTsOf(id: string): number {
+  const seg = id.split(/[-_]/)[1]
+  if (!seg) return 0
+  const ts = parseInt(seg, 36)
+  return Number.isFinite(ts) ? ts : 0
+}
+
+/**
+ * 展示用的「最新在前」排序：存储层一律追加到底部，表格/列表在渲染时才倒序。
+ * tsOf 缺省时从 id 解析创建时间戳；时间戳相同（同毫秒）时按存储顺序靠后者在前。
+ * 返回新数组，不改动传入的存储数组。
+ */
+export function sortByNewest<T extends { id: string }>(
+  list: readonly T[],
+  tsOf?: (x: T) => number,
+): T[] {
+  const ts = tsOf ?? ((x: T) => createdTsOf(x.id))
+  return list
+    .map((x, i) => ({ x, i, t: ts(x) }))
+    .sort((a, b) => b.t - a.t || b.i - a.i)
+    .map((e) => e.x)
+}
+
+/**
  * 汇总一组表格列的最小列宽（width/minWidth），用于 NDataTable 的 scroll-x。
  * 只要总和超过容器宽度，表格就会出现横向滚动条，避免列被无限挤压。
  */
