@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   NCard,
   NCheckbox,
@@ -45,6 +45,11 @@ const emit = defineEmits<{
 
 const discountStore = useDiscountStore()
 const message = useMessage()
+
+// 面板不自加载优惠表时，直接进新建订单页会看不到任何可享优惠，故此处兜底
+onMounted(() => {
+  if (!discountStore.discounts.length) void discountStore.load()
+})
 
 // 响应式 ctx：随 props.memberId / props.items 变化自动重算候选
 const ctx = computed(() => ({

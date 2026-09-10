@@ -95,7 +95,7 @@ export function scopeEligible(
   scope: DiscountScope | undefined,
   ctx: {
     memberId: string | null
-    memberTypeId: string | null
+    memberTypeIds: string[]
     items: OrderItem[]
     categoryIdsOf: (priceEntryId: string) => string[]
     now?: Date
@@ -103,7 +103,8 @@ export function scopeEligible(
 ): boolean {
   if (!scope) return true
   if (scope.memberTypeIds?.length) {
-    if (!ctx.memberTypeId || !scope.memberTypeIds.includes(ctx.memberTypeId)) return false
+    // 会员可归属多个种类，命中任一即可（与专属服务的种类判定一致）
+    if (!scope.memberTypeIds.some((t) => ctx.memberTypeIds.includes(t))) return false
   }
   if (scope.memberIds?.length) {
     if (!ctx.memberId || !scope.memberIds.includes(ctx.memberId)) return false
@@ -174,7 +175,7 @@ export const useDiscountStore = defineStore('discount', () => {
   // 否则每次重算候选都会重新掷骰，导致计价器计时期间反复重新投掷。
   function autoCandidates(ctx: {
     memberId: string | null
-    memberTypeId: string | null
+    memberTypeIds: string[]
     items: OrderItem[]
     categoryIdsOf: (priceEntryId: string) => string[]
     now?: Date
@@ -192,7 +193,7 @@ export const useDiscountStore = defineStore('discount', () => {
     code: string,
     ctx: {
       memberId: string | null
-      memberTypeId: string | null
+      memberTypeIds: string[]
       items: OrderItem[]
       categoryIdsOf: (priceEntryId: string) => string[]
     },

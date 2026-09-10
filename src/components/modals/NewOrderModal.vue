@@ -20,6 +20,7 @@ import { IconCheck, IconPlus, IconTrash, IconX } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
+import { useDiscountStore } from '@/stores/useDiscountStore'
 import { type OrderItem, type DiscountRecord } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
 import {
@@ -32,6 +33,7 @@ const msg = useMessage()
 const orderStore = useOrderStore()
 const serviceStore = useServiceStore()
 const memberStore = useMemberStore()
+const discountStore = useDiscountStore()
 const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
 const newMember = ref<string | null>(null)
@@ -91,6 +93,8 @@ onMounted(async () => {
   if (!memberStore.members.length) await memberStore.load()
   if (!serviceStore.services.length) await serviceStore.load()
   if (!orderStore.orders.length) await orderStore.load()
+  // 优惠面板不会自行加载：直接进新建订单页时须在此补齐，否则可享优惠为空
+  if (!discountStore.discounts.length) await discountStore.load()
 })
 
 async function doCreate() {

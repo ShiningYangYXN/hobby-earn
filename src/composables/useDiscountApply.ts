@@ -3,7 +3,6 @@ import { useDiscountStore } from '@/stores/useDiscountStore'
 import { useLimitGroupStore } from '@/stores/useLimitGroupStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
-import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { itemAmount, type Discount, type DiscountRecord, type OrderItem } from '@/stores/types'
 
 export interface ApplyContext {
@@ -92,7 +91,6 @@ export function useDiscountApply(ctx: () => ApplyContext) {
   const limitGroupStore = useLimitGroupStore()
   const serviceStore = useServiceStore()
   const memberStore = useMemberStore()
-  const memberTypeStore = useMemberTypeStore()
 
   // 已被历史订单计入用量的优惠 id（hydrate 时填充，commitUsage 时跳过）
   const countedIds = ref<Set<string>>(new Set())
@@ -108,12 +106,12 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     return categoryIdsMap.value.get(priceEntryId) ?? []
   }
 
-  const memberTypeId = computed(() => {
+  // 会员所属种类：直接读 Member.typeIds（可多选），与专属服务的种类判定同源，
+  // 保证「某种类专属商品」与「该种类可用优惠」对同一会员得出一致结论
+  const memberTypeIds = computed<string[]>(() => {
     const id = ctx().memberId
-    if (!id) return null
-    const m = memberStore.members.find((x) => x.id === id)
-    // 会员类型反查：通过会员名匹配会员类型（当前数据模型会员无 typeId，沿用旧约定）
-    return memberTypeStore.types.find((t) => t.name === m?.name)?.id ?? null
+    if (!id) return []
+    return memberStore.members.find((x) => x.id === id)?.typeIds ?? []
   })
 
   // 已抽取的随机结果：key=discountId -> { captured, decided, triggered }
@@ -137,7 +135,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     const c = ctx()
     const cands = discountStore.autoCandidates({
       memberId: c.memberId,
-      memberTypeId: memberTypeId.value,
+      memberTypeIds: memberTypeIds.value,
       items: c.items,
       categoryIdsOf: (id) => categoryIdsOf(id),
     })
@@ -195,7 +193,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     const next: Record<string, DrawResult> = {}
     const cands = discountStore.autoCandidates({
       memberId: c.memberId,
-      memberTypeId: memberTypeId.value,
+      memberTypeIds: memberTypeIds.value,
       items: c.items,
       categoryIdsOf: (id) => categoryIdsOf(id),
     })
@@ -622,7 +620,7 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     const c = ctx()
     const d = discountStore.redeemByCode(code, {
       memberId: c.memberId,
-      memberTypeId: memberTypeId.value,
+      memberTypeIds: memberTypeIds.value,
       items: c.items,
       categoryIdsOf: (id) => categoryIdsOf(id),
     })
