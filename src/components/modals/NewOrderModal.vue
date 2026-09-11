@@ -77,7 +77,49 @@ function addRow() {
 function removeRow(i: number) {
   newItems.value.splice(i, 1)
 }
-const canCreate = computed(() => !!newMember.value && newItems.value.some((r) => r.priceId))
+// currentItems 过滤掉了未选服务的行，行下标需换算后才能用于校验
+function itemsIndex(i: number): number {
+  let n = -1
+  for (let k = 0; k <= i; k++) if (newItems.value[k]?.priceId) n++
+  return n
+}
+function qtyMax(i: number): number | undefined {
+  const idx = itemsIndex(i)
+  return idx < 0 ? undefined : restrictionCheck.maxQtyOf(currentItems.value, idx)
+}
+function qtyHint(i: number): string {
+  const idx = itemsIndex(i)
+  return idx < 0 ? '' : restrictionCheck.limitTextOf(currentItems.value, idx)
+}
+// 选中服务即时判定：已达限购 / 互斥则回退选择，不等到提交
+function onServiceChange(i: number) {
+  const row = newItems.value[i]
+  if (!row?.priceId) return
+  const idx = itemsIndex(i)
+  if (idx < 0) return
+  const problem = restrictionCheck.violationOf(currentItems.value, idx)
+  if (!problem) return
+  row.priceId = ''
+  msg.error(problem)
+}
+// 填写数量即时判定：超限则回退到上限
+function onQtyChange(i: number, v: number | null) {
+  const row = newItems.value[i]
+  const idx = itemsIndex(i)
+  if (!row || idx < 0 || v == null) return
+  const problem = restrictionCheck.violationOf(currentItems.value, idx)
+  if (!problem) return
+  row.quantity = Math.max(1, restrictionCheck.capOf(currentItems.value, idx) ?? v)
+  msg.warning(problem)
+}
+// 存量/边界情况兜底：仍有违规时不允许创建
+const restrictionProblems = computed(() => restrictionCheck.check(currentItems.value))
+const canCreate = computed(
+  () =>
+    !!newMember.value &&
+    newItems.value.some((r) => r.priceId) &&
+    restrictionProblems.value.length === 0,
+)
 
 function resetForm() {
   newMember.value = null
@@ -166,14 +208,20 @@ function close() {
               placeholder="选择服务"
               filterable
               style="min-width: 240px"
+              @update:value="() => onServiceChange(i)"
             />
-            <NInputNumber
-              v-if="row.priceId && rowPrice(row.priceId)?.pricingMode === 'perPiece'"
-              v-model:value="row.quantity"
-              :min="1"
-              style="width: 100px"
-            />
-            <NText v-else depth="3">待计费</NText>
+            <NFlex align="center" :size="4">
+              <NInputNumber
+                v-if="row.priceId && rowPrice(row.priceId)?.pricingMode === 'perPiece'"
+                v-model:value="row.quantity"
+                :min="1"
+                :max="qtyMax(i)"
+                style="width: 100px"
+                @update:value="(v: number | null) => onQtyChange(i, v)"
+              />
+              <NText v-else depth="3">待计费</NText>
+              <NText v-if="qtyHint(i)" depth="3" style="font-size: 12px">{{ qtyHint(i) }}</NText>
+            </NFlex>
             <NButton text type="error" @click="removeRow(i)">
               <NIcon>
                 <IconTrash />
@@ -187,6 +235,9 @@ function close() {
             </NIcon>
             添加服务项
           </NButton>
+          <NText v-if="restrictionProblems.length" type="error" style="font-size: 12px">
+            {{ restrictionProblems.join('；') }}
+          </NText>
         </NFlex>
       </NFormItem>
 

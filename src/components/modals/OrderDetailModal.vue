@@ -41,7 +41,7 @@ import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
-import { useMemberServiceOptions } from '@/composables/useMemberServices'
+import { useMemberServiceOptions, useServiceRestrictionCheck } from '@/composables/useMemberServices'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -144,6 +144,14 @@ function addItemRow() {
     unitPrice: 0,
   })
 }
+const restrictionCheck = useServiceRestrictionCheck()
+// 编辑态数量上限与限购提示（editItems 下标与校验下标一致）
+function editQtyMax(i: number): number | undefined {
+  return restrictionCheck.maxQtyOf(editItems.value, i)
+}
+function editQtyHint(i: number): string {
+  return restrictionCheck.limitTextOf(editItems.value, i)
+}
 function onItemPriceChange(i: number) {
   const it = editItems.value[i]
   if (!it || !it.priceEntryId) return
@@ -155,6 +163,22 @@ function onItemPriceChange(i: number) {
   it.hourlyRate = p.pricingMode === 'hourly' ? p.basePrice : undefined
   it.elapsed = p.pricingMode === 'hourly' ? 0 : undefined
   it.quantity = p.pricingMode === 'hourly' ? 1 : it.quantity
+  // 选中服务即时拦截：已达限购 / 互斥则回退选择
+  const problem = restrictionCheck.violationOf(editItems.value, i)
+  if (problem) {
+    it.priceEntryId = ''
+    it.serviceName = ''
+    msg.error(problem)
+  }
+}
+// 改数量即时拦截：超限回退到上限
+function onEditQtyChange(i: number, v: number | null) {
+  const it = editItems.value[i]
+  if (!it || v == null) return
+  const problem = restrictionCheck.violationOf(editItems.value, i)
+  if (!problem) return
+  it.quantity = Math.max(1, restrictionCheck.capOf(editItems.value, i) ?? v)
+  msg.warning(problem)
 }
 const memberId = computed(() => order.value?.memberId ?? null)
 
@@ -263,6 +287,12 @@ function goMeter() {
 }
 async function saveDraft() {
   if (!order.value) return
+  // 兜底拦截互斥 / 限购 / 分组限购违规（填写阶段已即时拦截）
+  const problems = restrictionCheck.check(editItems.value.filter((it) => it.priceEntryId))
+  if (problems.length) {
+    msg.error(problems[0]!)
+    return
+  }
   await orderStore.updateDraft(order.value.id, {
     notes: editNotes.value,
     items: editItems.value.filter((it) => it.priceEntryId),
@@ -472,13 +502,20 @@ async function saveDebug() {
                 style="min-width: 220px"
                 @update:value="() => onItemPriceChange(i)"
               />
-              <NInputNumber
-                v-if="it.pricingMode === 'perPiece'"
-                v-model:value="it.quantity"
-                :min="1"
-                style="width: 90px"
-              />
-              <NText v-else depth="3">待计费</NText>
+              <NFlex align="center" :size="4">
+                <NInputNumber
+                  v-if="it.pricingMode === 'perPiece'"
+                  v-model:value="it.quantity"
+                  :min="1"
+                  :max="editQtyMax(i)"
+                  style="width: 90px"
+                  @update:value="(v: number | null) => onEditQtyChange(i, v)"
+                />
+                <NText v-else depth="3">待计费</NText>
+                <NText v-if="editQtyHint(i)" depth="3" style="font-size: 12px">{{
+                  editQtyHint(i)
+                }}</NText>
+              </NFlex>
               <NButton text type="error" @click="editItems.splice(i, 1)">
                 <NIcon> <IconTrash /> </NIcon>删除
               </NButton>

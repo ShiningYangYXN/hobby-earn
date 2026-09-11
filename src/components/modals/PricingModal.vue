@@ -98,9 +98,31 @@ function ensureTimer() {
   if (timer) return
   timer = window.setInterval(() => {
     items.value.forEach((it, idx) => {
-      if (it.pricingMode === 'hourly' && running[idx]) it.elapsed = (it.elapsed ?? 0) + 1
+      if (it.pricingMode === 'hourly' && running[idx]) {
+        it.elapsed = (it.elapsed ?? 0) + 1
+        enforceHourCap(idx) // 走时即拦截：到点自动停表，不等完成收款
+      }
     })
   }, 1000)
+}
+/**
+ * 工时型项目触及限购上限：把已计时长钉在上限并自动停表，避免超时长计费。
+ * 返回是否触发拦截。
+ */
+function enforceHourCap(idx: number): boolean {
+  const it = items.value[idx]
+  if (!it || it.pricingMode !== 'hourly') return false
+  const cap = restrictionCheck.capOf(items.value, idx)
+  if (cap == null) return false
+  if (Math.ceil((it.elapsed ?? 0) / 3600) <= cap) return false
+  it.elapsed = Math.max(0, cap) * 3600
+  delete running[idx]
+  if (!Object.values(running).some(Boolean)) {
+    stopTimer()
+    discountPanel.value?.drawRandom?.()
+  }
+  msg.warning(`「${it.serviceName}」已达限购上限 ${cap} 小时／单，已自动停表`)
+  return true
 }
 function stopTimer() {
   if (timer) {
@@ -204,10 +226,26 @@ function isExclusiveItem(it: OrderItem): boolean {
   const p = serviceStore.services.find((s) => s.id === it.priceEntryId)
   return p ? isExclusiveService(p) : false
 }
+// 数量输入框上限与限购提示（按件型）
+function qtyMax(idx: number): number | undefined {
+  return restrictionCheck.maxQtyOf(items.value, idx)
+}
+function limitHint(idx: number): string {
+  return restrictionCheck.limitTextOf(items.value, idx)
+}
+// 改数量即时拦截：超限回退到上限并提示原因
+function onQtyChange(idx: number, v: number | null) {
+  if (v == null) return
+  const problem = restrictionCheck.violationOf(items.value, idx)
+  if (!problem) return
+  items.value[idx]!.quantity = Math.max(1, restrictionCheck.capOf(items.value, idx) ?? v)
+  msg.warning(problem)
+}
 function addService() {
   if (!newServiceId.value) return
   const p = serviceStore.services.find((x) => x.id === newServiceId.value)
   if (!p) return
+  const before = new Set(restrictionCheck.check(items.value))
   items.value.push({
     priceEntryId: p.id,
     serviceName: p.name,
@@ -217,6 +255,13 @@ function addService() {
     elapsed: p.pricingMode === 'hourly' ? 0 : undefined,
     hourlyRate: p.pricingMode === 'hourly' ? p.basePrice : undefined,
   })
+  // 追加即拦截：若因此项引入新的互斥 / 限购违规，撤销本次添加
+  const added = restrictionCheck.check(items.value).find((x) => !before.has(x))
+  if (added) {
+    items.value.pop()
+    msg.error(added)
+    return
+  }
   newServiceId.value = null
   // 新增项目可能命中优惠作用域，停表状态下按新计费节点重算
   if (!Object.values(running).some(Boolean)) discountPanel.value?.drawRandom?.()
@@ -241,14 +286,14 @@ async function saveProgress() {
 async function finish(m: PaymentMethod) {
   if (!order.value) return
   stopTimer()
-  discountPanel.value?.finalizeRandom?.() // 固化随机触发资格
-  const recs = discountPanel.value?.getRecords?.() ?? []
-  // 提交前拦截互斥 / 限购 / 分组限购违规
+  // 兜底拦截互斥 / 限购 / 分组限购违规（正常填写阶段已被即时拦截）
   const problems = restrictionCheck.check(items.value)
   if (problems.length) {
     msg.error(problems[0]!)
     return
   }
+  discountPanel.value?.finalizeRandom?.() // 固化随机触发资格
+  const recs = discountPanel.value?.getRecords?.() ?? []
   try {
     await discountPanel.value?.commitUsage(recs)
     await orderStore.finalize(
@@ -297,6 +342,9 @@ function closePricing() {
               <NTag v-if="isExclusiveItem(it)" size="tiny" type="warning" :bordered="false"
                 >专属</NTag
               >
+              <NTag v-if="limitHint(idx)" size="tiny" type="error" :bordered="false">{{
+                limitHint(idx)
+              }}</NTag>
             </NFlex>
             <NText class="meter-num" style="font-size: 18px">{{ fmt(itemAmount(it)) }}</NText>
             <NFlex align="center" justify="space-between">
@@ -333,11 +381,13 @@ function closePricing() {
                     v-else
                     v-model:value="it.quantity"
                     :min="1"
+                    :max="qtyMax(idx)"
                     size="small"
                     style="width: 90px"
                     v-focus
                     @blur="stopEdit(idx)"
                     @keyup.enter="stopEdit(idx)"
+                    @update:value="(v: number | null) => onQtyChange(idx, v)"
                   />
                 </template>
                 <NButton size="small" circle quaternary type="error" @click="removeItem(idx)">
