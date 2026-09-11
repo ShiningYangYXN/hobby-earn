@@ -41,7 +41,11 @@ import { useMemberTypeStore } from '@/stores/useMemberTypeStore'
 import { useMemberStore } from '@/stores/useMemberStore'
 import { useUiStore } from '@/stores/useUiStore'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
-import { useMemberServiceOptions, useServiceRestrictionCheck } from '@/composables/useMemberServices'
+import RestrictionAlerts from '@/components/RestrictionAlerts.vue'
+import {
+  useMemberServiceOptions,
+  useServiceRestrictionCheck,
+} from '@/composables/useMemberServices'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -152,6 +156,13 @@ function editQtyMax(i: number): number | undefined {
 function editQtyHint(i: number): string {
   return restrictionCheck.limitTextOf(editItems.value, i)
 }
+// 行内服务选项：会立刻触发限购 / 互斥的服务置灰并附上原因
+function editRowOptions(i: number) {
+  return restrictionCheck.annotateOptions(priceOptions.value, editItems.value, i)
+}
+// 草稿的违规清单：始终展示，并禁用保存修改
+const draftProblems = computed(() => restrictionCheck.check(editItems.value))
+const draftBlocked = computed(() => draftProblems.value.length > 0)
 function onItemPriceChange(i: number) {
   const it = editItems.value[i]
   if (!it || !it.priceEntryId) return
@@ -496,7 +507,7 @@ async function saveDebug() {
             >
               <NSelect
                 v-model:value="it.priceEntryId"
-                :options="priceOptions"
+                :options="editRowOptions(i)"
                 placeholder="选择服务"
                 filterable
                 style="min-width: 220px"
@@ -526,6 +537,7 @@ async function saveDebug() {
               </NIcon>
               添加服务项
             </NButton>
+            <RestrictionAlerts :problems="draftProblems" />
           </NFlex>
         </NCard>
 
@@ -696,7 +708,7 @@ async function saveDebug() {
     <template #footer>
       <NFlex justify="end">
         <template v-if="editable">
-          <NButton :disabled="!draftDirty" @click="saveDraft">保存修改</NButton>
+          <NButton :disabled="!draftDirty || draftBlocked" @click="saveDraft">保存修改</NButton>
         </template>
         <template v-else>
           <NButton

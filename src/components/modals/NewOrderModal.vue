@@ -23,6 +23,7 @@ import { useMemberStore } from '@/stores/useMemberStore'
 import { useDiscountStore } from '@/stores/useDiscountStore'
 import { type OrderItem, type DiscountRecord } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
+import RestrictionAlerts from '@/components/RestrictionAlerts.vue'
 import {
   useMemberServiceOptions,
   useServiceRestrictionCheck,
@@ -77,8 +78,10 @@ function addRow() {
 function removeRow(i: number) {
   newItems.value.splice(i, 1)
 }
-// currentItems 过滤掉了未选服务的行，行下标需换算后才能用于校验
+// currentItems 过滤掉了未选服务的行，行下标需换算后才能用于校验；
+// 本行未选服务时返回 -1（＝不是「替换」而是「追加」，交由调用方按追加试探）
 function itemsIndex(i: number): number {
+  if (!newItems.value[i]?.priceId) return -1
   let n = -1
   for (let k = 0; k <= i; k++) if (newItems.value[k]?.priceId) n++
   return n
@@ -90,6 +93,15 @@ function qtyMax(i: number): number | undefined {
 function qtyHint(i: number): string {
   const idx = itemsIndex(i)
   return idx < 0 ? '' : restrictionCheck.limitTextOf(currentItems.value, idx)
+}
+// 行内服务选项：会立刻触发限购 / 互斥的服务置灰并附上原因，从选择阶段就拦下
+function rowOptions(i: number) {
+  const idx = itemsIndex(i)
+  return restrictionCheck.annotateOptions(
+    priceOptions.value,
+    currentItems.value,
+    idx < 0 ? undefined : idx,
+  )
 }
 // 选中服务即时判定：已达限购 / 互斥则回退选择，不等到提交
 function onServiceChange(i: number) {
@@ -204,7 +216,7 @@ function close() {
           >
             <NSelect
               v-model:value="row.priceId"
-              :options="priceOptions"
+              :options="rowOptions(i)"
               placeholder="选择服务"
               filterable
               style="min-width: 240px"
@@ -235,9 +247,7 @@ function close() {
             </NIcon>
             添加服务项
           </NButton>
-          <NText v-if="restrictionProblems.length" type="error" style="font-size: 12px">
-            {{ restrictionProblems.join('；') }}
-          </NText>
+          <RestrictionAlerts :problems="restrictionProblems" />
         </NFlex>
       </NFormItem>
 

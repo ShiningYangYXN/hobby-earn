@@ -41,9 +41,12 @@ import {
   type DiscountRecord,
 } from '@/stores/types'
 import DiscountApplyPanel from '@/components/panels/DiscountApplyPanel.vue'
+import RestrictionAlerts from '@/components/RestrictionAlerts.vue'
 import {
   useMemberServiceOptions,
   useServiceRestrictionCheck,
+  serviceUsageOf,
+  type ServiceOption,
 } from '@/composables/useMemberServices'
 
 const props = defineProps<{ show: boolean; orderId: string | null }>()
@@ -121,7 +124,11 @@ function enforceHourCap(idx: number): boolean {
     stopTimer()
     discountPanel.value?.drawRandom?.()
   }
-  msg.warning(`「${it.serviceName}」已达限购上限 ${cap} 小时／单，已自动停表`)
+  msg.warning(
+    cap > 0
+      ? `「${it.serviceName}」已达限购上限 ${cap} 小时／单，已自动停表`
+      : `「${it.serviceName}」限购额度已被占用，无法计时`,
+  )
   return true
 }
 function stopTimer() {
@@ -241,6 +248,19 @@ function onQtyChange(idx: number, v: number | null) {
   items.value[idx]!.quantity = Math.max(1, restrictionCheck.capOf(items.value, idx) ?? v)
   msg.warning(problem)
 }
+// 当前计价的违规清单：始终展示，并禁用保存 / 完成收款
+const restrictionProblems = computed(() => restrictionCheck.check(items.value))
+const blocked = computed(() => restrictionProblems.value.length > 0)
+// 追加服务的选择项：会立刻触发限购 / 互斥的服务置灰并附上原因。
+// 以「服务构成 + 占用量」为缓存键：秒表每秒刷新时长时不重建选项，避免下拉列表被重置。
+let addOptionsCache: { key: string; options: ServiceOption[] } | null = null
+const addOptions = computed(() => {
+  const key = items.value.map((it) => `${it.priceEntryId}#${serviceUsageOf(it)}`).join('|')
+  if (addOptionsCache?.key === key) return addOptionsCache.options
+  const options = restrictionCheck.annotateOptions(priceOptions.value, items.value, undefined)
+  addOptionsCache = { key, options }
+  return options
+})
 function addService() {
   if (!newServiceId.value) return
   const p = serviceStore.services.find((x) => x.id === newServiceId.value)
@@ -273,6 +293,11 @@ const payable = computed(() => Math.max(0, liveSubtotal.value - discountAmount.v
 
 async function saveProgress() {
   if (!order.value) return
+  // 兜底拦截互斥 / 限购 / 分组限购违规（填写阶段已即时拦截）
+  if (blocked.value) {
+    msg.error(restrictionProblems.value[0]!)
+    return
+  }
   stopTimer()
   await orderStore.saveExecution(
     order.value.id,
@@ -406,7 +431,7 @@ function closePricing() {
             <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
               <NSelect
                 v-model:value="newServiceId"
-                :options="priceOptions"
+                :options="addOptions"
                 placeholder="选择要追加的服务"
                 clearable
                 filterable
@@ -418,6 +443,8 @@ function closePricing() {
             </NFlex>
           </NFlex>
         </NCard>
+
+        <RestrictionAlerts :problems="restrictionProblems" />
 
         <DiscountApplyPanel
           ref="discountPanel"
@@ -464,13 +491,13 @@ function closePricing() {
           </NIcon>
           取消
         </NButton>
-        <NButton @click="saveProgress">
+        <NButton :disabled="blocked" @click="saveProgress">
           <NIcon>
             <IconDeviceFloppy />
           </NIcon>
           保存进度
         </NButton>
-        <NButton type="primary" @click="finish(payMethod)">
+        <NButton type="primary" :disabled="blocked" @click="finish(payMethod)">
           <NIcon> <IconCoinYen /> </NIcon>完成并收款
         </NButton>
       </NFlex>
