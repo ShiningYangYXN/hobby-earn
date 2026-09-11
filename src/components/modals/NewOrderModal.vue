@@ -145,7 +145,8 @@ function resetForm() {
 onMounted(async () => {
   resetForm()
   if (!memberStore.members.length) await memberStore.load()
-  if (!serviceStore.services.length) await serviceStore.load()
+  // 服务定义（计费方式 / 单价 / 限制）始终重新拉取：避免使用会话早期或其他标签页写入前的旧配置
+  await serviceStore.load()
   if (!orderStore.orders.length) await orderStore.load()
   // 优惠面板不会自行加载：直接进新建订单页时须在此补齐，否则可享优惠为空
   if (!discountStore.discounts.length) await discountStore.load()

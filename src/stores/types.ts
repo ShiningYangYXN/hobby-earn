@@ -401,6 +401,80 @@ export function itemAmount(it: OrderItem): number {
   return Math.round((it.quantity || 0) * (it.unitPrice || 0))
 }
 
+/**
+ * 把订单项的计费方式对齐到服务的当前定义（服务不存在或方式一致时原样返回引用）。
+ * 服务方式变更后，未完成订单不应继续按旧方式计价，故在计价 / 编辑 / 展示时统一对齐：
+ * - 改为按工时：件数固定 1，已计时长从 0 起（件数无法换算成工时，须重新计时）；
+ * - 改为按件：件数取原已计时长折算的小时数（向上取整，至少 1），保留原有计量规模；
+ * 单价按新方式取服务当前单价（旧单价属于另一种计量方式，不可沿用）。
+ */
+export function alignItemToService(it: OrderItem, s?: ServiceEntry): OrderItem {
+  if (!s || s.pricingMode === it.pricingMode) return it
+  if (s.pricingMode === 'hourly')
+    return {
+      ...it,
+      pricingMode: 'hourly',
+      quantity: 1,
+      unitPrice: s.basePrice,
+      hourlyRate: s.basePrice,
+      elapsed: 0,
+    }
+  const hours = Math.max(1, Math.ceil((it.elapsed ?? 0) / 3600))
+  return {
+    ...it,
+    pricingMode: 'perPiece',
+    quantity: Math.max(hours, Math.round(it.quantity || 1)),
+    unitPrice: s.basePrice,
+    hourlyRate: undefined,
+    elapsed: undefined,
+  }
+}
+
+/**
+ * 批量对齐订单项到服务当前定义。返回新数组（未变更的项保持原引用）与变更条数。
+ * findService 由调用方按服务 id 查找（无此服务时该项保持快照）。
+ */
+export function alignItemsToServices(
+  items: OrderItem[],
+  findService: (id: string) => ServiceEntry | undefined,
+): { items: OrderItem[]; changed: number } {
+  let changed = 0
+  const next = items.map((it) => {
+    const aligned = alignItemToService(it, findService(it.priceEntryId))
+    if (aligned !== it) changed++
+    return aligned
+  })
+  return { items: changed ? next : items, changed }
+}
+
+/**
+ * 订单是否跟随服务当前定义：
+ * - 未完成订单（待处理 / 执行中）＝用服务的**新**计价方式（改配置后立刻生效）；
+ * - 已完成 / 已关闭＝历史账目，沿用**执行（落库）时**的计费方式，不受后续服务配置改动影响。
+ */
+export function followsServiceConfig(status: OrderStatus): boolean {
+  return status === 'pending' || status === 'in_progress'
+}
+
+/**
+ * 按上述规则取「计价 / 展示用」订单项，并给出与落库数据不一致的条数（changed）：
+ * changed > 0 表示服务改过计价方式、本单尚未按新方式保存，界面上应据此给出提示。
+ * findService 无命中（服务已删除）时该项保持落库快照。
+ */
+export function orderItemsByServiceRule(
+  order: Pick<Order, 'status' | 'items'>,
+  findService: (id: string) => ServiceEntry | undefined,
+): { items: OrderItem[]; changed: number } {
+  if (!followsServiceConfig(order.status)) return { items: order.items, changed: 0 }
+  return alignItemsToServices(order.items, findService)
+}
+
+/** 订单项的计量展示：工时型显示已计时长（未计时＝待计时），按件型显示件数 */
+export function itemMeasureLabel(it: OrderItem): string {
+  if (it.pricingMode === 'hourly') return it.elapsed ? fmtElapsed(it.elapsed) : '待计时'
+  return `${it.quantity || 0} 件`
+}
+
 export function fmt(cents: number): string {
   const sign = cents < 0 ? '-' : ''
   const abs = Math.abs(cents)

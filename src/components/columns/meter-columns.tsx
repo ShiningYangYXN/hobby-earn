@@ -1,5 +1,12 @@
 import { NTag, NButton } from 'naive-ui'
-import { fmt, fmtElapsed, type Order, type OrderStatus } from '@/stores/types'
+import {
+  fmt,
+  orderItemsByServiceRule,
+  itemMeasureLabel,
+  type Order,
+  type OrderStatus,
+} from '@/stores/types'
+import { useServiceStore } from '@/stores/useServiceStore'
 
 export interface MeterColumnsOpts {
   openOrder: (o: Order) => void
@@ -24,6 +31,10 @@ const statusType = (s: OrderStatus) =>
     | 'default'
 
 export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
+  const serviceStore = useServiceStore()
+  const findService = (id: string) => serviceStore.services.find((s) => s.id === id)
+  // 未完成订单跟随服务当前计价方式；已完成 / 已关闭沿用落库快照（历史账目不变）
+  const shown = (o: Order) => orderItemsByServiceRule(o, findService)
   return [
     {
       title: '订单号',
@@ -36,15 +47,11 @@ export function buildMeterColumns(opts: MeterColumnsOpts): MeterColumn[] {
       title: '项目',
       key: 'items',
       width: 280,
-      render: (o: Order) =>
-        o.items
-          .map((i) => {
-            if (i.pricingMode === 'hourly' && i.elapsed) {
-              return `${i.serviceName} ${fmtElapsed(i.elapsed)}`
-            }
-            return `${i.serviceName}×${i.quantity}`
-          })
-          .join(', '),
+      render: (o: Order) => {
+        const { items, changed } = shown(o)
+        const text = items.map((i) => `${i.serviceName} ${itemMeasureLabel(i)}`).join(', ')
+        return changed ? `${text}（计费方式已更新，计价后生效）` : text
+      },
     },
     {
       title: '金额',

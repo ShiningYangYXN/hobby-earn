@@ -33,6 +33,8 @@ import {
   fmtElapsed,
   subtotalOf,
   itemAmount,
+  alignItemsToServices,
+  followsServiceConfig,
   isExclusiveService,
   type Order,
   type OrderItem,
@@ -140,8 +142,10 @@ function stopTimer() {
 
 async function load() {
   if (!props.show || !props.orderId) return
-  if (!serviceStore.services.length) await serviceStore.load()
+  // 服务定义始终重新拉取：订单项的计费方式要对齐到最新配置，不能用会话早期的旧值
+  await serviceStore.load()
   if (!discountStore.discounts.length) await discountStore.load()
+  if (!orderStore.orders.length) await orderStore.load()
   let o = orderStore.orders.find((x) => x.id === props.orderId)
   if (!o) return
   if (o.status === 'pending') await orderStore.beginExecute(o.id)
@@ -149,6 +153,17 @@ async function load() {
   if (!o) return
   order.value = o
   items.value = o.items.map((it) => ({ ...it }))
+  // 未完成订单的计费方式跟随服务当前定义：服务改了计价方式后本单立刻按新方式计价；
+  // 已完成 / 已关闭订单是历史账目，沿用执行时的计费方式，不进计价器
+  if (followsServiceConfig(o.status)) {
+    const aligned = alignItemsToServices(items.value, (id) =>
+      serviceStore.services.find((s) => s.id === id),
+    )
+    if (aligned.changed) {
+      items.value = aligned.items
+      msg.info(`${aligned.changed} 个项目的计费方式已按服务当前配置更新`)
+    }
+  }
   Object.keys(running).forEach((k) => delete running[Number(k)])
   payMethod.value = o.paymentMethod ?? 'cash'
   newServiceId.value = null

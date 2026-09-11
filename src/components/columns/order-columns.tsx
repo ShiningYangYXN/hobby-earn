@@ -1,7 +1,8 @@
 import { NTag, NFlex, NButton, NText, NEllipsis } from 'naive-ui'
 import {
   fmt,
-  fmtElapsed,
+  orderItemsByServiceRule,
+  itemMeasureLabel,
   isExclusiveService,
   type Order,
   type OrderItem,
@@ -41,10 +42,13 @@ export interface OrderColumnsOpts {
 
 export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
   const serviceStore = useServiceStore()
+  const findService = (id: string) => serviceStore.services.find((s) => s.id === id)
   const isExclusive = (id: string) => {
-    const p = serviceStore.services.find((s) => s.id === id)
+    const p = findService(id)
     return p ? isExclusiveService(p) : false
   }
+  // 展示用订单项：未完成订单跟随服务当前计价方式，已完成 / 已关闭沿用落库快照
+  const shown = (row: Order) => orderItemsByServiceRule(row, findService)
   return [
     {
       title: '订单号',
@@ -57,24 +61,30 @@ export function buildOrderColumns(opts: OrderColumnsOpts): OrderColumn[] {
       title: '项目',
       key: 'items',
       width: 240,
-      render: (row: Order) => (
-        <NFlex size={6} vertical>
-          {row.items.map((i: OrderItem, idx: number) => (
-            <NFlex key={idx} size={4} align="center" wrap>
-              <NText>
-                {i.pricingMode === 'hourly' && i.elapsed
-                  ? `${i.serviceName} ${fmtElapsed(i.elapsed)}`
-                  : `${i.serviceName}×${i.quantity}`}
-              </NText>
-              {isExclusive(i.priceEntryId) && (
-                <NTag size="tiny" type="warning" bordered={false}>
-                  专属
-                </NTag>
-              )}
-            </NFlex>
-          ))}
-        </NFlex>
-      ),
+      render: (row: Order) => {
+        const { items, changed } = shown(row)
+        return (
+          <NFlex size={6} vertical>
+            {items.map((i: OrderItem, idx: number) => (
+              <NFlex key={idx} size={4} align="center" wrap>
+                <NText>
+                  {i.serviceName} {itemMeasureLabel(i)}
+                </NText>
+                {isExclusive(i.priceEntryId) && (
+                  <NTag size="tiny" type="warning" bordered={false}>
+                    专属
+                  </NTag>
+                )}
+              </NFlex>
+            ))}
+            {changed > 0 && (
+              <NTag size="tiny" type="info" bordered={false}>
+                计费方式已随服务更新，保存后金额生效
+              </NTag>
+            )}
+          </NFlex>
+        )
+      },
     },
     { title: '小计', key: 'subtotal', width: 90, render: (row: Order) => fmt(row.subtotal) },
     {

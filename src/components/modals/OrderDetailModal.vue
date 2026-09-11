@@ -23,8 +23,10 @@ import {
 import { IconTrash, IconX, IconPlus, IconStopwatch } from '@tabler/icons-vue'
 import {
   fmt,
-  fmtElapsed,
   itemAmount,
+  itemMeasureLabel,
+  alignItemsToServices,
+  orderItemsByServiceRule,
   ruleTypeLabel,
   formatZhe,
   isExclusiveService,
@@ -85,6 +87,14 @@ async function loadDraft() {
   if (!o) return
   editNotes.value = o.notes ?? ''
   editItems.value = o.items.map((it) => ({ ...it }))
+  // 计费方式跟随服务当前定义：服务改了计费方式后，草稿不应继续按旧方式编辑
+  const aligned = alignItemsToServices(editItems.value, (id) =>
+    serviceStore.services.find((s) => s.id === id),
+  )
+  if (aligned.changed) {
+    editItems.value = aligned.items
+    msg.info(`${aligned.changed} 个项目的计费方式已按服务当前配置更新`)
+  }
   editDiscountRecords.value = o.discountRecords.map((r) => ({ ...r }))
   editDiscountAmount.value = o.discountAmount
   editFinalAmount.value = o.finalAmount
@@ -198,6 +208,13 @@ function isExclusiveItem(it: OrderItem): boolean {
   const p = serviceStore.services.find((s) => s.id === it.priceEntryId)
   return p ? isExclusiveService(p) : false
 }
+// 只读态展示项：未完成订单跟随服务当前计价方式；已完成 / 已关闭沿用落库快照（历史账目不变）
+const displaySync = computed(() => {
+  const o = order.value
+  if (!o) return { items: [] as OrderItem[], changed: 0 }
+  return orderItemsByServiceRule(o, (id) => serviceStore.services.find((s) => s.id === id))
+})
+const displayItems = computed<OrderItem[]>(() => displaySync.value.items)
 const readColumns = [
   {
     title: '服务',
@@ -224,8 +241,7 @@ const readColumns = [
   {
     title: '数量',
     key: 'qty',
-    render: (row: OrderItem) =>
-      row.pricingMode === 'hourly' ? fmtElapsed(row.elapsed ?? 0) : row.quantity + ' 件',
+    render: (row: OrderItem) => itemMeasureLabel(row),
   },
   { title: '小计', key: 'amount', render: (row: OrderItem) => fmt(itemAmount(row)) },
 ]
@@ -288,7 +304,11 @@ function close() {
 watch(
   () => props.id,
   async () => {
+    // 订单必须先就绪，否则 loadDraft 会在订单缺失时静默返回、草稿区显示为空
+    if (!orderStore.orders.length) await orderStore.load()
     if (!discountStore.discounts.length) await discountStore.load()
+    // 服务定义始终重新拉取：计费方式等要对齐到最新配置
+    await serviceStore.load()
     if (editable.value) await loadDraft()
   },
   { immediate: true },
@@ -599,11 +619,15 @@ async function saveDebug() {
       <template v-else>
         <NDataTable
           :columns="readColumns"
-          :data="order.items"
+          :data="displayItems"
           :pagination="false"
           size="small"
           style="margin-top: 12px"
         />
+        <NText v-if="displaySync.changed" type="warning" style="font-size: 12px">
+          有 {{ displaySync.changed }} 个服务项的计费方式已随「服务管理」变更，金额将在下次计价 /
+          保存后更新
+        </NText>
 
         <NFlex justify="space-between" style="margin-top: 12px">
           <NText>小计：{{ fmt(order.subtotal) }}</NText>
