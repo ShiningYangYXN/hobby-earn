@@ -33,6 +33,7 @@ import {
   fmtElapsed,
   subtotalOf,
   itemAmount,
+  addOrMergeItem,
   alignItemsToServices,
   followsServiceConfig,
   isExclusiveService,
@@ -280,26 +281,33 @@ function addService() {
   if (!newServiceId.value) return
   const p = serviceStore.services.find((x) => x.id === newServiceId.value)
   if (!p) return
-  const before = new Set(restrictionCheck.check(items.value))
-  items.value.push({
+  const incoming: OrderItem = {
     priceEntryId: p.id,
     serviceName: p.name,
     pricingMode: p.pricingMode,
-    quantity: p.pricingMode === 'hourly' ? 1 : 1,
+    quantity: 1,
     unitPrice: p.basePrice,
     elapsed: p.pricingMode === 'hourly' ? 0 : undefined,
     hourlyRate: p.pricingMode === 'hourly' ? p.basePrice : undefined,
-  })
+  }
+  const original = items.value
+  const before = new Set(restrictionCheck.check(original))
+  // 若已有同服务项则合并（数量 / 时长叠加），否则追加；列表长度不变即并入已有项
+  const merged = addOrMergeItem(original, incoming)
   // 追加即拦截：若因此项引入新的互斥 / 限购违规，撤销本次添加
-  const added = restrictionCheck.check(items.value).find((x) => !before.has(x))
+  const added = restrictionCheck.check(merged).find((x) => !before.has(x))
   if (added) {
-    items.value.pop()
+    items.value = original
     msg.error(added)
     return
   }
+  // 列表长度不变＝并入已有项（合并），否则为新增
+  const wasMerged = merged.length === original.length
+  items.value = merged
   newServiceId.value = null
   // 新增项目可能命中优惠作用域，停表状态下按新计费节点重算
   if (!Object.values(running).some(Boolean)) discountPanel.value?.drawRandom?.()
+  if (wasMerged) msg.info(`已将「${p.name}」并入已有项目，数量/时长叠加`)
 }
 
 const liveSubtotal = computed(() => subtotalOf(items.value))

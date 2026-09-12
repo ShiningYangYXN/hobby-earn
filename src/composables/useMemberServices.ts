@@ -110,6 +110,9 @@ export function useServiceRestrictionCheck() {
     })
     for (const [gid, idxs] of groupHits) {
       if (idxs.length > 1) {
+        // 同一服务的多份（会合并为一项）不计为互斥；仅当组内存在「不同服务」才冲突
+        const distinct = new Set(idxs.map((i) => items[i]!.priceEntryId))
+        if (distinct.size <= 1) continue
         const gname = exclStore.groups.find((g) => g.id === gid)?.name ?? gid
         const names = idxs.map((i) => items[i]!.serviceName)
         problems.push({

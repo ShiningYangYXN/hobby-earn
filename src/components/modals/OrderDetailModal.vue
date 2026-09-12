@@ -184,6 +184,26 @@ function onItemPriceChange(i: number) {
   it.hourlyRate = p.pricingMode === 'hourly' ? p.basePrice : undefined
   it.elapsed = p.pricingMode === 'hourly' ? 0 : undefined
   it.quantity = p.pricingMode === 'hourly' ? 1 : it.quantity
+  // 重复服务：并入已有的同服务项目，数量 / 时长叠加
+  const dupIdx = editItems.value.findIndex((x, j) => j !== i && x.priceEntryId === it.priceEntryId)
+  if (dupIdx >= 0) {
+    const dup = editItems.value[dupIdx]!
+    if (p.pricingMode === 'hourly') dup.elapsed = (dup.elapsed ?? 0) + (it.elapsed ?? 0)
+    else dup.quantity = (dup.quantity || 0) + (it.quantity || 0)
+    editItems.value.splice(i, 1)
+    const finalIdx = dupIdx > i ? dupIdx - 1 : dupIdx
+    const problem = restrictionCheck.violationOf(editItems.value, finalIdx)
+    if (problem) {
+      const cap = restrictionCheck.capOf(editItems.value, finalIdx)
+      if (p.pricingMode === 'hourly') {
+        if (cap != null) dup.elapsed = Math.max(0, cap) * 3600
+      } else if (cap != null) dup.quantity = Math.max(1, cap)
+      msg.warning(problem)
+    } else {
+      msg.info(`已将「${p.name}」并入已有项目`)
+    }
+    return
+  }
   // 选中服务即时拦截：已达限购 / 互斥则回退选择
   const problem = restrictionCheck.violationOf(editItems.value, i)
   if (problem) {

@@ -14,9 +14,10 @@ import {
   NCard,
   NEmpty,
   NIcon,
+  NTag,
   useMessage,
 } from 'naive-ui'
-import { IconCheck, IconPlus, IconTrash, IconX } from '@tabler/icons-vue'
+import { IconCheck, IconTrash, IconX } from '@tabler/icons-vue'
 import { useOrderStore } from '@/stores/useOrderStore'
 import { useServiceStore } from '@/stores/useServiceStore'
 import { useMemberStore } from '@/stores/useMemberStore'
@@ -39,6 +40,7 @@ const discountPanel = ref<InstanceType<typeof DiscountApplyPanel> | null>(null)
 
 const newMember = ref<string | null>(null)
 const newItems = ref<{ priceId: string; quantity: number }[]>([])
+const newServiceId = ref<string | null>(null)
 const newNotes = ref('')
 
 // 优惠结果（来自复用面板）
@@ -72,8 +74,41 @@ const currentItems = computed<OrderItem[]>(() =>
       }
     }),
 )
-function addRow() {
-  newItems.value.push({ priceId: '', quantity: 1 })
+function addServiceRow() {
+  if (!newMember.value) {
+    msg.warning('请先选择会员再添加服务')
+    return
+  }
+  if (!newServiceId.value) return
+  const p = serviceStore.services.find((x) => x.id === newServiceId.value)
+  if (!p) return
+  // 已存在同服务行 → 数量累加（合并）
+  const existing = newItems.value.find((r) => r.priceId === newServiceId.value)
+  if (existing) {
+    existing.quantity = (existing.quantity || 0) + 1
+    const idx = currentItems.value.findIndex((it) => it.priceEntryId === existing.priceId)
+    const problem = idx >= 0 ? restrictionCheck.violationOf(currentItems.value, idx) : null
+    if (problem) {
+      const cap = restrictionCheck.capOf(currentItems.value, idx)
+      existing.quantity = Math.max(1, cap ?? existing.quantity)
+      newServiceId.value = null
+      msg.warning(problem)
+      return
+    }
+    newServiceId.value = null
+    msg.info(`已将「${p.name}」并入已有项目，数量累加`)
+    return
+  }
+  const before = new Set(restrictionCheck.check(currentItems.value))
+  newItems.value.push({ priceId: p.id, quantity: 1 })
+  const added = restrictionCheck.check(currentItems.value).find((x) => !before.has(x))
+  if (added) {
+    newItems.value.pop()
+    newServiceId.value = null
+    msg.error(added)
+    return
+  }
+  newServiceId.value = null
 }
 function removeRow(i: number) {
   newItems.value.splice(i, 1)
@@ -94,26 +129,10 @@ function qtyHint(i: number): string {
   const idx = itemsIndex(i)
   return idx < 0 ? '' : restrictionCheck.limitTextOf(currentItems.value, idx)
 }
-// 行内服务选项：会立刻触发限购 / 互斥的服务置灰并附上原因，从选择阶段就拦下
-function rowOptions(i: number) {
-  const idx = itemsIndex(i)
-  return restrictionCheck.annotateOptions(
-    priceOptions.value,
-    currentItems.value,
-    idx < 0 ? undefined : idx,
-  )
-}
-// 选中服务即时判定：已达限购 / 互斥则回退选择，不等到提交
-function onServiceChange(i: number) {
-  const row = newItems.value[i]
-  if (!row?.priceId) return
-  const idx = itemsIndex(i)
-  if (idx < 0) return
-  const problem = restrictionCheck.violationOf(currentItems.value, idx)
-  if (!problem) return
-  row.priceId = ''
-  msg.error(problem)
-}
+// 追加服务的选择项：会立刻触发限购 / 互斥的服务置灰并附上原因
+const addOptions = computed(() =>
+  restrictionCheck.annotateOptions(priceOptions.value, currentItems.value, undefined),
+)
 // 填写数量即时判定：超限则回退到上限
 function onQtyChange(i: number, v: number | null) {
   const row = newItems.value[i]
@@ -206,48 +225,65 @@ function close() {
         />
       </NFormItem>
 
-      <NFormItem label="服务项">
+      <NFormItem label="服务项目">
         <NFlex vertical :size="8" style="width: 100%">
-          <NFlex
-            v-for="(row, i) in newItems"
-            :key="i"
-            align="center"
-            :size="8"
-            justify="space-between"
-          >
-            <NSelect
-              v-model:value="row.priceId"
-              :options="rowOptions(i)"
-              placeholder="选择服务"
-              filterable
-              style="min-width: 240px"
-              @update:value="() => onServiceChange(i)"
-            />
-            <NFlex align="center" :size="4">
-              <NInputNumber
-                v-if="row.priceId && rowPrice(row.priceId)?.pricingMode === 'perPiece'"
-                v-model:value="row.quantity"
-                :min="1"
-                :max="qtyMax(i)"
-                style="width: 100px"
-                @update:value="(v: number | null) => onQtyChange(i, v)"
+          <NFlex justify="space-between" align="center">
+            <NText depth="3">补充服务项目</NText>
+            <NFlex align="center" :size="8" style="flex: 1; min-width: 0">
+              <NSelect
+                v-model:value="newServiceId"
+                :options="addOptions"
+                placeholder="请先选择会员"
+                :disabled="!newMember"
+                clearable
+                filterable
+                style="flex: 1; min-width: 0"
               />
-              <NText v-else depth="3">待计费</NText>
-              <NText v-if="qtyHint(i)" depth="3" style="font-size: 12px">{{ qtyHint(i) }}</NText>
+              <NButton
+                size="small"
+                type="primary"
+                :disabled="!newMember || !newServiceId"
+                @click="addServiceRow"
+                >添加</NButton
+              >
             </NFlex>
-            <NButton text type="error" @click="removeRow(i)">
-              <NIcon>
-                <IconTrash />
-              </NIcon>
-              删除
-            </NButton>
           </NFlex>
-          <NButton dashed block @click="addRow">
-            <NIcon :size="16">
-              <IconPlus />
-            </NIcon>
-            添加服务项
-          </NButton>
+
+          <NEmpty v-if="!newItems.some((r) => r.priceId)" description="尚未添加服务项目" />
+          <NCard v-for="(row, i) in newItems" :key="i" size="small">
+            <NFlex vertical :size="6">
+              <NFlex align="center" :size="6">
+                <NText strong>{{ rowPrice(row.priceId)?.name }}</NText>
+                <NTag v-if="qtyHint(i)" size="tiny" type="error" :bordered="false">{{
+                  qtyHint(i)
+                }}</NTag>
+              </NFlex>
+              <NFlex align="center" justify="space-between">
+                <NText depth="3">{{
+                  rowPrice(row.priceId)?.pricingMode === 'hourly' ? '工时' : '数量'
+                }}</NText>
+                <NFlex align="center" :size="10">
+                  <NText v-if="rowPrice(row.priceId)?.pricingMode === 'hourly'" depth="3"
+                    >待计费</NText
+                  >
+                  <NInputNumber
+                    v-else
+                    v-model:value="row.quantity"
+                    :min="1"
+                    :max="qtyMax(i)"
+                    size="small"
+                    style="width: 100px"
+                    @update:value="(v: number | null) => onQtyChange(i, v)"
+                  />
+                  <NButton size="small" circle quaternary type="error" @click="removeRow(i)">
+                    <NIcon>
+                      <IconTrash />
+                    </NIcon>
+                  </NButton>
+                </NFlex>
+              </NFlex>
+            </NFlex>
+          </NCard>
           <RestrictionAlerts :problems="restrictionProblems" />
         </NFlex>
       </NFormItem>

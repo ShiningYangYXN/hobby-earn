@@ -402,6 +402,31 @@ export function itemAmount(it: OrderItem): number {
 }
 
 /**
+ * 将待加入的订单项并入列表：若已存在相同 priceEntryId，则数量（按件）或时长（计时）叠加，
+ * 并以待加入项的最新服务配置覆盖服务名 / 计价方式 / 单价 / 时薪；否则追加。
+ * 返回新数组（不修改入参）。用于「重复添加同一服务时合并为一行而非新增多行」。
+ */
+export function addOrMergeItem(items: OrderItem[], incoming: OrderItem): OrderItem[] {
+  const next = items.map((it) => ({ ...it }))
+  const idx = next.findIndex((it) => it.priceEntryId === incoming.priceEntryId)
+  if (idx >= 0) {
+    const it = next[idx]!
+    it.serviceName = incoming.serviceName
+    it.pricingMode = incoming.pricingMode
+    it.unitPrice = incoming.unitPrice
+    it.hourlyRate = incoming.hourlyRate
+    if (incoming.pricingMode === 'hourly') {
+      it.elapsed = (it.elapsed ?? 0) + (incoming.elapsed ?? 0)
+    } else {
+      it.quantity = (it.quantity || 0) + (incoming.quantity || 0)
+    }
+    return next
+  }
+  next.push({ ...incoming })
+  return next
+}
+
+/**
  * 把订单项的计费方式对齐到服务的当前定义（服务不存在或方式一致时原样返回引用）。
  * 服务方式变更后，未完成订单不应继续按旧方式计价，故在计价 / 编辑 / 展示时统一对齐：
  * - 改为按工时：件数固定 1，已计时长从 0 起（件数无法换算成工时，须重新计时）；
