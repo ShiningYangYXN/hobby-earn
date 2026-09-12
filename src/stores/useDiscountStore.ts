@@ -189,6 +189,7 @@ export const useDiscountStore = defineStore('discount', () => {
   }
 
   // —— 券码兑换：仅 coupon 触发或带券码的优惠，且准入 ——
+  // 返回所有匹配该券码且准入的优惠（券码可能碰撞，需一次性兑换全部）。
   function redeemByCode(
     code: string,
     ctx: {
@@ -197,14 +198,16 @@ export const useDiscountStore = defineStore('discount', () => {
       items: OrderItem[]
       categoryIdsOf: (priceEntryId: string) => string[]
     },
-  ): Discount | null {
+  ): Discount[] {
     const c = normalizeCouponCode(code)
-    if (!isValidCouponCode(c)) return null // 非 6 位券码一律无效
-    const d = discounts.value.find((x) => x.couponCode && normalizeCouponCode(x.couponCode) === c)
-    if (!d) return null
-    if (!isUsable(d, ctx.memberId)) return null
-    if (!scopeEligible(d.scope, ctx)) return null
-    return d
+    if (!isValidCouponCode(c)) return [] // 非 6 位券码一律无效
+    return discounts.value.filter(
+      (x) =>
+        x.couponCode &&
+        normalizeCouponCode(x.couponCode) === c &&
+        isUsable(x, ctx.memberId) &&
+        scopeEligible(x.scope, ctx),
+    )
   }
 
   // —— 优惠计算（作用于 baseAmount，返回减免额，保证 <= base）

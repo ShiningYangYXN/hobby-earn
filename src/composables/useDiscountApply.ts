@@ -615,25 +615,30 @@ export function useDiscountApply(ctx: () => ApplyContext) {
     recordsSnapshot = recs
   }
 
-  // 券码兑换：透传当前 ctx 做准入/作用域校验，并立即抽取随机结果（手动动作）
-  function redeem(code: string): Discount | null {
+  // 券码兑换：透传当前 ctx 做准入/作用域校验，并立即抽取随机结果（手动动作）。
+  // 券码可能碰撞，返回所有匹配且准入的优惠，由调用方逐一建草稿兑换。
+  function redeem(code: string): Discount[] {
     const c = ctx()
-    const d = discountStore.redeemByCode(code, {
+    const ds = discountStore.redeemByCode(code, {
       memberId: c.memberId,
       memberTypeIds: memberTypeIds.value,
       items: c.items,
       categoryIdsOf: (id) => categoryIdsOf(id),
     })
-    if (!d) return null
-    if (isRandom(d)) {
-      const captured = d.random ? discountStore.captureRandom(d.random) : 0
-      const triggered = d.triggerChance != null ? Math.random() * 100 < d.triggerChance : true
-      drawnRandom.value = {
-        ...drawnRandom.value,
-        [d.id]: { captured, decided: true, triggered },
+    if (!ds.length) return []
+    const result: Discount[] = []
+    for (const d of ds) {
+      if (isRandom(d)) {
+        const captured = d.random ? discountStore.captureRandom(d.random) : 0
+        const triggered = d.triggerChance != null ? Math.random() * 100 < d.triggerChance : true
+        drawnRandom.value = {
+          ...drawnRandom.value,
+          [d.id]: { captured, decided: true, triggered },
+        }
       }
+      result.push(d)
     }
-    return d
+    return result
   }
 
   return {

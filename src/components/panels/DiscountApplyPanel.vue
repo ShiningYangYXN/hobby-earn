@@ -420,17 +420,23 @@ function redeem() {
     message.error(`券码需为 ${COUPON_LENGTH} 位字母或数字`)
     return
   }
-  const d = apply.redeem(code)
-  if (!d) {
+  const ds = apply.redeem(code)
+  if (!ds.length) {
     message.error('券码无效或不可用')
     return
   }
   couponSlots.value = []
-  if (redeemed.value.some((r) => r.discount.id === d.id)) return
-  const draft = apply.buildDraft(d)
-  if (!draft) return
-  redeemed.value.push(draft)
-  checked.value.add(d.id)
+  let added = 0
+  for (const d of ds) {
+    // 同一券码可能碰撞出多个优惠，逐一建草稿；已兑换的按 id 去重
+    if (redeemed.value.some((r) => r.discount.id === d.id)) continue
+    const draft = apply.buildDraft(d)
+    if (!draft) continue
+    redeemed.value.push(draft)
+    checked.value.add(d.id)
+    added++
+  }
+  if (added > 1) message.success(`已一次性兑换该券码关联的 ${added} 张优惠`)
 }
 
 function reset() {
